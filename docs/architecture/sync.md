@@ -26,7 +26,8 @@ Alle IDs sind UUIDs und werden vom Client erzeugt (offline-fähig). Synchronisie
 | `Device` | `id`, `user_id`, `name`, `created_at`, `last_seen_at` |
 | `Document` | `id`, `workspace_id`, `parent_id` (Seitenbaum, `null` = Wurzel), `title`, `sort_key`, `favorite`, `created_at`, `updated_at`, `revision`, `deleted_at` |
 | `Block` | `id`, `document_id`, `type` (`paragraph`, `heading`, `list_item`, `code`, `quote`, …), `content` (Text inkl. Inline-Formatierung und Seitenlinks), `attrs` (z. B. Überschriftenebene, Code-Sprache), `sort_key`, `revision`, `deleted_at` |
-| `Tag` | `id`, `workspace_id`, `name`, `revision`, `deleted_at`; Zuordnung über `document_tags` |
+| `Tag` | `id`, `workspace_id`, `name`, `revision`, `deleted_at` |
+| `DocumentTag` | `id`, `workspace_id`, `document_id`, `tag_id`, `revision`, `deleted_at` – Zuordnung Tag ↔ Dokument, eigene Entität `document_tag` ([ADR 0009](../adr/0009-local-data-layer.md)) |
 | `Change` | `seq` (monoton pro Workspace = Cursor), `op_id`, `device_id`, `entity`, `entity_id`, `kind`, `revision`, `payload`, `applied_at` |
 | `Conflict` | `id`, `entity`, `entity_id`, `base_revision`, `local` (Stand des Geräts), `remote` (Stand des Servers), `created_at`, `resolved_at` |
 | `SyncCursor` | lokal auf dem Gerät: `workspace_id`, `cursor` (letzte gesehene `seq`) |
@@ -34,7 +35,8 @@ Alle IDs sind UUIDs und werden vom Client erzeugt (offline-fähig). Synchronisie
 
 - `sort_key`: fraktionaler Index (String), damit Einfügen und Verschieben auf mehreren Geräten ohne Umnummerierung funktioniert.
 - Backlinks werden aus Seitenlinks in `Block.content` abgeleitet, nicht separat synchronisiert.
-- Die Inline-Repräsentation von `content` wird mit der Editor-Wahl in Phase 2 festgelegt.
+- `content` ist ein Markdown-Inline-String; Seitenlinks als `[Titel](page:<uuid>)`, Blocktypen und `attrs` siehe [ADR 0008](../adr/0008-block-editor.md).
+- Im Code (TypeScript, JSON) heißen die Felder in camelCase (`parentId`, `sortKey`, `deletedAt`, `opId` …), siehe [ADR 0009](../adr/0009-local-data-layer.md).
 
 Protokoll und Operationen: [ADR 0002](../adr/0002-sync-protocol.md).
 

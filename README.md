@@ -19,7 +19,10 @@ corepack enable
 pnpm install
 pnpm dev        # Server :3000, Web :5173
 pnpm test
+pnpm --filter @notion-alt/web test:e2e   # Playwright, startet Server und Vite selbst
 ```
+
+Stand: Der lokale Editor (Phase 2) funktioniert vollständig offline; Inhalte bleiben bis zum Sync (Phase 3) nur im Browser des Geräts.
 
 Mehr in [`CLAUDE.md`](CLAUDE.md) und unter [`docs/`](docs/README.md).
 

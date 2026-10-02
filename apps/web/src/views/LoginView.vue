@@ -14,7 +14,11 @@ const error = ref<string | null>(null)
 const busy = ref(false)
 
 onMounted(async () => {
-  registrationOpen.value = (await api.authStatus()).registrationOpen
+  try {
+    registrationOpen.value = (await api.authStatus()).registrationOpen
+  } catch {
+    error.value = 'Server nicht erreichbar.'
+  }
 })
 
 const messages: Record<string, string> = {

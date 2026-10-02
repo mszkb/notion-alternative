@@ -25,7 +25,7 @@ Jede lokale Änderung erzeugt genau eine Operation:
 | `op_id` | UUID, vom Client erzeugt – Idempotency Key |
 | `device_id` | Stabile Geräte-ID |
 | `workspace_id` | Ziel-Workspace |
-| `entity` | `document` \| `block` \| `tag` |
+| `entity` | `document` \| `block` \| `tag` \| `document_tag` (ergänzt durch [ADR 0009](0009-local-data-layer.md)) |
 | `entity_id` | Stabile ID (UUID, vom Client erzeugt) |
 | `kind` | `create` \| `update` \| `move` \| `delete` |
 | `base_revision` | Revision der Entität, auf der die Änderung beruht (`null` bei `create`) |
