@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    volumes:
+      - data:/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${PORT:-8080}:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  data:
