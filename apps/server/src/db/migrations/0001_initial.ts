@@ -13,9 +13,7 @@ export async function up(db: Kysely<any>): Promise<void> {
   await db.schema
     .createTable('sessions')
     .addColumn('id', 'text', (col) => col.primaryKey())
-    .addColumn('user_id', 'text', (col) =>
-      col.notNull().references('users.id').onDelete('cascade'),
-    )
+    .addColumn('user_id', 'text', (col) => col.notNull().references('users.id').onDelete('cascade'))
     .addColumn('created_at', 'text', (col) => col.notNull())
     .addColumn('expires_at', 'text', (col) => col.notNull())
     .execute()

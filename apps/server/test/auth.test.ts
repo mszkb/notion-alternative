@@ -94,7 +94,11 @@ describe('auth', () => {
   it('invalidates the session on logout', async () => {
     ;({ app } = await createTestApp())
     const { cookie } = await register(app, 'alice@example.com')
-    const logout = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } })
+    const logout = await app.inject({
+      method: 'POST',
+      url: '/api/auth/logout',
+      headers: { cookie },
+    })
     expect(logout.statusCode).toBe(204)
     const me = await app.inject({ url: '/api/auth/me', headers: { cookie } })
     expect(me.statusCode).toBe(401)
@@ -104,7 +108,10 @@ describe('auth', () => {
     let db
     ;({ app, db } = await createTestApp())
     const { cookie } = await register(app, 'alice@example.com')
-    await db.updateTable('sessions').set({ expires_at: new Date(0).toISOString() }).execute()
+    await db
+      .updateTable('sessions')
+      .set({ expires_at: new Date(0).toISOString() })
+      .execute()
     const me = await app.inject({ url: '/api/auth/me', headers: { cookie } })
     expect(me.statusCode).toBe(401)
   })
@@ -113,7 +120,10 @@ describe('auth', () => {
     ;({ app } = await createTestApp())
     expect((await app.inject('/api/auth/me')).statusCode).toBe(401)
     expect((await app.inject('/api/workspaces')).statusCode).toBe(401)
-    const forged = await app.inject({ url: '/api/workspaces', headers: { cookie: 'session=forged' } })
+    const forged = await app.inject({
+      url: '/api/workspaces',
+      headers: { cookie: 'session=forged' },
+    })
     expect(forged.statusCode).toBe(401)
   })
 })

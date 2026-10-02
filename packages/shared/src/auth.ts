@@ -3,11 +3,7 @@ import { z } from 'zod'
 export const PASSWORD_MIN_LENGTH = 10
 export const PASSWORD_MAX_LENGTH = 256
 
-export const emailSchema = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .pipe(z.email().max(254))
+export const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254))
 
 export const passwordSchema = z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH)
 
