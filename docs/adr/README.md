@@ -13,3 +13,5 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0005](0005-push.md) | Push | Accepted |
 | [0006](0006-tech-stack.md) | Tech-Stack (Frontend/Backend) | Accepted |
 | [0007](0007-foundation-libraries.md) | Bibliotheken und Konventionen für Phase 1 | Accepted |
+| [0008](0008-block-editor.md) | Editor und Inline-Repräsentation von Blöcken | Accepted |
+| [0009](0009-local-data-layer.md) | Lokale Datenschicht, Operationen und Suche | Accepted |
