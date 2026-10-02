@@ -1,23 +1,24 @@
 # Architekturüberblick
 
-> Status: **Vorschlag**. Verbindliche Entscheidungen werden in [ADRs](../adr/README.md) getroffen.
+> Status: **teilweise entschieden** (ADR 0001, 0003, 0006 akzeptiert). Verbindliche Entscheidungen werden in [ADRs](../adr/README.md) getroffen.
 
 ```
 ┌──────────────────────────── Gerät ────────────────────────────┐
-│  PWA (Nuxt/Vue)                                               │
+│  SPA / PWA (Vue 3 + Vite)                                     │
 │   ├─ Editor / UI                                              │
-│   ├─ Lokale DB (SQLite-Wrapper oder IndexedDB)  ◄── Wahrheit  │
+│   ├─ Lokale DB (IndexedDB via Dexie)            ◄── Wahrheit  │
 │   ├─ Offline-Queue (Operationen mit Operation-ID)             │
 │   ├─ Lokale Volltextsuche                                     │
 │   └─ Service Worker (Cache, Web Push)                         │
 └───────────────┬───────────────────────────────▲───────────────┘
                 │ Delta-Sync (Cursor, idempotent) │ Web Push: sync_available
 ┌───────────────▼───────────────────────────────┴───────────────┐
-│  Self-hosted Server (Docker Compose)                          │
-│   ├─ API (Fastify oder .NET)                                  │
-│   ├─ PostgreSQL (Daten, Änderungslog, FTS)                    │
-│   ├─ S3-kompatibler Object Storage (Anhänge)                  │
-│   └─ VAPID-Keypair / Push-Versand                             │
+│  Self-hosted Server (Docker Compose, 2 Container)             │
+│   ├─ frontend: statischer Webserver (SPA), /api → backend     │
+│   └─ backend:  Fastify-API                                    │
+│                 ├─ SQLite (Daten, Änderungslog, FTS5)         │
+│                 ├─ Datei-Volume (Anhänge; S3 später)          │
+│                 └─ VAPID-Keypair / Push-Versand               │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -25,16 +26,16 @@
 
 | Bereich | Vorschlag | ADR |
 | --- | --- | --- |
-| Frontend | Nuxt/Vue als responsive PWA mit Service Worker | [0006](../adr/0006-tech-stack.md) |
-| Lokaler Speicher | SQLite über geeigneten Wrapper **oder** IndexedDB mit klarer Persistenzstrategie | [0001](../adr/0001-local-storage.md) |
-| Backend | Fastify oder .NET API | [0006](../adr/0006-tech-stack.md) |
-| Serverdatenbank | PostgreSQL | – |
-| Dateien | S3-kompatibler Object Storage | – |
+| Frontend | Vue 3 als SPA (Vite), ohne Nuxt; PWA-Funktionen ab Phase 4 | [0006](../adr/0006-tech-stack.md) |
+| Lokaler Speicher | IndexedDB über Dexie, `navigator.storage.persist()` | [0001](../adr/0001-local-storage.md) |
+| Backend | Fastify (TypeScript), geteilte Typen/Sync-Logik im Monorepo | [0006](../adr/0006-tech-stack.md) |
+| Serverdatenbank | SQLite (Prototyp); Wechsel auf PostgreSQL per eigenem ADR offen | [0006](../adr/0006-tech-stack.md) |
+| Dateien | Datei-Volume im Backend; S3-kompatibler Storage später | [0006](../adr/0006-tech-stack.md) |
 | Sync | Versioniertes Änderungslog mit Cursor, Geräte-ID, Revisionen, Idempotency Keys | [0002](../adr/0002-sync-protocol.md) |
-| Sync (später) | CRDT oder operation-based Sync für echte parallele Bearbeitung | [0003](../adr/0003-conflict-resolution.md) |
-| Suche | Zunächst PostgreSQL Full Text Search; später optional Meilisearch/OpenSearch | – |
+| Konflikte | Block-Merge + sichtbare Konfliktanzeige; CRDT/operation-based Sync später (Phase 8) | [0003](../adr/0003-conflict-resolution.md) |
+| Suche | Server: SQLite FTS5; lokal: JS-Bibliothek (Wahl in Phase 2); später optional Meilisearch/OpenSearch | [0006](../adr/0006-tech-stack.md) |
 | Push | Web Push (VAPID), optionaler Hosted Relay | [0005](../adr/0005-push.md) |
 | Export | Markdown, JSON, ZIP | [0004](../adr/0004-export-format.md) |
-| Deployment | Docker Compose, Healthchecks, Migrationen, dokumentierte Backup-Prozedur | – |
+| Deployment | Docker Compose mit 2 Containern (`frontend`, `backend`), Healthchecks, Migrationen, dokumentierte Backup-Prozedur | [0006](../adr/0006-tech-stack.md) |
 
 Weiter: [Datenmodell & Sync](sync.md) · [Push-Strategie](push.md)

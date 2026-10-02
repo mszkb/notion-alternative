@@ -8,7 +8,15 @@ Self-hosted, **local-first / offline-first** Wissens- und Dokumentenplattform (N
 
 ## Status
 
-Phase 0 (Discovery). Es existiert noch kein Code. Der Tech-Stack ist **vorgeschlagen, aber nicht entschieden** – Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+Phase 0 (Discovery). Es existiert noch kein Code. Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+
+Entschieden (`Accepted`):
+
+- **Stack** ([ADR 0006](docs/adr/0006-tech-stack.md)): TypeScript; Vue 3 SPA (Vite, ohne Nuxt); Fastify; SQLite (Server, inkl. FTS5); Dateien im Volume, S3 später; Docker Compose mit 2 Containern (`frontend`, `backend`).
+- **Lokale DB** ([ADR 0001](docs/adr/0001-local-storage.md)): IndexedDB über Dexie.
+- **Konflikte** ([ADR 0003](docs/adr/0003-conflict-resolution.md)): Block-Merge + sichtbare Konfliktanzeige.
+
+Noch offen: Sync-Protokoll (0002), Exportformat (0004), Push (0005).
 
 ## Wo steht was
 
