@@ -15,7 +15,28 @@
 | `Tag` | Schlagwort; Favoriten/zuletzt bearbeitet als Metadaten |
 | `SyncCursor` | Position eines Geräts im Änderungslog |
 
-> Das genaue Schema ist Teil von Phase 0 und wird in [ADR 0002](../adr/0002-sync-protocol.md) konkretisiert.
+## Felder (MVP)
+
+Alle IDs sind UUIDs und werden vom Client erzeugt (offline-fähig). Synchronisierte Entitäten tragen zusätzlich `revision` (vom Server vergeben, steigt pro Änderung) und `deleted_at` (Tombstone, `null` = aktiv).
+
+| Entität | Felder |
+| --- | --- |
+| `Workspace` | `id`, `name`, `owner_id`, `created_at` |
+| `User` | `id`, `email`, `password_hash`, `created_at` |
+| `Device` | `id`, `user_id`, `name`, `created_at`, `last_seen_at` |
+| `Document` | `id`, `workspace_id`, `parent_id` (Seitenbaum, `null` = Wurzel), `title`, `sort_key`, `favorite`, `created_at`, `updated_at`, `revision`, `deleted_at` |
+| `Block` | `id`, `document_id`, `type` (`paragraph`, `heading`, `list_item`, `code`, `quote`, …), `content` (Text inkl. Inline-Formatierung und Seitenlinks), `attrs` (z. B. Überschriftenebene, Code-Sprache), `sort_key`, `revision`, `deleted_at` |
+| `Tag` | `id`, `workspace_id`, `name`, `revision`, `deleted_at`; Zuordnung über `document_tags` |
+| `Change` | `seq` (monoton pro Workspace = Cursor), `op_id`, `device_id`, `entity`, `entity_id`, `kind`, `revision`, `payload`, `applied_at` |
+| `Conflict` | `id`, `entity`, `entity_id`, `base_revision`, `local` (Stand des Geräts), `remote` (Stand des Servers), `created_at`, `resolved_at` |
+| `SyncCursor` | lokal auf dem Gerät: `workspace_id`, `cursor` (letzte gesehene `seq`) |
+| `Attachment`, `Revision` | werden in Phase 5 konkretisiert |
+
+- `sort_key`: fraktionaler Index (String), damit Einfügen und Verschieben auf mehreren Geräten ohne Umnummerierung funktioniert.
+- Backlinks werden aus Seitenlinks in `Block.content` abgeleitet, nicht separat synchronisiert.
+- Die Inline-Repräsentation von `content` wird mit der Editor-Wahl in Phase 2 festgelegt.
+
+Protokoll und Operationen: [ADR 0002](../adr/0002-sync-protocol.md).
 
 ## Regeln
 

@@ -8,7 +8,18 @@ Self-hosted, **local-first / offline-first** Wissens- und Dokumentenplattform (N
 
 ## Status
 
-Phase 0 (Discovery). Es existiert noch kein Code. Der Tech-Stack ist **vorgeschlagen, aber nicht entschieden** – Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+Phase 0 (Discovery). Es existiert noch kein Code. Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+
+Entschieden (`Accepted`):
+
+- **Stack** ([ADR 0006](docs/adr/0006-tech-stack.md)): TypeScript; Vue 3 SPA (Vite, ohne Nuxt); Fastify; SQLite (Server, inkl. FTS5); Dateien im Volume, S3 später; Docker Compose mit 2 Containern (`frontend`, `backend`).
+- **Lokale DB** ([ADR 0001](docs/adr/0001-local-storage.md)): IndexedDB über Dexie.
+- **Konflikte** ([ADR 0003](docs/adr/0003-conflict-resolution.md)): Block-Merge + sichtbare Konfliktanzeige.
+- **Sync** ([ADR 0002](docs/adr/0002-sync-protocol.md)): REST-Batch (`/api/sync/push`, `/pull`, `/snapshot`), Operationen auf Blockebene.
+- **Export** ([ADR 0004](docs/adr/0004-export-format.md)): Markdown mit relativen Links, JSON inkl. Verlauf, ZIP mit Manifest.
+- **Push** ([ADR 0005](docs/adr/0005-push.md)): VAPID vom eigenen Server, Payload ohne Inhalte.
+
+Noch offen in Phase 0: Zielgruppe schärfen.
 
 ## Wo steht was
 

@@ -22,14 +22,14 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 ## Phase 0 – Discovery
 
 - [ ] Zielgruppe schärfen ([`docs/product/vision.md`](docs/product/vision.md))
-- [ ] Datenmodell festlegen ([`docs/architecture/sync.md`](docs/architecture/sync.md))
-- [ ] Exportformat festlegen – [ADR 0004](docs/adr/0004-export-format.md)
-- [ ] Lizenz bestätigen (aktuell: MIT, siehe `LICENSE`)
-- [ ] Offline-Anforderungen definieren – [ADR 0001](docs/adr/0001-local-storage.md)
-- [ ] Konfliktstrategie festlegen – [ADR 0003](docs/adr/0003-conflict-resolution.md)
-- [ ] Sync-Protokoll festlegen – [ADR 0002](docs/adr/0002-sync-protocol.md)
-- [ ] Push-Strategie bestätigen – [ADR 0005](docs/adr/0005-push.md)
-- [ ] Tech-Stack entscheiden (Frontend, Backend) – [ADR 0006](docs/adr/0006-tech-stack.md)
+- [x] Datenmodell festlegen ([`docs/architecture/sync.md`](docs/architecture/sync.md))
+- [x] Exportformat festlegen – [ADR 0004](docs/adr/0004-export-format.md)
+- [x] Lizenz bestätigen (MIT, siehe `LICENSE`)
+- [x] Offline-Anforderungen definieren – [ADR 0001](docs/adr/0001-local-storage.md)
+- [x] Konfliktstrategie festlegen – [ADR 0003](docs/adr/0003-conflict-resolution.md)
+- [x] Sync-Protokoll festlegen – [ADR 0002](docs/adr/0002-sync-protocol.md)
+- [x] Push-Strategie bestätigen – [ADR 0005](docs/adr/0005-push.md)
+- [x] Tech-Stack entscheiden (Frontend, Backend) – [ADR 0006](docs/adr/0006-tech-stack.md)
 
 ## Phase 1 – Foundation
 
@@ -37,14 +37,13 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 - [ ] CI (Lint, Typecheck, Tests)
 - [ ] Auth (Benutzerkonto)
 - [ ] Workspace-Modell
-- [ ] Docker Compose (App, PostgreSQL, S3-kompatibler Storage)
-- [ ] Datenbank & Migrationen
-- [ ] Object Storage anbinden
+- [ ] Docker Compose mit 2 Containern (`frontend`, `backend`)
+- [ ] Datenbank (SQLite) & Migrationen
 - [ ] Observability (Logs, Healthchecks, Metriken)
 
 ## Phase 2 – Local editor
 
-- [ ] Lokale Datenbank (gemäß ADR 0001)
+- [ ] Lokale Datenbank (IndexedDB/Dexie, gemäß ADR 0001)
 - [ ] Editor: Überschriften, Text, Listen, Code, Links, Zitate
 - [ ] Navigation & verschachtelter Seitenbaum
 - [ ] Tags, Favoriten, zuletzt bearbeitet
@@ -61,7 +60,7 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 - [ ] Vollständiger Re-Sync
 - [ ] Sync-Trigger: Start, Fokuswechsel, Push, periodisch
 - [ ] Konfliktanzeige (gemäß ADR 0003)
-- [ ] Serverseitige Volltextsuche (PostgreSQL FTS)
+- [ ] Serverseitige Volltextsuche (SQLite FTS5)
 
 ## Phase 4 – PWA
 
@@ -74,6 +73,7 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 ## Phase 5 – Files and history
 
 - [ ] Dateianhänge
+- [ ] S3-kompatiblen Object Storage anbinden (optional, ersetzt Datei-Volume)
 - [ ] Speicher- und Größenlimits
 - [ ] Versionen / Revisionsverlauf
 - [ ] Wiederherstellung früherer Versionen
