@@ -1,0 +1,41 @@
+import path from 'node:path'
+import { z } from 'zod'
+
+const booleanFromEnv = z
+  .enum(['true', 'false', '1', '0'])
+  .transform((value) => value === 'true' || value === '1')
+
+const envSchema = z.object({
+  HOST: z.string().default('0.0.0.0'),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  DATA_DIR: z.string().default('./data'),
+  DATABASE_PATH: z.string().optional(),
+  // Registration is always possible for the very first account; afterwards only if enabled.
+  ALLOW_REGISTRATION: booleanFromEnv.default(false),
+  COOKIE_SECURE: booleanFromEnv.default(false),
+  SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+})
+
+export interface Config {
+  host: string
+  port: number
+  logLevel: string
+  databasePath: string
+  allowRegistration: boolean
+  cookieSecure: boolean
+  sessionTtlDays: number
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const parsed = envSchema.parse(env)
+  return {
+    host: parsed.HOST,
+    port: parsed.PORT,
+    logLevel: parsed.LOG_LEVEL,
+    databasePath: parsed.DATABASE_PATH ?? path.join(parsed.DATA_DIR, 'app.sqlite'),
+    allowRegistration: parsed.ALLOW_REGISTRATION,
+    cookieSecure: parsed.COOKIE_SECURE,
+    sessionTtlDays: parsed.SESSION_TTL_DAYS,
+  }
+}
