@@ -83,6 +83,39 @@ describe('serializeInline', () => {
     ],
   ]
 
+  it('writes italic with underscores and keeps bold+italic unambiguous', () => {
+    const nodes: InlineNode[] = [
+      {
+        type: 'bold',
+        children: [
+          { type: 'text', text: 'b ' },
+          { type: 'italic', children: [{ type: 'text', text: 'c' }] },
+        ],
+      },
+    ]
+    expect(serializeInline(nodes)).toBe('**b _c_**')
+    expect(parseInline('**b _c_**')).toEqual(nodes)
+    expect(parseInline('_x_')).toEqual(parseInline('*x*'))
+    expect(serializeInline([{ type: 'text', text: 'snake_case' }])).toBe('snake\\_case')
+  })
+
+  it('moves edge whitespace out of emphasis and flattens nested spans', () => {
+    const nodes: InlineNode[] = [
+      { type: 'text', text: 'a' },
+      { type: 'bold', children: [{ type: 'text', text: ' b ' }] },
+      { type: 'text', text: 'c' },
+    ]
+    expect(serializeInline(nodes)).toBe('a **b** c')
+    expect(
+      serializeInline([
+        { type: 'bold', children: [{ type: 'bold', children: [{ type: 'text', text: 'x' }] }] },
+      ]),
+    ).toBe('**x**')
+    expect(serializeInline([{ type: 'italic', children: [{ type: 'text', text: '  ' }] }])).toBe(
+      '  ',
+    )
+  })
+
   it('round-trips nodes through markdown', () => {
     for (const nodes of cases) {
       expect(parseInline(serializeInline(nodes))).toEqual(nodes)
@@ -90,7 +123,17 @@ describe('serializeInline', () => {
   })
 
   it('is stable for arbitrary input after one normalisation', () => {
-    for (const source of ['a * b', '**x', 'x\\', '[a](b)', 'a `b` **c** *d*', '* x *']) {
+    for (const source of [
+      'a * b',
+      '**x',
+      'x\\',
+      '[a](b)',
+      'a `b` **c** *d*',
+      '* x *',
+      '***x***',
+      '**a *b***',
+      '_a_b_',
+    ]) {
       const once = serializeInline(parseInline(source))
       expect(serializeInline(parseInline(once))).toBe(once)
       expect(inlineToPlainText(once)).toBe(inlineToPlainText(source))

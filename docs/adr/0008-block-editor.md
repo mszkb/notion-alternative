@@ -45,10 +45,10 @@ Listen sind keine Container, sondern aufeinanderfolgende `list_item`-Blöcke mit
 
 | Syntax | Bedeutung |
 | --- | --- |
-| `**fett**`, `*kursiv*`, `` `code` `` | Formatierung |
+| `**fett**`, `_kursiv_`, `` `code` `` | Formatierung; beim Lesen wird auch `*kursiv*` akzeptiert. Geschrieben wird kursiv mit `_`, damit fett+kursiv eindeutig bleibt (`**a _b_**` statt `**a *b***`). |
 | `[Text](https://…)` | Externer Link (nur `http`, `https`, `mailto`) |
 | `[Titel](page:<uuid>)` | **Seitenlink** auf ein Dokument über dessen stabile ID |
-| `\*` usw. | Escaping von Steuerzeichen |
+| `\*`, `\_` usw. | Escaping der Steuerzeichen `\`, `*`, `_`, `` ` ``, `[`, `]` |
 
 - Seitenlinks referenzieren die **ID**, nicht den Titel – Umbenennen bricht keine Links. Der gespeicherte Titel ist nur Fallback-Anzeige; angezeigt wird der aktuelle Titel des Ziels.
 - Backlinks werden aus `page:`-Links abgeleitet (lokaler, nicht synchronisierter Index, siehe [ADR 0009](0009-local-data-layer.md)).

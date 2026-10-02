@@ -2,7 +2,7 @@ import { isUuid } from './ids'
 
 /**
  * Markdown-inline subset used for `Block.content` (ADR 0008):
- * `**bold**`, `*italic*`, `` `code` ``, `[text](https://…)` and page links `[title](page:<uuid>)`.
+ * `**bold**`, `_italic_` (`*italic*` is read too), `` `code` ``, `[text](https://…)` and page links `[title](page:<uuid>)`.
  * Anything that does not form valid syntax stays literal text, so parsing never drops content.
  */
 export type InlineNode =
@@ -26,7 +26,7 @@ export function isSafeHref(href: string): boolean {
   }
 }
 
-const ESCAPABLE = new Set(['\\', '*', '`', '[', ']'])
+const ESCAPABLE = new Set(['\\', '*', '_', '`', '[', ']'])
 
 export function parseInline(source: string): InlineNode[] {
   return normalize(parseRange(source, 0, source.length, true))
@@ -64,8 +64,8 @@ function parseRange(src: string, start: number, end: number, allowLinks: boolean
         i = close + 2
         continue
       }
-    } else if (ch === '*') {
-      const close = findClosing(src, i + 1, end, '*')
+    } else if (ch === '*' || ch === '_') {
+      const close = findClosing(src, i + 1, end, ch)
       if (close !== -1 && close > i + 1 && flanking(src, i + 1, close)) {
         flush()
         nodes.push({ type: 'italic', children: parseRange(src, i + 1, close, allowLinks) })
@@ -95,7 +95,7 @@ function flanking(src: string, contentStart: number, contentEnd: number): boolea
 }
 
 /** Finds the closing delimiter, skipping escapes, code spans and (for `*`) bold markers. */
-function findClosing(src: string, from: number, end: number, delim: '*' | '**'): number {
+function findClosing(src: string, from: number, end: number, delim: '*' | '**' | '_'): number {
   let i = from
   while (i < end) {
     const ch = src[i]
@@ -110,7 +110,8 @@ function findClosing(src: string, from: number, end: number, delim: '*' | '**'):
         continue
       }
     }
-    if (ch === '*') {
+    if (delim === '_' && ch === '_') return i
+    if (ch === '*' && delim !== '_') {
       const double = src[i + 1] === '*'
       if (delim === '**' && double) return i
       if (delim === '*' && !double) return i
@@ -162,11 +163,11 @@ function parseLink(
 }
 
 function unescape(value: string): string {
-  return value.replace(/\\([\\*`[\]])/g, '$1')
+  return value.replace(/\\([\\*_`[\]])/g, '$1')
 }
 
 function escapeText(value: string): string {
-  return value.replace(/[\\*`[\]]/g, '\\$&')
+  return value.replace(/[\\*_`[\]]/g, '\\$&')
 }
 
 /** Merges adjacent text nodes and drops empty ones. */
@@ -181,7 +182,22 @@ export function normalize(nodes: InlineNode[]): InlineNode[] {
         continue
       }
       result.push(node)
-    } else if (node.type === 'bold' || node.type === 'italic' || node.type === 'link') {
+    } else if (node.type === 'bold' || node.type === 'italic') {
+      // <b> inside <b> adds nothing; adjacent spans of the same kind merge.
+      const children = normalize(
+        node.children.flatMap((child) => (child.type === node.type ? child.children : [child])),
+      )
+      if (children.length === 0) continue
+      const last = result[result.length - 1]
+      if (last?.type === node.type) {
+        result[result.length - 1] = {
+          type: node.type,
+          children: normalize([...last.children, ...children]),
+        }
+        continue
+      }
+      result.push({ type: node.type, children })
+    } else if (node.type === 'link') {
       const children = normalize(node.children)
       if (children.length === 0) continue
       result.push({ ...node, children })
@@ -195,7 +211,7 @@ export function normalize(nodes: InlineNode[]): InlineNode[] {
 }
 
 export function serializeInline(nodes: InlineNode[]): string {
-  return nodes.map(serializeNode).join('')
+  return normalize(nodes).map(serializeNode).join('')
 }
 
 function serializeNode(node: InlineNode): string {
@@ -203,9 +219,10 @@ function serializeNode(node: InlineNode): string {
     case 'text':
       return escapeText(node.text)
     case 'bold':
-      return `**${serializeInline(node.children)}**`
+      return emphasis(node.children, '**')
     case 'italic':
-      return `*${serializeInline(node.children)}*`
+      // `_` instead of `*` keeps bold+italic unambiguous (`**a _b_**` rather than `**a *b***`).
+      return emphasis(node.children, '_')
     case 'code':
       // Backticks cannot be represented inside a code span; fall back to escaped plain text.
       return node.text.includes('`') ? escapeText(node.text) : `\`${node.text}\``
@@ -214,6 +231,14 @@ function serializeNode(node: InlineNode): string {
     case 'page':
       return `[${escapeText(node.title)}](${PAGE_LINK_PREFIX}${node.documentId})`
   }
+}
+
+/** Emphasis cannot start or end with whitespace; move it outside the markers. */
+function emphasis(children: InlineNode[], marker: string): string {
+  const inner = serializeInline(children)
+  const match = /^(\s*)([\s\S]*?)(\s*)$/.exec(inner)!
+  const [, lead, middle, trail] = match
+  return middle ? `${lead}${marker}${middle}${marker}${trail}` : inner
 }
 
 /** Visible text without markup, e.g. for search and previews. */
