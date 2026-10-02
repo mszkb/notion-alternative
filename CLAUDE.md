@@ -8,7 +8,7 @@ Self-hosted, **local-first / offline-first** Wissens- und Dokumentenplattform (N
 
 ## Status
 
-Phase 0 (Discovery). Es existiert noch kein Code. Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+Phase 0 abgeschlossen, Phase 1 (Foundation) weitgehend umgesetzt: Monorepo, Server mit Auth und Workspaces, SPA-Grundgerüst, Docker Compose, CI. Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
 
 Entschieden (`Accepted`):
 
@@ -18,6 +18,7 @@ Entschieden (`Accepted`):
 - **Sync** ([ADR 0002](docs/adr/0002-sync-protocol.md)): REST-Batch (`/api/sync/push`, `/pull`, `/snapshot`), Operationen auf Blockebene.
 - **Export** ([ADR 0004](docs/adr/0004-export-format.md)): Markdown mit relativen Links, JSON inkl. Verlauf, ZIP mit Manifest.
 - **Push** ([ADR 0005](docs/adr/0005-push.md)): VAPID vom eigenen Server, Payload ohne Inhalte.
+- **Bibliotheken** ([ADR 0007](docs/adr/0007-foundation-libraries.md)): pnpm, Kysely + better-sqlite3, zod, esbuild, Vitest, ESLint + Prettier, nginx.
 
 Noch offen in Phase 0: Zielgruppe schärfen.
 
@@ -69,4 +70,21 @@ Relationale Datenbanken mit vielen Views, Echtzeit-Kollaboration/Cursor-Präsenz
 
 ## Befehle
 
-Noch keine – sobald Phase 1 (Monorepo, CI, Docker Compose) steht, hier Build-, Test-, Lint- und Dev-Befehle eintragen.
+Node 22 und pnpm (`corepack enable`).
+
+| Befehl | Zweck |
+| --- | --- |
+| `pnpm install` | Abhängigkeiten installieren |
+| `pnpm dev` | Server (`:3000`) und Vite (`:5173`, Proxy `/api`) im Watch-Modus |
+| `pnpm lint` / `pnpm format:check` | ESLint / Prettier (`pnpm format` korrigiert) |
+| `pnpm typecheck` | `tsc` bzw. `vue-tsc` in allen Paketen |
+| `pnpm test` | Vitest in allen Paketen |
+| `pnpm build` | Server-Bundle und SPA bauen |
+| `docker compose up -d --build` | Produktiv-Stack auf `:8080` |
+
+Struktur: `apps/server` (Fastify), `apps/web` (Vue SPA), `packages/shared` (zod-Schemas/Typen für beide).
+
+- Neue DB-Migration: Datei in `apps/server/src/db/migrations/` anlegen **und** in `src/db/migrate.ts` registrieren; Migrationen nie nachträglich ändern.
+- Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.
+- Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`findWorkspaceForUser`).
+- Betrieb, Konfiguration, Backup: `docs/operations/deployment.md`.

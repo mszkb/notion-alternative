@@ -33,13 +33,15 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 
 ## Phase 1 – Foundation
 
-- [ ] Monorepo-Struktur
-- [ ] CI (Lint, Typecheck, Tests)
-- [ ] Auth (Benutzerkonto)
-- [ ] Workspace-Modell
-- [ ] Docker Compose mit 2 Containern (`frontend`, `backend`)
-- [ ] Datenbank (SQLite) & Migrationen
-- [ ] Observability (Logs, Healthchecks, Metriken)
+- [x] Monorepo-Struktur
+- [x] CI (Lint, Typecheck, Tests)
+- [x] Auth (Benutzerkonto)
+- [x] Workspace-Modell
+- [x] Docker Compose mit 2 Containern (`frontend`, `backend`)
+- [x] Datenbank (SQLite) & Migrationen
+- [x] Observability: strukturierte Logs, Healthchecks
+- [ ] Observability: Metriken
+- [ ] Login-Rate-Limiting, Passwort ändern
 
 ## Phase 2 – Local editor
 
