@@ -1,10 +1,15 @@
+import { randomUUID } from 'node:crypto'
 import { test as base, expect, type Page } from '@playwright/test'
 
-export const USER = { email: 'e2e@example.com', password: 'correct horse battery' }
-
-/** Signs in through the API (cookie shared with the page) and opens the workspace. */
+/**
+ * Registers a fresh account (the session cookie is shared with the page) and opens its
+ * workspace. A new account per test and retry keeps server-side data isolated.
+ */
 export async function signIn(page: Page): Promise<void> {
-  const response = await page.request.post('/api/auth/login', { data: USER })
+  const email = `e2e-${randomUUID()}@example.com`
+  const response = await page.request.post('/api/auth/register', {
+    data: { email, password: 'correct horse battery' },
+  })
   expect(response.ok()).toBe(true)
   await page.goto('/')
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]+$/)

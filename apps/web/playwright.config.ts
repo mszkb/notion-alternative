@@ -13,7 +13,6 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
-  globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
     trace: 'retain-on-failure',
@@ -26,7 +25,13 @@ export default defineConfig({
     {
       command: 'pnpm --filter @notion-alt/server exec tsx src/index.ts',
       url: `http://localhost:${API_PORT}/api/ready`,
-      env: { PORT: String(API_PORT), DATABASE_PATH: databasePath, LOG_LEVEL: 'warn' },
+      // Every test (and retry) registers its own account, so attempts never share server data.
+      env: {
+        PORT: String(API_PORT),
+        DATABASE_PATH: databasePath,
+        LOG_LEVEL: 'warn',
+        ALLOW_REGISTRATION: 'true',
+      },
       reuseExistingServer: false,
     },
     {
