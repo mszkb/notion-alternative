@@ -1,6 +1,6 @@
 # Architekturüberblick
 
-> Status: **teilweise entschieden** (ADR 0001, 0003, 0006 akzeptiert). Verbindliche Entscheidungen werden in [ADRs](../adr/README.md) getroffen.
+> Status: **entschieden** (ADR 0001–0006 akzeptiert). Verbindliche Entscheidungen werden in [ADRs](../adr/README.md) getroffen.
 
 ```
 ┌──────────────────────────── Gerät ────────────────────────────┐

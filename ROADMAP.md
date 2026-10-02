@@ -22,13 +22,13 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 ## Phase 0 – Discovery
 
 - [ ] Zielgruppe schärfen ([`docs/product/vision.md`](docs/product/vision.md))
-- [ ] Datenmodell festlegen ([`docs/architecture/sync.md`](docs/architecture/sync.md))
-- [ ] Exportformat festlegen – [ADR 0004](docs/adr/0004-export-format.md)
-- [ ] Lizenz bestätigen (aktuell: MIT, siehe `LICENSE`)
+- [x] Datenmodell festlegen ([`docs/architecture/sync.md`](docs/architecture/sync.md))
+- [x] Exportformat festlegen – [ADR 0004](docs/adr/0004-export-format.md)
+- [x] Lizenz bestätigen (MIT, siehe `LICENSE`)
 - [x] Offline-Anforderungen definieren – [ADR 0001](docs/adr/0001-local-storage.md)
 - [x] Konfliktstrategie festlegen – [ADR 0003](docs/adr/0003-conflict-resolution.md)
-- [ ] Sync-Protokoll festlegen – [ADR 0002](docs/adr/0002-sync-protocol.md)
-- [ ] Push-Strategie bestätigen – [ADR 0005](docs/adr/0005-push.md)
+- [x] Sync-Protokoll festlegen – [ADR 0002](docs/adr/0002-sync-protocol.md)
+- [x] Push-Strategie bestätigen – [ADR 0005](docs/adr/0005-push.md)
 - [x] Tech-Stack entscheiden (Frontend, Backend) – [ADR 0006](docs/adr/0006-tech-stack.md)
 
 ## Phase 1 – Foundation
