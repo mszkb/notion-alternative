@@ -128,9 +128,9 @@ function readContent(block: Block, el: HTMLElement): string {
   return isTextarea(el) ? el.value : serializeDom(el)
 }
 
+/** Code does not wrap, so the line count gives the height without measuring layout. */
 function autosize(el: HTMLTextAreaElement) {
-  el.style.height = 'auto'
-  el.style.height = `${el.scrollHeight}px`
+  el.rows = Math.max(1, el.value.split('\n').length)
 }
 
 function isBusy(id: string): boolean {
