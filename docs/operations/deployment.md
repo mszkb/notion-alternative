@@ -46,6 +46,8 @@ Datenbank-Migrationen laufen beim Start des Backends automatisch.
 
 ## Backup (vorläufig)
 
+> **Wichtig bis Phase 3 (Sync):** Seiteninhalte liegen nur lokal im Browser (IndexedDB) des jeweiligen Geräts und werden noch nicht zum Server übertragen. Das Server-Backup enthält deshalb nur Konten und Workspaces. Abmelden löscht die lokalen Daten nicht; das Löschen der Website-Daten im Browser schon. Die Seitenleiste zeigt, ob der Browser den Speicher dauerhaft gewährt hat.
+
 Bis zum automatisierten Backup (Phase 7): Backend stoppen, Volume sichern, wieder starten. Im Verzeichnis mit der `docker-compose.yml` ausführen:
 
 ```sh

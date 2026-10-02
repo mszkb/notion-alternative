@@ -7,3 +7,5 @@ data
 docs
 *.md
 !apps/**/*.md
+**/test-results
+**/playwright-report

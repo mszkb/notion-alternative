@@ -45,12 +45,17 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 
 ## Phase 2 – Local editor
 
-- [ ] Lokale Datenbank (IndexedDB/Dexie, gemäß ADR 0001)
-- [ ] Editor: Überschriften, Text, Listen, Code, Links, Zitate
-- [ ] Navigation & verschachtelter Seitenbaum
-- [ ] Tags, Favoriten, zuletzt bearbeitet
-- [ ] Backlinks & Seitenverlinkung
-- [ ] Lokale Volltextsuche
+Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor, Markdown-Inline), [ADR 0009](docs/adr/0009-local-data-layer.md) (Datenschicht, Operationen, MiniSearch).
+
+- [x] Lokale Datenbank (IndexedDB/Dexie, gemäß ADR 0001) inkl. Offline-Queue in derselben Transaktion und `navigator.storage.persist()`
+- [x] Editor: Überschriften, Text, Listen, Code, Links, Zitate
+- [x] Navigation & verschachtelter Seitenbaum
+- [x] Tags, Favoriten, zuletzt bearbeitet
+- [x] Backlinks & Seitenverlinkung
+- [x] Lokale Volltextsuche
+- [x] App startet ohne Server aus lokalen Daten (T-OFF-01, T-OFF-02 automatisiert)
+
+Offen bzw. später: blockübergreifendes Undo und Markieren über Blockgrenzen ([ADR 0008](docs/adr/0008-block-editor.md)); „Lokale Daten löschen“ beim Abmelden (Phase 3, Geräteverwaltung); App-Dateien offline cachen (Phase 4, Service Worker).
 
 ## Phase 3 – Sync
 

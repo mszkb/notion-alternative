@@ -6,12 +6,14 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 
 | ID | Szenario | Erwartung | AC | Auto |
 | --- | --- | --- | --- | --- |
-| T-OFF-01 | App ohne Netz öffnen | Lokale Dokumente lesbar | AC-01, AC-08 | ☐ |
-| T-OFF-02 | Offline bearbeiten, neu laden | Änderung bleibt lokal erhalten | AC-01 | ☐ |
+| T-OFF-01 | App ohne Netz öffnen | Lokale Dokumente lesbar | AC-01, AC-08 | ☑ ¹ |
+| T-OFF-02 | Offline bearbeiten, neu laden | Änderung bleibt lokal erhalten | AC-01 | ☑ ¹ |
 | T-OFF-03 | Offline bearbeiten, dann online | Änderung wird synchronisiert | AC-02 | ☐ |
 | T-OFF-04 | Server down, Netz vorhanden | Lesen & Bearbeiten möglich, Queue wächst | AC-08 | ☐ |
 | T-OFF-05 | Verbindung bricht während Sync ab | Kein Datenverlust, Wiederholung idempotent | AC-02 | ☐ |
 | T-OFF-06 | Push deaktiviert | Sync bei Start/Fokus/Timer | AC-07 | ☐ |
+
+¹ Playwright (`apps/web/e2e/offline.spec.ts`): Server nicht erreichbar (alle `/api`-Requests schlagen fehl) sowie Netzverlust in der geladenen App; T-OFF-02 zusätzlich auf Datenebene (`apps/web/src/local/store.test.ts`). Neuladen bei echtem Netz-Offline braucht gecachte App-Dateien und wird mit dem Service Worker (Phase 4) ergänzt.
 
 ## Mehrere Geräte & Konflikte
 
@@ -29,7 +31,9 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | --- | --- | --- | --- | --- |
 | T-DEL-01 | A löscht Dokument, B synct | Tombstone repliziert, Dokument auf B entfernt | AC-02 | ☐ |
 | T-DEL-02 | A löscht, B bearbeitet offline dasselbe Dokument | Konflikt sichtbar, kein stiller Verlust | AC-03 | ☐ |
-| T-DEL-03 | Seite mit Unterseiten löschen | Konsistente Behandlung des Teilbaums | – | ☐ |
+| T-DEL-03 | Seite mit Unterseiten löschen | Konsistente Behandlung des Teilbaums | – | ☑ (lokal) ² |
+
+² Lokal: Tombstones für den ganzen Teilbaum (`store.test.ts`, `e2e/editor.spec.ts`). Replikation auf andere Geräte folgt mit Phase 3.
 
 ## Export / Import
 
