@@ -39,6 +39,8 @@ export interface Position {
 }
 
 export interface NewBlock {
+  /** Client-chosen id, e.g. so the editor can show the block before the write commits. */
+  id?: string
   type?: BlockType
   content?: string
   attrs?: BlockAttrs
@@ -336,7 +338,7 @@ export class LocalStore {
     position: Position,
   ): Promise<Block> {
     const block = blockSchema.parse({
-      id: newId(),
+      id: input.id ?? newId(),
       documentId: document.id,
       type: input.type ?? 'paragraph',
       content: input.content ?? '',
