@@ -10,7 +10,7 @@ Notion nervt mit seinem „always on“. Ja, es gibt eine Offline-Funktion, aber
 docker compose up -d --build
 ```
 
-Dann `http://localhost:8080` öffnen und das erste Konto anlegen. Details: [Deployment & Betrieb](docs/operations/deployment.md).
+Dann `http://127.0.0.1:8080` öffnen und das erste Konto anlegen. Details: [Deployment & Betrieb](docs/operations/deployment.md).
 
 ## Entwicklung
 

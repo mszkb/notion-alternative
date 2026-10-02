@@ -17,7 +17,8 @@ services:
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     ports:
-      - '${PORT:-8080}:80'
+      # Loopback only by default: put a TLS reverse proxy in front for remote access.
+      - '${BIND_ADDRESS:-127.0.0.1}:${PORT:-8080}:80'
     depends_on:
       backend:
         condition: service_healthy
