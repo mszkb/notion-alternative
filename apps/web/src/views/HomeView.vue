@@ -26,7 +26,13 @@ async function createWorkspace() {
 }
 
 async function logout() {
-  await api.logout()
+  error.value = null
+  try {
+    await api.logout()
+  } catch {
+    error.value = 'Abmelden fehlgeschlagen. Ist der Server erreichbar?'
+    return
+  }
   setCurrentUser(null)
   await router.push({ name: 'login' })
 }

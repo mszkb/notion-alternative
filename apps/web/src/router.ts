@@ -13,8 +13,13 @@ export const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  const user = await loadCurrentUser()
-  if (to.meta.requiresAuth && !user) return { name: 'login' }
-  if (to.name === 'login' && user) return { name: 'home' }
-  return true
+  try {
+    const user = await loadCurrentUser()
+    if (to.meta.requiresAuth && !user) return { name: 'login' }
+    if (to.name === 'login' && user) return { name: 'home' }
+    return true
+  } catch {
+    // Server unreachable: show the login page instead of a blank screen (no redirect loop).
+    return to.name === 'login' ? true : { name: 'login' }
+  }
 })
