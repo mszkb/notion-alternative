@@ -139,6 +139,7 @@ function isBusy(id: string): boolean {
     timers.has(id) ||
     inFlight.has(id) ||
     picker.value?.blockId === id ||
+    linking.value === id ||
     (!!el && el === document.activeElement)
   )
 }
@@ -701,10 +702,25 @@ function closePicker(refocus: boolean) {
   if (state && refocus) elements.get(state.blockId)?.focus()
 }
 
+/** Block whose saved range is in use while a chosen link is inserted (keeps it from re-rendering). */
+const linking = ref<string | null>(null)
+
 async function choose(choice: PickerChoice) {
   const state = picker.value
   picker.value = null
   if (!state) return
+  linking.value = state.blockId
+  try {
+    await insertLink(state, choice)
+  } finally {
+    linking.value = null
+  }
+}
+
+async function insertLink(
+  state: { blockId: string; range: Range; remove: number },
+  choice: PickerChoice,
+) {
   const block = blockById.value.get(state.blockId)
   const el = elements.get(state.blockId)
   if (!block || !el) return

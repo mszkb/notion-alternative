@@ -156,7 +156,10 @@ export class LocalStore {
     if (position.afterId === null) return sortKeyBetween(null, list[0]?.sortKey ?? null)
     const index = list.findIndex((item) => item.id === position.afterId)
     if (index === -1) throw new LocalStoreError(`Sibling ${position.afterId} not found`)
-    return sortKeyBetween(list[index]!.sortKey, list[index + 1]?.sortKey ?? null)
+    const before = list[index]!.sortKey
+    // Siblings with an equal key (concurrent inserts) are skipped: bound by the next distinct key.
+    const next = list.slice(index + 1).find((item) => item.sortKey > before)
+    return sortKeyBetween(before, next?.sortKey ?? null)
   }
 
   // ---------------------------------------------------------------- documents

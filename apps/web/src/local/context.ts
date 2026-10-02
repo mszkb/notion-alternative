@@ -14,6 +14,8 @@ export const workspaces = ref<Workspace[]>([])
 
 let openUserId: string | null = null
 let opening: Promise<LocalStore> | null = null
+/** Identifies the current open; a superseded open (user switch, logout) must not touch state. */
+let generation: object | null = null
 const searches = new Map<string, Promise<WorkspaceSearch>>()
 
 const PERSIST_REQUESTED = 'persistRequested'
@@ -22,17 +24,29 @@ export function openLocalStore(userId: string): Promise<LocalStore> {
   if (opening && openUserId === userId) return opening
   closeLocalStore()
   openUserId = userId
+  const token = {}
+  generation = token
   opening = (async () => {
     const store = await LocalStore.open(new LocalDb(localDbName(userId)))
-    localStore.value = store
+    const superseded = () => {
+      if (generation === token) return false
+      store.db.close()
+      return true
+    }
+    if (superseded()) throw new Error('Opening the local store was superseded')
     // Ask for persistent storage once on first start; afterwards only report the status.
     const asked = await store.db.meta.get(PERSIST_REQUESTED)
-    persistence.value = await ensurePersistentStorage(undefined, !asked)
+    const status = await ensurePersistentStorage(undefined, !asked)
     if (!asked) await store.db.meta.put({ key: PERSIST_REQUESTED, value: true })
-    workspaces.value = await store.cachedWorkspaces()
+    const cached = await store.cachedWorkspaces()
+    if (superseded()) throw new Error('Opening the local store was superseded')
+    localStore.value = store
+    persistence.value = status
+    workspaces.value = cached
     return store
   })()
   opening.catch(() => {
+    if (generation !== token) return
     opening = null
     openUserId = null
   })
@@ -44,8 +58,10 @@ export function closeLocalStore(): void {
   searches.clear()
   localStore.value?.db.close()
   localStore.value = null
+  workspaces.value = []
   opening = null
   openUserId = null
+  generation = null
 }
 
 export function requireStore(): LocalStore {

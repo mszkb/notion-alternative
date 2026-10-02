@@ -186,6 +186,20 @@ describe('blocks', () => {
     ])
   })
 
+  it('inserts next to a sibling even when following siblings share its key', async () => {
+    const document = await store.createDocument({ workspaceId: WS })
+    const [a] = await store.listBlocks(document.id)
+    const b = await store.createBlock(document.id, { content: 'b' })
+    const c = await store.createBlock(document.id, { content: 'c' })
+    // Equal keys as produced by concurrent inserts on two devices.
+    await db.blocks.update(b.id, { sortKey: a!.sortKey })
+    await db.blocks.update(c.id, { sortKey: `${a!.sortKey}V` })
+    const inserted = await store.createBlock(document.id, { content: 'new' }, { afterId: a!.id })
+    const keys = (await store.listBlocks(document.id)).map((block) => block.content)
+    expect(keys.indexOf('new')).toBeLessThan(keys.indexOf('c'))
+    expect(inserted.sortKey < `${a!.sortKey}V`).toBe(true)
+  })
+
   it('bumps updatedAt for recently edited pages', async () => {
     const a = await store.createDocument({ workspaceId: WS, title: 'A' })
     await store.createDocument({ workspaceId: WS, title: 'B' })

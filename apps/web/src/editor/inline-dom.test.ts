@@ -75,4 +75,16 @@ describe('caret helpers', () => {
     setCaretOffset(el, 100)
     expect(getCaretOffset(el)).toBe(8)
   })
+
+  it('counts a line break right before the caret', () => {
+    const el = element()
+    el.innerHTML = 'line<br><br>'
+    const range = document.createRange()
+    range.setStart(el, 2)
+    range.collapse(true)
+    document.getSelection()!.removeAllRanges()
+    document.getSelection()!.addRange(range)
+    expect(textLength(el)).toBe(5)
+    expect(getCaretOffset(el)).toBe(5)
+  })
 })

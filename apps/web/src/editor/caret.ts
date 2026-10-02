@@ -34,7 +34,9 @@ export function getCaretOffset(el: HTMLElement): number | null {
   before.selectNodeContents(el)
   before.setEnd(range.startContainer, range.startOffset)
   const fragment = before.cloneContents()
-  return nodeLength(fragment, fragment)
+  // Measured against el: a <br> before the caret is content; only el's own last <br> is the
+  // placeholder.
+  return Math.min(nodeLength(fragment, el), textLength(el))
 }
 
 export function hasCollapsedSelection(el: HTMLElement): boolean {
