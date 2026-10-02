@@ -1,4 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Web Crypto and URL are shared by browsers and Node; DOM provides their types.
+    "lib": ["ES2023", "DOM"]
+  },
   "include": ["src"]
 }
