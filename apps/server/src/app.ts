@@ -24,8 +24,8 @@ export async function buildApp({ db, config, logger = false }: AppOptions) {
   const app = Fastify({
     logger,
     bodyLimit: 1024 * 1024,
-    // The frontend container is the only client and acts as reverse proxy.
-    trustProxy: true,
+    // Trust exactly one hop: the frontend container (nginx) in front of the backend.
+    trustProxy: (_address, hop) => hop === 0,
   })
 
   app.decorate('db', db)

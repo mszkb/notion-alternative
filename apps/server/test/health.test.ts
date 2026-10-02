@@ -20,3 +20,19 @@ describe('health', () => {
     expect(response.json().error.code).toBe('not_found')
   })
 })
+
+describe('proxy trust', () => {
+  let app: TestApp
+  afterEach(() => app.close())
+
+  it('takes the client IP only from the hop added by the frontend proxy', async () => {
+    ;({ app } = await createTestApp())
+    app.get('/api/test-ip', async (request) => ({ ip: request.ip }))
+    // nginx appends the real client IP to whatever the client sent.
+    const response = await app.inject({
+      url: '/api/test-ip',
+      headers: { 'x-forwarded-for': '6.6.6.6, 203.0.113.7' },
+    })
+    expect(response.json().ip).toBe('203.0.113.7')
+  })
+})
