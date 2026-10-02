@@ -214,6 +214,13 @@ export function serializeInline(nodes: InlineNode[]): string {
   return normalize(nodes).map(serializeNode).join('')
 }
 
+/** `)` would end the link and whitespace is not allowed in it; both are percent-encoded. */
+function encodeHref(href: string): string {
+  return href.replace(/[()\s]/g, (c) =>
+    c === '(' ? '%28' : c === ')' ? '%29' : encodeURIComponent(c),
+  )
+}
+
 function serializeNode(node: InlineNode): string {
   switch (node.type) {
     case 'text':
@@ -227,7 +234,7 @@ function serializeNode(node: InlineNode): string {
       // Backticks cannot be represented inside a code span; fall back to escaped plain text.
       return node.text.includes('`') ? escapeText(node.text) : `\`${node.text}\``
     case 'link':
-      return `[${serializeInline(node.children)}](${node.href})`
+      return `[${serializeInline(node.children)}](${encodeHref(node.href)})`
     case 'page':
       return `[${escapeText(node.title)}](${PAGE_LINK_PREFIX}${node.documentId})`
   }

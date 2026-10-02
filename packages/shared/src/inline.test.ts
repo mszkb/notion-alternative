@@ -116,6 +116,20 @@ describe('serializeInline', () => {
     )
   })
 
+  it('percent-encodes parentheses and whitespace in link targets', () => {
+    const link: InlineNode = {
+      type: 'link',
+      href: 'https://en.wikipedia.org/wiki/Foo_(bar) baz',
+      children: [{ type: 'text', text: 'x' }],
+    }
+    const once = serializeInline([link])
+    expect(once).toBe('[x](https://en.wikipedia.org/wiki/Foo_%28bar%29%20baz)')
+    expect(parseInline(once)).toEqual([
+      { ...link, href: 'https://en.wikipedia.org/wiki/Foo_%28bar%29%20baz' },
+    ])
+    expect(serializeInline(parseInline(once))).toBe(once)
+  })
+
   it('round-trips nodes through markdown', () => {
     for (const nodes of cases) {
       expect(parseInline(serializeInline(nodes))).toEqual(nodes)
