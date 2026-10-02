@@ -126,3 +126,25 @@ test('deleting a page removes its subtree', async ({ signedIn: page }) => {
   await expect(page.getByRole('tree')).not.toContainText('Eltern')
   await expect(page.getByRole('tree')).not.toContainText('Kind')
 })
+
+test('pasted and dropped HTML is inserted as plain text only', async ({ signedIn: page }) => {
+  await newPage(page, 'Einfügen')
+  const input = blockInput(page, 0)
+  await input.click()
+  for (const type of ['paste', 'drop'] as const) {
+    await input.evaluate((el, eventType) => {
+      const data = new DataTransfer()
+      data.setData('text/html', '<img src="x" onerror="window.__xss = 1"><b>fett</b>')
+      data.setData('text/plain', `${eventType}-text `)
+      const event =
+        eventType === 'paste'
+          ? new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })
+          : new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true })
+      el.dispatchEvent(event)
+    }, type)
+  }
+  await expect(input).toContainText('paste-text')
+  await expect(input).toContainText('drop-text')
+  await expect(input.locator('img, b')).toHaveCount(0)
+  expect(await page.evaluate(() => (window as { __xss?: number }).__xss)).toBeUndefined()
+})

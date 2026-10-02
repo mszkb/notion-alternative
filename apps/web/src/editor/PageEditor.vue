@@ -637,6 +637,24 @@ function onPaste(event: ClipboardEvent) {
   if (text) document.execCommand('insertText', false, text.replace(/\r\n?/g, '\n'))
 }
 
+function onDrop(event: DragEvent) {
+  // Like paste: dropped HTML never reaches the DOM, only its plain text.
+  event.preventDefault()
+  const text = event.dataTransfer?.getData('text/plain') ?? ''
+  if (!text) return
+  const el = event.currentTarget as HTMLElement
+  const range = document.caretRangeFromPoint?.(event.clientX, event.clientY)
+  if (range && el.contains(range.startContainer)) {
+    const selection = document.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  } else {
+    el.focus()
+    setCaretOffset(el, textLength(el))
+  }
+  document.execCommand('insertText', false, text.replace(/\r\n?/g, '\n'))
+}
+
 function onClick(event: MouseEvent) {
   const link = (event.target as Element | null)?.closest?.('a')
   if (!link) return
@@ -868,6 +886,7 @@ function blockLabel(block: Block): string {
         @keydown="onKeydown(block, $event)"
         @blur="onBlur(block)"
         @paste="onPaste"
+        @drop="onDrop"
         @click="onClick"
       ></div>
 
