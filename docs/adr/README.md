@@ -12,3 +12,4 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0004](0004-export-format.md) | Exportformat | Accepted |
 | [0005](0005-push.md) | Push | Accepted |
 | [0006](0006-tech-stack.md) | Tech-Stack (Frontend/Backend) | Accepted |
+| [0007](0007-foundation-libraries.md) | Bibliotheken und Konventionen für Phase 1 | Accepted |

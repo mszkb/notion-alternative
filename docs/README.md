@@ -17,6 +17,10 @@ Abgeleitet aus der ursprünglichen Roadmap-Spezifikation („Roadmap: Self-hoste
 
 - [Index & Vorlage](adr/README.md)
 
+## Betrieb
+
+- [Deployment & Betrieb](operations/deployment.md)
+
 ## Prozess
 
 - [Definition of Done](process/definition-of-done.md)
