@@ -29,7 +29,7 @@ Alle IDs sind UUIDs und werden vom Client erzeugt (offline-fähig). Synchronisie
 | `Tag` | `id`, `workspace_id`, `name`, `revision`, `deleted_at` |
 | `DocumentTag` | `id`, `workspace_id`, `document_id`, `tag_id`, `revision`, `deleted_at` – Zuordnung Tag ↔ Dokument, eigene Entität `document_tag` ([ADR 0009](../adr/0009-local-data-layer.md)) |
 | `Change` | `seq` (monoton pro Workspace = Cursor), `op_id`, `device_id`, `entity`, `entity_id`, `kind`, `revision`, `payload`, `applied_at` |
-| `Conflict` | `id`, `entity`, `entity_id`, `base_revision`, `local` (Stand des Geräts), `remote` (Stand des Servers), `created_at`, `resolved_at` |
+| `Conflict` | `id`, `workspace_id`, `op_id`, `entity`, `entity_id`, `document_id`, `reason`, `base_revision`, `local` (nicht angewendete Operation des Geräts), `remote` (Stand des Servers), `created_at`, `resolved_at`, `resolution`, `revision` – Regeln und Auflösung in [ADR 0003](../adr/0003-conflict-resolution.md) |
 | `SyncCursor` | lokal auf dem Gerät: `workspace_id`, `cursor` (letzte gesehene `seq`) |
 | `Attachment`, `Revision` | werden in Phase 5 konkretisiert |
 
@@ -57,7 +57,7 @@ Umsetzung: `apps/server/src/sync/` (Migration `0003_sync`). Payload-Schemas je E
 2. `device_id` ist ein aktives Gerät des Benutzers, sonst `rejected: device_not_active`.
 3. `op_id` schon angewendet → `duplicate` mit ursprünglicher Revision und `seq` (Idempotenz). Dieselbe `op_id` für eine andere Entität → `rejected: op_id_reused`.
 4. Payload passt zum Schema (`rejected: invalid_payload`), Referenzen (`documentId`, `parentId`, `tagId`) liegen im selben Workspace (`rejected: not_found`), kein Zyklus im Seitenbaum.
-5. `create`: Entität darf nicht existieren (`already_exists`), Revision 1. Sonst: Entität muss existieren und aktiv sein (`not_found`, `deleted`). Hat **ein anderes Gerät** die Entität nach `base_revision` geändert, ist das Ergebnis `conflict` mit `currentRevision` – **nichts wird geschrieben** (kein stilles Überschreiben). Block-Merge und Konfliktobjekte ([ADR 0003](../adr/0003-conflict-resolution.md)) setzen auf diesem Ergebnis auf. Änderungen desselben Geräts zählen nicht: Seine Queue baut aufeinander auf (z. B. `create`, danach `update` mit noch `null` als Basis), weil das Gerät die Revision erst nach dem Push erfährt. Eine `base_revision` über der aktuellen ist ungültig.
+5. `create`: Entität darf nicht existieren (`already_exists`), Revision 1. Sonst: Entität muss existieren und aktiv sein (`not_found`, `deleted`). Hat **ein anderes Gerät** die Entität nach `base_revision` geändert, werden disjunkte Felder zusammengeführt (`merged`); bei gleichem Feld entsteht ein Konfliktobjekt mit beiden Ständen (`conflict` mit `conflictId`), die Entität bleibt unverändert – kein stilles Überschreiben ([ADR 0003](../adr/0003-conflict-resolution.md), Nachtrag). Änderungen desselben Geräts zählen nicht: Seine Queue baut aufeinander auf (z. B. `create`, danach `update` mit noch `null` als Basis), weil das Gerät die Revision erst nach dem Push erfährt. Eine `base_revision` über der aktuellen ist ungültig.
 6. Neue Revision = alte + 1; `seq` = höchste `seq` des Workspaces + 1 (lückenlos, da Schreibtransaktionen in SQLite serialisiert sind).
 
 ### Push
@@ -102,7 +102,7 @@ FTS5-Tabelle `search_index` (Migration `0005`, mit Initialbefüllung): eine Zeil
 - Eine Seite mit Unterseiten erzeugt je Seite eine `delete`-Operation (T-DEL-03). Blöcke und Tag-Zuordnungen einer gelöschten Seite bekommen **keine** eigenen Tombstones: Sie sind über den Tombstone ihrer Seite ausgeblendet und bleiben unverändert, damit eine spätere Wiederherstellung (Phase 5) die Seite vollständig zurückbringt.
 - Ändert ein Gerät eine Entität, die ein **anderes** Gerät gelöscht hat, ist das Ergebnis `conflict` mit `reason: deleted`. Ändert oder ergänzt es Blöcke bzw. Tags einer von einem anderen Gerät gelöschten Seite, ist das Ergebnis `conflict` mit `reason: parent_deleted` (T-DEL-02). Nichts verschwindet still im Tombstone.
 - Erneutes Löschen einer gelöschten Entität antwortet `duplicate` (gleiche Wirkung).
-- Der Pull wendet den Tombstone einer Seite nicht an, solange das Gerät ungesyncte Änderungen an der Seite oder ihren Blöcken hat: Die Seite bleibt mit der Änderung sichtbar, die Seitenleiste zeigt den Konflikt. Die Auflösung (wiederherstellen oder verwerfen) folgt mit dem Konflikt-Issue.
+- Der Pull wendet den Tombstone einer Seite nicht an, solange das Gerät ungesyncte Änderungen an der Seite oder ihren Blöcken hat. Deren Push wird zum Konfliktobjekt; sobald es per Pull ankommt, übernimmt das Gerät den Tombstone, und die Änderung lässt sich in der Konfliktansicht als neue Seite wiederherstellen.
 
 Entitäten anderer Workspaces werden wie fehlende behandelt (keine Offenlegung). Abgelehnte Operationen hinterlassen keinen Eintrag im Log. `listChangesSince` liefert Changes ab einem Cursor, nur für Workspaces des Benutzers. DB-Zeilen werden ausschließlich in `sync/mapping.ts` in camelCase-Objekte übersetzt.
 

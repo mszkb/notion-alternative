@@ -35,6 +35,11 @@ const ancestors = computed(() => {
 })
 const children = computed(() => documents.value.filter((d) => d.parentId === documentId))
 const backlinks = useLiveQuery(() => store.backlinks(documentId), [])
+const conflicts = useLiveQuery(
+  async () =>
+    (await store.openConflicts(workspaceId.value)).filter((c) => c.documentId === documentId),
+  [],
+)
 
 // ---------------------------------------------------------------- title
 
@@ -110,6 +115,13 @@ async function deletePage() {
 
 <template>
   <article v-if="document" class="page">
+    <p v-if="conflicts.length" class="error conflict-banner" data-testid="page-conflicts">
+      Diese Seite hat {{ conflicts.length }} offene{{
+        conflicts.length === 1 ? 'n' : ''
+      }}
+      Konflikt{{ conflicts.length === 1 ? '' : 'e' }}.
+      <RouterLink :to="{ name: 'conflicts', params: { workspaceId } }">Anzeigen</RouterLink>
+    </p>
     <header class="page-header">
       <nav class="breadcrumbs" aria-label="Pfad">
         <template v-for="ancestor in ancestors" :key="ancestor.id">

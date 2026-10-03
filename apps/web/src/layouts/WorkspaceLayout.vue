@@ -356,9 +356,10 @@ watch(
           {{ pending }} lokale Änderung{{ pending === 1 ? '' : 'en' }} noch nicht synchronisiert
         </p>
         <p v-if="conflicts.length" class="error" data-testid="sync-conflicts">
-          {{ conflicts.length }} Änderung{{ conflicts.length === 1 ? '' : 'en' }} mit Konflikt: auf
-          einem anderen Gerät geändert oder gelöscht. Sie bleiben lokal erhalten, bis die
-          Konfliktauflösung verfügbar ist.
+          <RouterLink :to="{ name: 'conflicts', params: { workspaceId } }">
+            {{ conflicts.length }} Konflikt{{ conflicts.length === 1 ? '' : 'e' }}
+          </RouterLink>
+          – gleichzeitige Änderungen auf mehreren Geräten. Beide Stände sind erhalten.
         </p>
         <p v-if="rejected.length" class="error" data-testid="sync-rejected">
           {{ rejected.length }} Änderung{{ rejected.length === 1 ? '' : 'en' }} vom Server abgelehnt

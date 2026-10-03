@@ -212,6 +212,11 @@ export class LocalStore {
     return document && !document.deletedAt ? document : undefined
   }
 
+  /** Title of a page, also of a deleted one (conflicts may refer to it). */
+  async documentTitle(id: string): Promise<string | null> {
+    return (await this.db.documents.get(id))?.title ?? null
+  }
+
   private async children(workspaceId: string, parentId: string | null): Promise<Document[]> {
     const documents = await this.db.documents.where('workspaceId').equals(workspaceId).toArray()
     return documents.filter((document) => !document.deletedAt && document.parentId === parentId)

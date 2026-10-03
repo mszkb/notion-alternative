@@ -3,6 +3,7 @@ import WorkspaceLayout from './layouts/WorkspaceLayout.vue'
 import { lastWorkspaceId, openLocalStore, refreshWorkspaces, workspaces } from './local/context'
 import { connection, loadCurrentUser } from './session'
 import AccountView from './views/AccountView.vue'
+import ConflictsView from './views/ConflictsView.vue'
 import HomeView from './views/HomeView.vue'
 import LoginView from './views/LoginView.vue'
 import PageView from './views/PageView.vue'
@@ -25,6 +26,7 @@ export const router = createRouter({
         { path: '', name: 'workspace', component: WorkspaceHome },
         { path: 'p/:documentId', name: 'page', component: PageView },
         { path: 'tags/:tagId', name: 'tag', component: TagView },
+        { path: 'conflicts', name: 'conflicts', component: ConflictsView },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

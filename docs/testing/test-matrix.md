@@ -24,14 +24,16 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | ID | Szenario | Erwartung | AC | Auto |
 | --- | --- | --- | --- | --- |
 | T-MD-01 | Gerät A ändert, B synct | B sieht Änderung | AC-02 | ☑ ⁴ |
-| T-MD-02 | A und B ändern verschiedene Blöcke desselben Dokuments offline | Automatischer Block-Merge | AC-03 | ☐ |
-| T-MD-03 | A und B ändern denselben Block offline | Sichtbarer Konflikt, beide Stände erhalten | AC-03 | ☐ |
+| T-MD-02 | A und B ändern verschiedene Blöcke desselben Dokuments offline | Automatischer Block-Merge | AC-03 | ☑ ⁷ |
+| T-MD-03 | A und B ändern denselben Block offline | Sichtbarer Konflikt, beide Stände erhalten | AC-03 | ☑ ⁷ |
 | T-MD-04 | Gleiche Operation doppelt gesendet | Nur einmal angewendet (Idempotenz) | AC-02 | ☑ ³ |
 | T-MD-05 | Gerät lange offline, Log kompaktiert | Vollständiger Re-Sync | AC-02 | ☑ ⁵ |
 
 ⁴ Pull (`GET /api/sync/pull`): zwei lokale Datenbanken gegen ein Änderungslog in `apps/web/src/sync/pull.test.ts` (inkl. Teilbaum, Tags, Backlinks, Abbruch mitten im Paging), zwei Browser-Kontexte in `apps/web/e2e/multi-device.spec.ts`.
 
 ⁵ Kompaktierung per `compactChangeLog` simuliert: Server (`apps/server/test/sync-snapshot.test.ts`, `410`), Client (`apps/web/src/sync/resync.test.ts`, ungesyncte Änderungen bleiben erhalten); manueller Re-Sync in `apps/web/e2e/sync.spec.ts`.
+
+⁷ `apps/server/test/sync-conflicts.test.ts` (Merge verschiedener Blöcke und Felder, Konfliktobjekt, Idempotenz, Auflösung), `apps/web/src/local/conflicts.test.ts` (Pull, Auflösen offline, Wiederherstellen), `apps/web/e2e/multi-device.spec.ts` (Konfliktansicht mit manuellem Zusammenführen, Löschkonflikt wiederherstellen).
 
 ## Löschungen
 

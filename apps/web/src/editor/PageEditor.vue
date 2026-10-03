@@ -90,6 +90,18 @@ function draftBlock(input: Pick<Block, 'type' | 'attrs' | 'content'>): Block {
 
 const blockById = computed(() => new Map((blocks.value ?? []).map((b) => [b.id, b])))
 
+/** Blocks with an open conflict get a marker (ADR 0003). */
+const conflicted = useLiveQuery(
+  async () =>
+    new Set(
+      (await store.openConflicts(workspaceId.value))
+        .filter((c) => c.entity === 'block' && c.documentId === props.documentId)
+        .map((c) => c.entityId),
+    ),
+  new Set<string>(),
+  () => props.documentId,
+)
+
 // ------------------------------------------------------------------ undo/redo across blocks
 
 const history = new EditHistory()
@@ -1180,7 +1192,13 @@ function blockLabel(block: Block): string {
       v-for="block in blocks ?? []"
       :key="block.id"
       class="block"
-      :class="[blockClass(block), { selected: selectedSet.has(block.id) }]"
+      :class="[
+        blockClass(block),
+        { selected: selectedSet.has(block.id), 'has-conflict': conflicted.has(block.id) },
+      ]"
+      :title="
+        conflicted.has(block.id) ? 'Konflikt: siehe Konflikte in der Seitenleiste' : undefined
+      "
       :style="{ '--indent': block.attrs.indent ?? 0 }"
       :data-block-id="block.id"
       :aria-selected="selectedSet.has(block.id) || undefined"

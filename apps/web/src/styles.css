@@ -503,6 +503,10 @@ kbd {
   user-select: none;
 }
 
+.block.has-conflict {
+  box-shadow: inset 3px 0 0 var(--error);
+}
+
 .block.selected {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border-radius: 6px;

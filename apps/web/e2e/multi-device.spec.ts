@@ -63,7 +63,7 @@ test('T-MD-01 / T-OFF-03: changes from one device appear on the other', async ({
   await other.context().close()
 })
 
-test('T-DEL-02: editing a page another device deleted shows a conflict and keeps the edit', async ({
+test('T-DEL-02: an edit on a page another device deleted is kept and can be restored', async ({
   page,
   browser,
 }) => {
@@ -89,9 +89,73 @@ test('T-DEL-02: editing a page another device deleted shows a conflict and keeps
 
   await other.unroute('**/api/**')
   await refocus(other)
-  await expect(other.getByTestId('sync-conflicts')).toBeVisible({ timeout: 10_000 })
-  await expect(other.getByRole('tree')).toContainText('Strittig')
+  const notice = other.getByTestId('sync-conflicts')
+  await expect(notice).toBeVisible({ timeout: 10_000 })
+  await notice.getByRole('link').click()
+  const conflict = other.getByRole('region', { name: /Konflikt/ })
+  await expect(conflict.getByTestId('local-version')).toHaveText('Ursprung – offline ergänzt')
+  await conflict.getByRole('button', { name: 'Als neue Seite wiederherstellen' }).click()
+
+  await expect(other.getByLabel('Titel')).toHaveValue('Strittig (wiederhergestellt)')
   await expect(blockInput(other, 0)).toHaveText('Ursprung – offline ergänzt')
+  await synced(other)
+  await refocus(page)
+  await expect(page.getByRole('tree')).toContainText('Strittig (wiederhergestellt)', {
+    timeout: 10_000,
+  })
+  await other.context().close()
+})
+
+test('T-MD-03: the same block edited offline on two devices becomes a visible conflict', async ({
+  page,
+  browser,
+}) => {
+  const email = await signIn(page)
+  await newPage(page, 'Gemeinsam')
+  await page.keyboard.type('Ursprung')
+  await waitForSaved(page)
+  await synced(page)
+  const other = await secondDevice(browser, email)
+  await other.getByRole('tree').getByText('Gemeinsam').click()
+  await expect(blockInput(other, 0)).toHaveText('Ursprung')
+
+  // Both devices edit the same block while offline.
+  for (const [device, text] of [
+    [page, ' von A'],
+    [other, ' von B'],
+  ] as const) {
+    await takeServerDown(device)
+    await blockInput(device, 0).click()
+    await device.keyboard.press('End')
+    await device.keyboard.type(text)
+    await waitForSaved(device)
+  }
+
+  // A syncs first and wins the block on the server.
+  await page.unroute('**/api/**')
+  await refocus(page)
+  await synced(page)
+  await other.unroute('**/api/**')
+  await refocus(other)
+
+  // B: the conflict is visible, nothing is lost, the block shows the server state meanwhile.
+  await expect(other.getByTestId('page-conflicts')).toBeVisible({ timeout: 10_000 })
+  await expect(other.locator('.block.has-conflict')).toHaveCount(1)
+  await expect(blockInput(other, 0)).toHaveText('Ursprung von A')
+  await other.getByTestId('page-conflicts').getByRole('link').click()
+  const conflict = other.getByRole('region', { name: /Konflikt/ })
+  await expect(conflict.getByTestId('local-version')).toHaveText('Ursprung von B')
+  await expect(conflict.getByTestId('remote-version')).toHaveText('Ursprung von A')
+
+  await conflict.getByRole('button', { name: 'Manuell zusammenführen' }).click()
+  await conflict.getByLabel('Zusammengeführte Fassung').fill('Ursprung von A und B')
+  await conflict.getByRole('button', { name: 'Zusammengeführt speichern' }).click()
+  await expect(other.getByTestId('no-conflicts')).toBeVisible()
+  await synced(other)
+
+  await refocus(page)
+  await expect(blockInput(page, 0)).toHaveText('Ursprung von A und B', { timeout: 10_000 })
+  await expect(page.getByTestId('sync-conflicts')).toHaveCount(0)
   await other.context().close()
 })
 

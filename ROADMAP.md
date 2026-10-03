@@ -72,7 +72,7 @@ Offen bzw. später: App-Dateien offline cachen (Phase 4, Service Worker). „Lok
 - [x] Tombstones für Löschungen (Replikation, Löschen vs. Bearbeiten als Konflikt)
 - [x] Vollständiger Re-Sync (`GET /api/sync/snapshot`, `410`, „Neu synchronisieren“)
 - [x] Sync-Trigger: Start, Fokuswechsel, Push (Hook), periodisch
-- [ ] Konfliktanzeige (gemäß ADR 0003)
+- [x] Block-Merge und Konfliktanzeige (gemäß ADR 0003)
 - [x] Serverseitige Volltextsuche (SQLite FTS5)
 
 ## Phase 4 – PWA
