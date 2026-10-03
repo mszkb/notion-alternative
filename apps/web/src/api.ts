@@ -5,6 +5,8 @@ import type {
   LoginInput,
   RegisterDeviceInput,
   RegisterInput,
+  SyncPullQuery,
+  SyncPullResponse,
   SyncPushInput,
   SyncPushResult,
   User,
@@ -60,6 +62,15 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
     removeDevice: (id: string) => request<void>('DELETE', `/devices/${id}`),
     syncPush: (input: SyncPushInput) =>
       request<{ results: SyncPushResult[] }>('POST', '/sync/push', input),
+    syncPull: ({ workspaceId, cursor, limit }: SyncPullQuery) =>
+      request<SyncPullResponse>(
+        'GET',
+        `/sync/pull?${new URLSearchParams({
+          workspaceId,
+          cursor: String(cursor),
+          limit: String(limit),
+        })}`,
+      ),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<{ workspace: Workspace }>('POST', '/workspaces', input),

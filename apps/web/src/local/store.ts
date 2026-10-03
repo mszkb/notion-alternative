@@ -1,11 +1,15 @@
 import {
   type Block,
   type BlockAttrs,
+  type BlockCreatePayload,
   type BlockType,
   blockSchema,
+  type Change,
   compareBySortKey,
   type Document,
+  type DocumentCreatePayload,
   type DocumentTag,
+  type DocumentTagCreatePayload,
   documentSchema,
   documentTitleSchema,
   extractPageLinks,
@@ -16,8 +20,10 @@ import {
   sortKeyBetween,
   type SyncPushResult,
   type Tag,
+  type TagCreatePayload,
   tagNameSchema,
   tagSchema,
+  validateOperationPayload,
   type Workspace,
 } from '@notion-alt/shared'
 import type { LocalDb, QueuedOperation } from './db'
@@ -95,11 +101,25 @@ export class LocalStore {
     // The scope must be an `async` function: Dexie only then tracks native awaits and keeps the
     // transaction alive across them (otherwise it may commit early).
     const result = await this.db.transaction('rw', CONTENT_TABLES, async () => fn(ctx))
+    this.notify(ctx)
+    return result
+  }
+
+  private notify(ctx: WriteContext) {
     for (const [workspaceId, ids] of ctx.touched) {
       const change = { workspaceId, documentIds: [...ids] }
       for (const listener of this.listeners) listener(change)
     }
-    return result
+  }
+
+  /** Local table of each synchronised entity. */
+  private get entityTables() {
+    return {
+      document: this.db.documents,
+      block: this.db.blocks,
+      tag: this.db.tags,
+      document_tag: this.db.documentTags,
+    } as const
   }
 
   private mark(ctx: WriteContext, workspaceId: string, documentId: string) {
@@ -608,12 +628,7 @@ export class LocalStore {
    * entity learns the server revision; conflicts and rejections stay queued and are marked.
    */
   async acknowledge(results: SyncPushResult[]): Promise<void> {
-    const tables = {
-      document: this.db.documents,
-      block: this.db.blocks,
-      tag: this.db.tags,
-      document_tag: this.db.documentTags,
-    } as const
+    const tables = this.entityTables
     await this.db.transaction('rw', CONTENT_TABLES, async () => {
       for (const result of results) {
         const op = await this.db.operations.where('opId').equals(result.opId).first()
@@ -637,6 +652,143 @@ export class LocalStore {
         }
       }
     })
+  }
+
+  // ---------------------------------------------------------------- pull
+
+  private static cursorKey(workspaceId: string): string {
+    return `syncCursor:${workspaceId}`
+  }
+
+  /** Last change-log `seq` of the workspace applied locally (0 = nothing yet). */
+  async syncCursor(workspaceId: string): Promise<number> {
+    const entry = await this.db.meta.get(LocalStore.cursorKey(workspaceId))
+    return typeof entry?.value === 'number' ? entry.value : 0
+  }
+
+  /**
+   * Applies pulled changes and stores the new cursor in one transaction (an interrupted pull
+   * repeats the whole page), without creating operations. Own changes only confirm: their queue
+   * entry leaves, the revision is stored. Entities with unsynced local operations stay as they
+   * are; their push then meets the conflict path instead of being overwritten (principle 6).
+   */
+  async applyRemoteChanges(workspaceId: string, changes: Change[], cursor: number): Promise<void> {
+    const ctx: WriteContext = { touched: new Map() }
+    await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
+      for (const change of changes) await this.applyRemoteChange(ctx, workspaceId, change)
+      await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
+    })
+    this.notify(ctx)
+  }
+
+  private async applyRemoteChange(ctx: WriteContext, workspaceId: string, change: Change) {
+    const table = this.entityTables[change.entity]
+    const local = await table.get(change.entityId)
+    const queued = await this.db.operations.where('opId').equals(change.opId).first()
+    if (queued?.seq !== undefined) await this.db.operations.delete(queued.seq)
+    if (queued || change.deviceId === this.deviceId) {
+      if (local && (local.revision ?? 0) < change.revision) {
+        await table.update(change.entityId, { revision: change.revision })
+      }
+      return
+    }
+    if ((await this.db.operations.where('entityId').equals(change.entityId).count()) > 0) return
+    const invalid = validateOperationPayload(change.entity, change.kind, change.payload)
+    if (invalid) {
+      console.warn('Skipping invalid change', change.seq, invalid)
+      return
+    }
+    const revision = change.revision
+    switch (change.entity) {
+      case 'document': {
+        if (change.kind === 'create') {
+          const p = change.payload as DocumentCreatePayload
+          await this.db.documents.put({
+            id: change.entityId,
+            workspaceId,
+            parentId: p.parentId,
+            title: p.title,
+            sortKey: p.sortKey,
+            favorite: p.favorite,
+            createdAt: p.createdAt,
+            updatedAt: change.appliedAt,
+            revision,
+            deletedAt: null,
+          })
+        } else if (local) {
+          const fields =
+            change.kind === 'delete'
+              ? { deletedAt: change.appliedAt }
+              : { ...(change.payload as Partial<Document>), updatedAt: change.appliedAt }
+          await this.db.documents.update(change.entityId, { ...fields, revision })
+        }
+        this.mark(ctx, workspaceId, change.entityId)
+        return
+      }
+      case 'block': {
+        let block: Block | undefined
+        if (change.kind === 'create') {
+          const p = change.payload as BlockCreatePayload
+          block = {
+            id: change.entityId,
+            documentId: p.documentId,
+            type: p.type,
+            content: p.content,
+            attrs: p.attrs,
+            sortKey: p.sortKey,
+            revision,
+            deletedAt: null,
+          }
+        } else if (local) {
+          const fields = change.kind === 'delete' ? { deletedAt: change.appliedAt } : change.payload
+          block = { ...(local as Block), ...fields, revision }
+        }
+        if (!block) return
+        await this.db.blocks.put(block)
+        const document = await this.db.documents.get(block.documentId)
+        if (block.deletedAt) await this.db.links.delete(block.id)
+        else if (document) await this.updateLinks(block, document)
+        this.mark(ctx, workspaceId, block.documentId)
+        return
+      }
+      case 'tag': {
+        if (change.kind === 'create') {
+          const p = change.payload as TagCreatePayload
+          await this.db.tags.put({
+            id: change.entityId,
+            workspaceId,
+            name: p.name,
+            revision,
+            deletedAt: null,
+          })
+        } else if (local) {
+          const fields = change.kind === 'delete' ? { deletedAt: change.appliedAt } : change.payload
+          await this.db.tags.update(change.entityId, { ...fields, revision })
+        }
+        return
+      }
+      case 'document_tag': {
+        let documentId = (local as DocumentTag | undefined)?.documentId
+        if (change.kind === 'create') {
+          const p = change.payload as DocumentTagCreatePayload
+          documentId = p.documentId
+          await this.db.documentTags.put({
+            id: change.entityId,
+            workspaceId,
+            documentId: p.documentId,
+            tagId: p.tagId,
+            revision,
+            deletedAt: null,
+          })
+        } else if (local) {
+          await this.db.documentTags.update(change.entityId, {
+            deletedAt: change.appliedAt,
+            revision,
+          })
+        }
+        if (documentId) this.mark(ctx, workspaceId, documentId)
+      }
+    }
   }
 
   async cacheWorkspaces(workspaces: Workspace[]): Promise<void> {

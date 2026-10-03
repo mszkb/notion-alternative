@@ -1,9 +1,17 @@
 import type { FastifyInstance } from 'fastify'
-import { type SyncPushResult, syncPushInputSchema } from '@notion-alt/shared'
+import {
+  type SyncPullResponse,
+  type SyncPushResult,
+  syncPullQuerySchema,
+  syncPushInputSchema,
+} from '@notion-alt/shared'
 import { currentUser, requireAuth } from '../auth/plugin'
 import { touchDevice } from '../devices/repository'
+import { HttpError } from '../errors'
 import { parseInput } from '../validation'
 import { applyOperation } from './apply'
+import { listChangesSince } from './changes'
+import { toChange } from './mapping'
 
 export async function syncRoutes(app: FastifyInstance): Promise<void> {
   const { db } = app
@@ -32,5 +40,19 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
       await touchDevice(db, user.id, deviceId, now)
     }
     return { results }
+  })
+
+  /** Delta sync: changes after the cursor, in `seq` order, page by page (ADR 0002). */
+  app.get('/sync/pull', async (request): Promise<SyncPullResponse> => {
+    const { workspaceId, cursor, limit } = parseInput(syncPullQuerySchema, request.query)
+    // One extra row tells whether another page follows.
+    const rows = await listChangesSince(db, currentUser(request).id, workspaceId, cursor, limit + 1)
+    if (!rows) throw new HttpError(404, 'not_found', 'Workspace not found')
+    const page = rows.slice(0, limit)
+    return {
+      changes: page.map(toChange),
+      cursor: page.at(-1)?.seq ?? cursor,
+      hasMore: rows.length > limit,
+    }
   })
 }

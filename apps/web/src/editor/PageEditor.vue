@@ -392,14 +392,15 @@ function autosize(el: HTMLTextAreaElement) {
   el.rows = Math.max(1, el.value.split('\n').length)
 }
 
-function isBusy(id: string): boolean {
+/** Unsaved or in-flight local edits (or an open picker): never replace this block's DOM. */
+function isBusy(id: string, allowFocused = false): boolean {
   const el = elements.get(id)
   return (
     timers.has(id) ||
     inFlight.has(id) ||
     picker.value?.blockId === id ||
     linking.value === id ||
-    (!!el && el === document.activeElement)
+    (!allowFocused && !!el && el === document.activeElement)
   )
 }
 
@@ -407,9 +408,18 @@ function isBusy(id: string): boolean {
 function syncDom(force = false) {
   for (const block of blocks.value ?? []) {
     const el = elements.get(block.id)
-    if (!el || isBusy(block.id)) continue
+    // A focused block without pending input also takes changes (e.g. pulled from another device).
+    if (!el || isBusy(block.id, true)) continue
     const linksPages = block.content.includes('](page:')
-    if ((force && linksPages) || rendered.get(block.id) !== block.content) renderBlock(block, el)
+    if (!((force && linksPages) || rendered.get(block.id) !== block.content)) continue
+    if (el === document.activeElement) {
+      const caret = caretOf(el)
+      renderBlock(block, el)
+      if (isTextarea(el)) el.setSelectionRange(caret, caret)
+      else setCaretOffset(el, Math.min(caret, textLength(el)))
+    } else {
+      renderBlock(block, el)
+    }
   }
   applyPendingFocus()
 }

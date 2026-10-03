@@ -64,6 +64,16 @@ Umsetzung: `apps/server/src/sync/` (Migration `0003_sync`). Payload-Schemas je E
 
 `POST /api/sync/push` nimmt bis zu 500 Operationen in Erzeugungsreihenfolge und wendet jede einzeln an (je eine Transaktion); die Antwort enthält pro `opId` `applied`/`duplicate` (mit `revision`, `seq`), `conflict` (mit `currentRevision`) oder `rejected` (mit `code`). `merged` und Konflikt-IDs folgen mit dem Konflikt-Issue. Der Client (`apps/web/src/sync/`) sendet die Queue in Batches (max. 500 Operationen und ≈ 900 KB wegen des nginx-Limits von 1 MB), entfernt bestätigte Operationen und speichert die Server-Revision an der Entität – beides in einer Dexie-Transaktion. Konflikte und Ablehnungen bleiben mit Grund (`issue`) in der Queue und werden in der Seitenleiste angezeigt; nichts geht verloren. Bei Netz- oder Serverfehlern wiederholt der Client mit exponentiellem Backoff (1 s … 5 min). Ausgelöst wird der Push nach lokalen Änderungen (entprellt), beim Start, bei Fokus, bei `online` und minütlich.
 
+### Pull
+
+`GET /api/sync/pull?workspaceId=…&cursor=…&limit=…` (max. 1000) liefert die Changes nach dem Cursor in `seq`-Reihenfolge, den neuen Cursor und `hasMore`. Der Client (`pullWorkspace`) holt nach jedem Push für jeden Workspace Seite um Seite und wendet sie mit `LocalStore.applyRemoteChanges` an. Eine Seite und ihr Cursor (`meta.syncCursor:<workspaceId>`) werden in **einer** Dexie-Transaktion gespeichert; ein Abbruch wiederholt höchstens diese Seite. Regeln beim Anwenden:
+
+- Es entstehen **keine** neuen Queue-Einträge.
+- Eigene Changes (gleiche `op_id` in der Queue oder eigene `device_id`) bestätigen nur: Der Queue-Eintrag wird entfernt (falls die Push-Antwort verloren ging) und die Revision gespeichert.
+- Hat die Entität noch ungesyncte lokale Operationen, bleibt sie unverändert. Ihr Push trifft dann auf den Konfliktpfad, statt still überschrieben zu werden.
+- `delete` setzt `deletedAt` (Tombstone), wie lokal auch für den Teilbaum, Tag-Zuordnungen und Blöcke. Links (Backlinks) werden nachgeführt, und die Suche indiziert betroffene Dokumente über `onChange` neu.
+- Der Editor übernimmt entfernte Änderungen auch in einem fokussierten Block, solange dort keine ungespeicherte Eingabe läuft; die Cursorposition bleibt erhalten.
+
 Entitäten anderer Workspaces werden wie fehlende behandelt (keine Offenlegung). Abgelehnte Operationen hinterlassen keinen Eintrag im Log. `listChangesSince` liefert Changes ab einem Cursor, nur für Workspaces des Benutzers. DB-Zeilen werden ausschließlich in `sync/mapping.ts` in camelCase-Objekte übersetzt.
 
 ## Regeln

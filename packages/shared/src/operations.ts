@@ -134,3 +134,20 @@ export const syncPushResultSchema = z.discriminatedUnion('status', [
   }),
 ])
 export type SyncPushResult = z.infer<typeof syncPushResultSchema>
+
+export const SYNC_PULL_MAX_LIMIT = 1000
+
+/** `GET /api/sync/pull`: changes of one workspace after `cursor` (ADR 0002). */
+export const syncPullQuerySchema = z.object({
+  workspaceId: z.uuid(),
+  cursor: z.coerce.number().int().nonnegative().default(0),
+  limit: z.coerce.number().int().min(1).max(SYNC_PULL_MAX_LIMIT).default(SYNC_PULL_MAX_LIMIT),
+})
+export type SyncPullQuery = z.infer<typeof syncPullQuerySchema>
+
+export interface SyncPullResponse {
+  changes: Change[]
+  /** Highest `seq` delivered (or the given cursor if none); the next request starts here. */
+  cursor: number
+  hasMore: boolean
+}
