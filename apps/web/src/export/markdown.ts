@@ -40,9 +40,14 @@ async function loadAttachmentContents(
   return contents
 }
 
-export function exportFileName(workspaceName: string, kind: string, now: Date): string {
+export function exportFileName(
+  workspaceName: string,
+  kind: string,
+  now: Date,
+  extension = 'zip',
+): string {
   const date = now.toISOString().slice(0, 10)
-  return `${safeFileName(workspaceName, 'Workspace')}-${kind}-${date}.zip`
+  return `${safeFileName(workspaceName, 'Workspace')}-${kind}-${date}.${extension}`
 }
 
 /**
@@ -81,9 +86,14 @@ export async function buildMarkdownExport(
   }
 }
 
-/** Offers bytes as a file download. */
-export function saveFile(fileName: string, data: Uint8Array, type = 'application/zip'): void {
-  const url = URL.createObjectURL(new Blob([data as BlobPart], { type }))
+/** Offers a file for download. */
+export function saveFile(
+  fileName: string,
+  data: Uint8Array | Blob,
+  type = 'application/zip',
+): void {
+  const blob = data instanceof Blob ? data : new Blob([data as BlobPart], { type })
+  const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
   link.download = fileName

@@ -11,4 +11,12 @@ Der Export ist in der Seitenleiste unter **Export** erreichbar. Er entsteht aus 
 - Front Matter je Datei: `id`, `title`, `tags`, `favorite`, `created_at`, `updated_at`.
 - Nur der aktuelle Stand: gelöschte Seiten (Papierkorb) und der Verlauf sind nicht enthalten.
 
+## JSON
+
+- Verlustfreie Kopie für Backup und Import: Seiten, Blöcke, Tags, Tag-Zuordnungen, Seitenlinks und Anhang-Metadaten mit ihren stabilen IDs, **inklusive gelöschter Einträge** (Papierkorb).
+- Top-Level-Feld `schema_version` (aktuell `1`). Das Schema steht als JSON Schema in [`docs/architecture/export.schema.json`](../architecture/export.schema.json) und als zod-Schema `jsonExportSchema` in `packages/shared`.
+- **Mit Verlauf** (Standard, nur online): zusätzlich das Änderungslog des Servers unter `history.changes`. Ist das Log kompaktiert, fehlen die Einträge bis `history.compactedSeq`. **Ohne Verlauf** ist `history` `null`.
+- Der aktuelle Stand stammt aus der lokalen Datenbank und enthält auch noch nicht synchronisierte Änderungen; offline ist nur der Export ohne Verlauf möglich.
+- Die Datei wird in kleinen Stücken (eine Entität pro Zeile) erzeugt, damit große Workspaces nicht als ein einziger String im Speicher liegen müssen.
+
 Format und Hintergründe: [ADR 0004](../adr/0004-export-format.md).

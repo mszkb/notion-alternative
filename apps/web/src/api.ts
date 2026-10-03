@@ -11,6 +11,8 @@ import type {
   RegisterDeviceInput,
   RegisterInput,
   ServerSearchHit,
+  SyncLogQuery,
+  SyncLogResponse,
   SyncPullQuery,
   SyncPullResponse,
   SyncPushInput,
@@ -73,6 +75,15 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
       request<SyncPullResponse>(
         'GET',
         `/sync/pull?${new URLSearchParams({
+          workspaceId,
+          cursor: String(cursor),
+          limit: String(limit),
+        })}`,
+      ),
+    syncLog: ({ workspaceId, cursor, limit }: SyncLogQuery) =>
+      request<SyncLogResponse>(
+        'GET',
+        `/sync/log?${new URLSearchParams({
           workspaceId,
           cursor: String(cursor),
           limit: String(limit),

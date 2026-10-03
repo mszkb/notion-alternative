@@ -130,3 +130,28 @@ describe('compacted change log', () => {
     expect(snapshot.documents).toHaveLength(4)
   })
 })
+
+describe('GET /api/sync/log', () => {
+  it('returns the remaining log after compaction instead of 410', async () => {
+    await push(
+      ...['a', 'b', 'c', 'd'].map(() => op('document', 'create', randomUUID(), docPayload)),
+    )
+    await compactChangeLog(db, workspaceId, 2)
+
+    const first = (await get(`/api/sync/log?workspaceId=${workspaceId}&cursor=0&limit=1`)).json()
+    expect(first.changes.map((c: { seq: number }) => c.seq)).toEqual([3])
+    expect(first).toMatchObject({ cursor: 3, hasMore: true, compactedSeq: 2 })
+    const second = (await get(`/api/sync/log?workspaceId=${workspaceId}&cursor=3`)).json()
+    expect(second.changes.map((c: { seq: number }) => c.seq)).toEqual([4])
+    expect(second.hasMore).toBe(false)
+  })
+
+  it('only serves the user’s own workspaces', async () => {
+    const { cookie: other } = await register(app, 'mallory@example.com')
+    const response = await app.inject({
+      url: `/api/sync/log?workspaceId=${workspaceId}`,
+      headers: { cookie: other },
+    })
+    expect(response.statusCode).toBe(404)
+  })
+})

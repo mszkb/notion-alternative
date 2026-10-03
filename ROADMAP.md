@@ -95,7 +95,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 ## Phase 6 – Export/import
 
 - [x] Markdown-Export
-- [ ] JSON-Export
+- [x] JSON-Export
 - [ ] ZIP-Export (inkl. Anhänge)
 - [ ] Import in frische Installation
 - [ ] Round-Trip-Importtests

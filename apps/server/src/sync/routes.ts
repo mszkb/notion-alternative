@@ -1,7 +1,9 @@
 import type { FastifyInstance } from 'fastify'
 import {
+  type SyncLogResponse,
   type SyncPullResponse,
   type SyncPushResult,
+  syncLogQuerySchema,
   syncPullQuerySchema,
   syncPushInputSchema,
   syncSnapshotQuerySchema,
@@ -72,6 +74,25 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
       changes: page.map(toChange),
       cursor: page.at(-1)?.seq ?? cursor,
       hasMore: rows.length > limit,
+    }
+  })
+
+  /**
+   * Change log for the JSON export (ADR 0004): like pull, but starts at the oldest change still
+   * kept instead of answering `410` after compaction.
+   */
+  app.get('/sync/log', async (request): Promise<SyncLogResponse> => {
+    const { workspaceId, cursor, limit } = parseInput(syncLogQuerySchema, request.query)
+    const userId = currentUser(request).id
+    const workspace = await findWorkspaceForUser(db, workspaceId, userId)
+    if (!workspace) throw new HttpError(404, 'not_found', 'Workspace not found')
+    const rows = (await listChangesSince(db, userId, workspaceId, cursor, limit + 1)) ?? []
+    const page = rows.slice(0, limit)
+    return {
+      changes: page.map(toChange),
+      cursor: page.at(-1)?.seq ?? cursor,
+      hasMore: rows.length > limit,
+      compactedSeq: workspace.compacted_seq,
     }
   })
 
