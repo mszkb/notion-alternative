@@ -6,6 +6,7 @@ import TagBar from '../components/TagBar.vue'
 import { useLiveQuery } from '../composables/live-query'
 import { displayTitle, useWorkspace } from '../composables/workspace'
 import PageEditor from '../editor/PageEditor.vue'
+import { registerPendingEdits } from '../pending-edits'
 
 const { store, workspaceId, documents, documentsById } = useWorkspace()
 const route = useRoute()
@@ -58,13 +59,15 @@ watch(
   { immediate: true },
 )
 
-function saveTitle() {
+function saveTitle(): Promise<void> {
   if (titleTimer) clearTimeout(titleTimer)
   titleTimer = null
   if (document.value && title.value !== document.value.title) {
-    void store.renameDocument(documentId, title.value)
+    return store.renameDocument(documentId, title.value)
   }
+  return Promise.resolve()
 }
+const stopPendingTitle = registerPendingEdits(saveTitle)
 
 function onTitleInput() {
   if (titleTimer) clearTimeout(titleTimer)
@@ -77,7 +80,10 @@ function focusFirstBlock() {
   first?.focus()
 }
 
-onBeforeUnmount(saveTitle)
+onBeforeUnmount(() => {
+  void saveTitle()
+  stopPendingTitle()
+})
 
 // ---------------------------------------------------------------- actions
 

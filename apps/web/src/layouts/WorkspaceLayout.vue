@@ -19,7 +19,8 @@ import {
 } from '../local/context'
 import type { SearchHit } from '../local/search'
 import { connection, currentUser, refreshSession } from '../session'
-import { requestSync, syncState } from '../sync/engine'
+import { onPushHint } from '../pwa'
+import { onSyncHint, requestSync, syncState } from '../sync/engine'
 import { DEFAULT_TRIGGERS, startSyncTriggers } from '../sync/triggers'
 
 const route = useRoute()
@@ -154,6 +155,7 @@ async function recheck() {
 // Local changes are pushed shortly after they were made; the queue keeps them meanwhile.
 let triggers: ReturnType<typeof startSyncTriggers> | null = null
 const stopChangeListener = store.onChange(() => triggers?.changed())
+const stopPushHints = onPushHint(() => void onSyncHint(store))
 
 onMounted(() => {
   triggers = startSyncTriggers(recheck, DEFAULT_TRIGGERS, () => requestSync(store))
@@ -163,6 +165,7 @@ onBeforeUnmount(() => {
   triggers?.stop()
   window.removeEventListener('offline', markOffline)
   stopChangeListener()
+  stopPushHints()
 })
 
 async function syncNow() {

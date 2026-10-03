@@ -4,6 +4,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 const API_PORT = 3100
 const WEB_PORT = 5180
+// Production build (service worker) for the PWA tests.
+const PREVIEW_PORT = 5181
 const databasePath = path.join(tmpdir(), `notion-alt-e2e-${Date.now()}.sqlite`)
 
 export default defineConfig({
@@ -20,7 +22,14 @@ export default defineConfig({
       ? { executablePath: process.env.PW_CHROMIUM_PATH }
       : {},
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /pwa-.*\.spec\.ts/ },
+    {
+      name: 'pwa',
+      use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PREVIEW_PORT}` },
+      testMatch: /pwa-.*\.spec\.ts/,
+    },
+  ],
   webServer: [
     {
       command: 'pnpm --filter @notion-alt/server exec tsx src/index.ts',
@@ -34,6 +43,12 @@ export default defineConfig({
         // Every test registers from the same address; keep the per-IP limit out of the way.
         REGISTER_MAX_ATTEMPTS_PER_IP: '100000',
       },
+      reuseExistingServer: false,
+    },
+    {
+      command: `pnpm exec vite build && pnpm exec vite preview --port ${PREVIEW_PORT} --strictPort`,
+      url: `http://localhost:${PREVIEW_PORT}`,
+      env: { API_PROXY_TARGET: `http://localhost:${API_PORT}` },
       reuseExistingServer: false,
     },
     {

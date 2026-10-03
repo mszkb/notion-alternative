@@ -1,8 +1,9 @@
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
+import { serviceWorker } from './service-worker.plugin'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), serviceWorker()],
   server: {
     port: 5173,
     // Same-origin API in development, mirroring the nginx proxy in production.

@@ -95,6 +95,7 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Lokales Schema ändern: neue `this.version(n + 1)` in `apps/web/src/local/db.ts` mit Upgrade; bestehende Versionen nie ändern (T-MIG-02).
 - Neue Abhängigkeiten im Server-Image müssen auf `linux/arm64` ohne Compiler installierbar sein (Prebuild im Paket); der CI-Job `docker-arm64` prüft das.
 - Editor: Neue strukturelle Schritte in `PageEditor.vue` rufen vorher `checkpoint()` auf, sonst fehlen sie im blockübergreifenden Undo (ADR 0008).
+- Service Worker: `apps/web/src/sw/service-worker.ts`, gebaut von `apps/web/service-worker.plugin.ts` (Precache-Liste, Version) – nur im Production-Build. PWA-E2E (`e2e/pwa-*.spec.ts`) laufen im Playwright-Projekt `pwa` gegen `vite preview`. Komponenten mit entprellten Eingaben melden ihren Flush über `registerPendingEdits` an (Update-Neuladen).
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
 - Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.
 - Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`findWorkspaceForUser`).

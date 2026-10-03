@@ -93,6 +93,12 @@ Das Backend begrenzt fehlgeschlagene Logins und Registrierungsversuche im Arbeit
 
 Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`frontend`) anhängt; das Backend vertraut genau einem Proxy-Hop. Ein weiterer Reverse Proxy davor (z. B. für TLS) erscheint deshalb als Client-IP; dann teilen sich alle Nutzer das IP-Limit. In diesem Fall `LOGIN_MAX_FAILURES_PER_IP` erhöhen. Bei rootless Docker sieht nginx je nach Port-Treiber ebenfalls nicht die echte Adresse.
 
+## App offline (Service Worker)
+
+Der Production-Build enthält einen Service Worker (`/sw.js`), der die App-Dateien zwischenspeichert, damit die App auch ohne Netz neu geladen werden kann. Er braucht einen sicheren Kontext: `https://` oder `http://localhost` (z. B. über den SSH-Tunnel). Über eine reine HTTP-LAN-Adresse läuft die App ohne Service Worker weiter, nur das Neuladen offline geht dann nicht ([ADR 0010](../adr/0010-reference-deployment-and-https.md)).
+
+Nach einem Update zeigt die App „Eine neue Version ist verfügbar – Neu laden“; offene Eingaben werden vorher gespeichert. Hängt ein Gerät auf einer alten Version fest: Kontoseite → „App-Cache zurücksetzen“ (lokale Daten bleiben), notfalls in den Browser-Einstellungen die Website-Daten nur für „Cache“/„Service Worker“ löschen.
+
 ## Healthchecks
 
 - `GET /healthz` – nginx läuft

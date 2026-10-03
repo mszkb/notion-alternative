@@ -61,7 +61,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 
 - [x] Blockübergreifendes Undo/Redo und Markieren ganzer Blöcke (Kopieren als Markdown, Löschen) – [ADR 0008](docs/adr/0008-block-editor.md)
 
-Offen bzw. später: App-Dateien offline cachen (Phase 4, Service Worker). „Lokale Daten löschen“ beim Abmelden ist mit Phase 3 umgesetzt.
+„Lokale Daten löschen“ beim Abmelden ist mit Phase 3 umgesetzt, App-Dateien offline cachen mit Phase 4 (Service Worker).
 
 ## Phase 3 – Sync
 
@@ -78,7 +78,7 @@ Offen bzw. später: App-Dateien offline cachen (Phase 4, Service Worker). „Lok
 ## Phase 4 – PWA
 
 - [x] Web App Manifest (Icons inkl. maskable/Apple, iOS-Meta-Tags)
-- [ ] Service Worker
+- [x] Service Worker (eigener, ohne Bibliothek; Update-Hinweis, Push-Handler)
 - [ ] Installationsflow (inkl. iOS-Hinweise)
 - [ ] Cache-Strategie
 - [ ] Web Push (VAPID, Subscription nach Nutzeraktion)

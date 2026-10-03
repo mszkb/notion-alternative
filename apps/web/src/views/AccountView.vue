@@ -5,6 +5,7 @@ import { ApiError, api } from '../api'
 import { deviceStatus } from '../device'
 import { refreshWorkspaces, requireStore } from '../local/context'
 import { connection, currentUser } from '../session'
+import { resetAppCache } from '../pwa'
 import { requestSync, syncState } from '../sync/engine'
 
 const currentPassword = ref('')
@@ -230,6 +231,15 @@ async function changePassword() {
     <p v-if="!resyncing && syncState.lastError" class="error">
       Synchronisierung fehlgeschlagen: {{ syncState.lastError }}
     </p>
+
+    <h2>App-Version</h2>
+    <p class="muted">
+      Hängt die App auf einer alten Version fest, entfernt dies die zwischengespeicherten
+      App-Dateien und lädt sie neu vom Server. Lokale Daten bleiben erhalten.
+    </p>
+    <button type="button" :disabled="connection !== 'online'" @click="resetAppCache">
+      App-Cache zurücksetzen
+    </button>
   </main>
 </template>
 

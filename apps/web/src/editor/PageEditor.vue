@@ -22,6 +22,7 @@ import {
   setCaretOffset,
   textLength,
 } from './caret'
+import { registerPendingEdits } from '../pending-edits'
 import { EditHistory } from './history'
 import { renderInline, serializeDom } from './inline-dom'
 import PagePicker, { type PickerChoice } from './PagePicker.vue'
@@ -536,6 +537,12 @@ function flushAll() {
   for (const id of [...timers.keys()]) void flush(id)
 }
 
+/** Before a reload (app update): write debounced edits and wait for all saves. */
+const stopPendingEdits = registerPendingEdits(async () => {
+  flushAll()
+  await Promise.all(inFlight.values())
+})
+
 function onVisibilityChange() {
   if (document.visibilityState === 'hidden') flushAll()
 }
@@ -551,6 +558,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   flushAll()
+  stopPendingEdits()
   document.removeEventListener('visibilitychange', onVisibilityChange)
   window.removeEventListener('pagehide', flushAll)
   document.removeEventListener('mousedown', closeMenuOnOutsideClick)
