@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { PASSWORD_MIN_LENGTH } from '@notion-alt/shared'
+import { onMounted, ref, watch } from 'vue'
+import { type Device, PASSWORD_MIN_LENGTH } from '@notion-alt/shared'
 import { ApiError, api } from '../api'
+import { deviceStatus } from '../device'
 import { connection, currentUser } from '../session'
 
 const currentPassword = ref('')
@@ -17,6 +18,64 @@ const messages: Record<string, string> = {
   too_many_attempts: 'Zu viele Fehlversuche. Bitte später erneut versuchen.',
   unauthorized: 'Sitzung abgelaufen. Bitte erneut anmelden.',
 }
+
+// ------------------------------------------------------------------ devices
+
+const devices = ref<Device[] | null>(null)
+const deviceError = ref<string | null>(null)
+const editing = ref<string | null>(null)
+const editName = ref('')
+
+const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+
+async function loadDevices() {
+  if (connection.value !== 'online') return
+  try {
+    devices.value = (await api.listDevices()).devices
+  } catch {
+    deviceError.value = 'Geräte konnten nicht geladen werden.'
+  }
+}
+
+onMounted(loadDevices)
+// The device registers itself on the online refresh; show it once that happened.
+watch(deviceStatus, loadDevices)
+
+function startRename(device: Device) {
+  editing.value = device.id
+  editName.value = device.name
+}
+
+async function saveRename(device: Device) {
+  deviceError.value = null
+  try {
+    await api.renameDevice(device.id, editName.value)
+    editing.value = null
+    await loadDevices()
+  } catch {
+    deviceError.value = 'Gerät konnte nicht umbenannt werden.'
+  }
+}
+
+async function removeDevice(device: Device) {
+  if (
+    !window.confirm(
+      `„${device.name}“ entfernen? Das Gerät wird abgemeldet und kann nicht mehr synchronisieren. ` +
+        'Noch nicht synchronisierte Änderungen auf dem Gerät werden dann nicht übertragen.',
+    )
+  ) {
+    return
+  }
+  deviceError.value = null
+  try {
+    await api.removeDevice(device.id)
+    await loadDevices()
+  } catch {
+    deviceError.value = 'Gerät konnte nicht entfernt werden.'
+  }
+}
+
+// ------------------------------------------------------------------ password
 
 async function changePassword() {
   error.value = null
@@ -93,6 +152,46 @@ async function changePassword() {
       Passwort geändert. Andere Geräte müssen sich neu anmelden; ihre lokalen Daten bleiben
       erhalten.
     </p>
+
+    <h2>Geräte</h2>
+    <p v-if="deviceStatus === 'revoked'" class="error">
+      Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten, werden aber nicht
+      mehr synchronisiert.
+    </p>
+    <p v-if="connection !== 'online'" class="muted">
+      Die Geräteliste ist nur mit Serververbindung verfügbar.
+    </p>
+    <ul v-else-if="devices" class="devices" aria-label="Geräte">
+      <li v-for="device in devices" :key="device.id" :data-testid="`device-${device.id}`">
+        <form v-if="editing === device.id" class="row" @submit.prevent="saveRename(device)">
+          <input v-model="editName" aria-label="Gerätename" maxlength="100" required />
+          <button type="submit">Speichern</button>
+          <button type="button" class="link" @click="editing = null">Abbrechen</button>
+        </form>
+        <template v-else>
+          <span>
+            <strong>{{ device.name }}</strong>
+            <span v-if="device.current" class="muted"> (dieses Gerät)</span>
+            <br />
+            <small class="muted"
+              >zuletzt gesehen {{ dateFormat.format(new Date(device.lastSeenAt)) }}</small
+            >
+          </span>
+          <span class="row">
+            <button type="button" class="link" @click="startRename(device)">Umbenennen</button>
+            <button
+              v-if="!device.current"
+              type="button"
+              class="link danger"
+              @click="removeDevice(device)"
+            >
+              Entfernen
+            </button>
+          </span>
+        </template>
+      </li>
+    </ul>
+    <p v-if="deviceError" class="error" role="alert">{{ deviceError }}</p>
   </main>
 </template>
 
@@ -100,6 +199,25 @@ async function changePassword() {
 h2 {
   margin: 1.5rem 0 0.75rem;
   font-size: 1.1rem;
+}
+
+.devices {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.devices > li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.danger {
+  color: var(--error);
 }
 
 fieldset {

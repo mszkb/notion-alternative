@@ -3,6 +3,7 @@ import Fastify, { type FastifyServerOptions } from 'fastify'
 import { authRoutes } from './auth/routes'
 import type { Config } from './config'
 import type { Db } from './db/database'
+import { deviceRoutes } from './devices/routes'
 import { HttpError } from './errors'
 import { healthRoutes } from './health/routes'
 import { metricsRoutes, setupMetrics } from './metrics/plugin'
@@ -34,6 +35,7 @@ export async function buildApp({ db, config, logger = false }: AppOptions) {
   app.decorate('db', db)
   app.decorate('config', config)
   app.decorateRequest('user', null)
+  app.decorateRequest('deviceId', null)
   await app.register(cookie)
   setupMetrics(app, config.databasePath)
 
@@ -63,6 +65,7 @@ export async function buildApp({ db, config, logger = false }: AppOptions) {
       if (config.metricsEnabled) await api.register(metricsRoutes)
       await api.register(authRoutes)
       await api.register(workspaceRoutes)
+      await api.register(deviceRoutes)
     },
     { prefix: '/api' },
   )

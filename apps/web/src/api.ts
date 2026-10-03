@@ -1,7 +1,9 @@
 import type {
   ChangePasswordInput,
   CreateWorkspaceInput,
+  Device,
   LoginInput,
+  RegisterDeviceInput,
   RegisterInput,
   User,
   Workspace,
@@ -48,6 +50,12 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
     logout: () => request<void>('POST', '/auth/logout'),
     changePassword: (input: ChangePasswordInput) => request<void>('POST', '/auth/password', input),
     me: () => request<{ user: User }>('GET', '/auth/me'),
+    registerDevice: (input: RegisterDeviceInput) =>
+      request<{ device: Device }>('POST', '/devices', input),
+    listDevices: () => request<{ devices: Device[] }>('GET', '/devices'),
+    renameDevice: (id: string, name: string) =>
+      request<{ device: Device }>('PATCH', `/devices/${id}`, { name }),
+    removeDevice: (id: string) => request<void>('DELETE', `/devices/${id}`),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<{ workspace: Workspace }>('POST', '/workspaces', input),

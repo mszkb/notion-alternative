@@ -7,6 +7,8 @@ import { toUser } from './users'
 declare module 'fastify' {
   interface FastifyRequest {
     user: User | null
+    /** Device registered with the current session, if any. */
+    deviceId: string | null
   }
 }
 
@@ -16,6 +18,7 @@ export async function requireAuth(request: FastifyRequest, _reply: FastifyReply)
   const row = token ? await findSessionUser(request.server.db, token) : undefined
   if (!row) throw new HttpError(401, 'unauthorized', 'Authentication required')
   request.user = toUser(row)
+  request.deviceId = row.device_id
 }
 
 export function currentUser(request: FastifyRequest): User {

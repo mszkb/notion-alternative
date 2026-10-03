@@ -1,5 +1,6 @@
 export * from './auth'
 export * from './content'
+export * from './device'
 export * from './ids'
 export * from './inline'
 export * from './markdown'

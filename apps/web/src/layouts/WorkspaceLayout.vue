@@ -6,6 +6,7 @@ import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
 import { expanded } from '../composables/tree-state'
 import { displayTitle, workspaceKey } from '../composables/workspace'
+import { deviceStatus } from '../device'
 import {
   persistence,
   refreshWorkspaces,
@@ -274,6 +275,10 @@ watch(
         <p v-if="persistence === 'not-persisted'" class="hint muted">
           Der Browser darf lokale Daten bei Speichermangel löschen. Tipp: App installieren oder
           regelmäßig exportieren.
+        </p>
+        <p v-if="deviceStatus === 'revoked'" class="error" data-testid="device-revoked">
+          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten, werden aber
+          nicht mehr synchronisiert.
         </p>
         <p class="muted" data-testid="pending">
           {{ pending }} lokale Änderung{{ pending === 1 ? '' : 'en' }} noch nicht synchronisiert

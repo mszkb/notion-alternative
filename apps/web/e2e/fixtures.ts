@@ -1,18 +1,21 @@
 import { randomUUID } from 'node:crypto'
 import { test as base, expect, type Page } from '@playwright/test'
 
+export const PASSWORD = 'correct horse battery'
+
 /**
  * Registers a fresh account (the session cookie is shared with the page) and opens its
  * workspace. A new account per test and retry keeps server-side data isolated.
  */
-export async function signIn(page: Page): Promise<void> {
+export async function signIn(page: Page): Promise<string> {
   const email = `e2e-${randomUUID()}@example.com`
   const response = await page.request.post('/api/auth/register', {
-    data: { email, password: 'correct horse battery' },
+    data: { email, password: PASSWORD },
   })
   expect(response.ok()).toBe(true)
   await page.goto('/')
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]+$/)
+  return email
 }
 
 /** Simulates a server outage: every API request fails, the SPA's files are still served. */

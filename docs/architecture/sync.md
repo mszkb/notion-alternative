@@ -23,7 +23,7 @@ Alle IDs sind UUIDs und werden vom Client erzeugt (offline-fähig). Synchronisie
 | --- | --- |
 | `Workspace` | `id`, `name`, `owner_id`, `created_at` |
 | `User` | `id`, `email`, `password_hash`, `created_at` |
-| `Device` | `id`, `user_id`, `name`, `created_at`, `last_seen_at` |
+| `Device` | `id`, `user_id`, `name`, `created_at`, `last_seen_at`, `revoked_at` (entfernt; Zeile bleibt, damit Sessions und Operationen des Geräts dauerhaft abgelehnt werden) |
 | `Document` | `id`, `workspace_id`, `parent_id` (Seitenbaum, `null` = Wurzel), `title`, `sort_key`, `favorite`, `created_at`, `updated_at`, `revision`, `deleted_at` |
 | `Block` | `id`, `document_id`, `type` (`paragraph`, `heading`, `list_item`, `code`, `quote`, …), `content` (Text inkl. Inline-Formatierung und Seitenlinks), `attrs` (z. B. Überschriftenebene, Code-Sprache), `sort_key`, `revision`, `deleted_at` |
 | `Tag` | `id`, `workspace_id`, `name`, `revision`, `deleted_at` |
@@ -39,6 +39,13 @@ Alle IDs sind UUIDs und werden vom Client erzeugt (offline-fähig). Synchronisie
 - Im Code (TypeScript, JSON) heißen die Felder in camelCase (`parentId`, `sortKey`, `deletedAt`, `opId` …), siehe [ADR 0009](../adr/0009-local-data-layer.md).
 
 Protokoll und Operationen: [ADR 0002](../adr/0002-sync-protocol.md).
+
+### Geräte
+
+- Die Geräte-ID entsteht beim ersten Öffnen der lokalen Datenbank eines Benutzers (`meta.deviceId`, eine Dexie-DB pro Benutzer, ADR 0009) und ist damit stabil pro Browserprofil und Konto. Jede Operation trägt sie, auch wenn das Gerät offline gestartet und noch nicht registriert ist.
+- Registrierung `POST /api/devices` (`id`, `name`) ist idempotent und läuft bei jedem Online-Refresh. Sie verknüpft die aktuelle Session mit dem Gerät (`sessions.device_id`) und aktualisiert `last_seen_at`; ein vom Nutzer vergebener Name bleibt erhalten. Gehört die ID einem anderen Konto: `409 device_conflict`.
+- `GET /api/devices` listet aktive Geräte, `PATCH /api/devices/:id` benennt um, `DELETE /api/devices/:id` entfernt: `revoked_at` wird gesetzt und alle Sessions des Geräts enden. Erneute Registrierung derselben ID antwortet `403 device_revoked`; der Client zeigt das an, lokale Daten bleiben lesbar und bearbeitbar. Das aktuell benutzte Gerät kann sich nicht selbst entfernen (`409 current_device`, stattdessen abmelden).
+- Sync (Phase 3) lehnt Operationen ab, deren `device_id` kein aktives Gerät des Benutzers ist (`findActiveDevice`), und aktualisiert `last_seen_at` bei jedem Lauf.
 
 ## Regeln
 
