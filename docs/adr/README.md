@@ -15,3 +15,4 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0007](0007-foundation-libraries.md) | Bibliotheken und Konventionen für Phase 1 | Accepted |
 | [0008](0008-block-editor.md) | Editor und Inline-Repräsentation von Blöcken | Accepted |
 | [0009](0009-local-data-layer.md) | Lokale Datenschicht, Operationen und Suche | Accepted |
+| [0010](0010-raspberry-pi-and-lan-https.md) | Raspberry Pi als Referenzgerät und HTTPS im LAN | Proposed |
