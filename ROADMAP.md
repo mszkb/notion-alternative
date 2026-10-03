@@ -38,9 +38,8 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 - [x] Auth (Benutzerkonto)
 - [x] Workspace-Modell
 - [x] Docker Compose mit 2 Containern (`frontend`, `backend`)
-- [x] Images für `linux/arm64` (Raspberry Pi als Referenzgerät, CI-Build) – [ADR 0010](docs/adr/0010-raspberry-pi-and-lan-https.md)
-- [ ] Stack auf dem Pi gestartet, Smoke-Test und T-OFF-01/02 auf echter Hardware (Build bereits erfolgreich)
-- [ ] HTTPS im LAN entscheiden und dokumentieren ([ADR 0010](docs/adr/0010-raspberry-pi-and-lan-https.md), Proposed)
+- [x] Referenz-Deployment auf echtem Host (Loopback + SSH-Tunnel), Smoke-Test und T-OFF-01/02 manuell – [ADR 0010](docs/adr/0010-reference-deployment-and-https.md)
+- [x] Images auch für `linux/arm64` (CI-Build, Raspberry Pi gemessen)
 - [x] Datenbank (SQLite) & Migrationen
 - [x] Observability: strukturierte Logs, Healthchecks
 - [ ] Observability: Metriken
@@ -79,6 +78,7 @@ Offen bzw. später: blockübergreifendes Undo und Markieren über Blockgrenzen (
 - [ ] Installationsflow (inkl. iOS-Hinweise)
 - [ ] Cache-Strategie
 - [ ] Web Push (VAPID, Subscription nach Nutzeraktion)
+- [ ] HTTPS für Smartphones/weitere Geräte entscheiden (Optionen in [ADR 0010](docs/adr/0010-reference-deployment-and-https.md))
 
 ## Phase 5 – Files and history
 

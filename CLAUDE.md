@@ -21,10 +21,7 @@ Entschieden (`Accepted`):
 - **Bibliotheken** ([ADR 0007](docs/adr/0007-foundation-libraries.md)): pnpm, Kysely + better-sqlite3, zod, esbuild, Vitest, ESLint + Prettier, nginx.
 - **Editor** ([ADR 0008](docs/adr/0008-block-editor.md)): eigener Block-Editor (ein `contenteditable` pro Block); `Block.content` ist Markdown-Inline, Seitenlinks `[Titel](page:<uuid>)`, kursiv wird als `_x_` geschrieben.
 - **Lokale Datenschicht** ([ADR 0009](docs/adr/0009-local-data-layer.md)): eine Dexie-DB pro Benutzer, Operationen in derselben Transaktion, Entität `document_tag`, Feldnamen camelCase, MiniSearch für die lokale Suche, Offline-Start mit zwischengespeichertem Benutzer.
-
-Vorgeschlagen (`Proposed`):
-
-- **Raspberry Pi und HTTPS im LAN** ([ADR 0010](docs/adr/0010-raspberry-pi-and-lan-https.md)): Pi 4 (arm64) ist Referenzgerät, CI baut die Images auch für `linux/arm64`. HTTPS-Variante (Tailscale serve oder TLS im `frontend`-nginx) noch offen, kein dritter Container.
+- **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. HTTPS für Smartphones wird in Phase 4 entschieden, kein dritter Container.
 
 Noch offen in Phase 0: Zielgruppe schärfen.
 
