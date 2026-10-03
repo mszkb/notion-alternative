@@ -22,6 +22,9 @@ const envSchema = z.object({
   REGISTER_MAX_ATTEMPTS_PER_IP: z.coerce.number().int().min(1).default(10),
   // VAPID contact (RFC 8292); some push services reject placeholder addresses.
   PUSH_SUBJECT: z.string().default('mailto:admin@localhost'),
+  ATTACHMENTS_DIR: z.string().optional(),
+  ATTACHMENT_MAX_MB: z.coerce.number().min(1).max(1024).default(25),
+  ATTACHMENT_RETENTION_DAYS: z.coerce.number().int().min(0).max(3650).default(30),
   // Push services the server may send to (subscription endpoints come from clients: no SSRF).
   PUSH_ALLOWED_HOSTS: z
     .string()
@@ -39,6 +42,12 @@ export interface Config {
   cookieSecure: boolean
   sessionTtlDays: number
   metricsEnabled: boolean
+  attachments: {
+    dir: string
+    maxBytes: number
+    /** Days a deleted attachment's file is kept (restore, conflicts). */
+    retentionDays: number
+  }
   push: {
     subject: string
     /** Host names; `*.` allows subdomains. */
@@ -63,6 +72,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure: parsed.COOKIE_SECURE,
     sessionTtlDays: parsed.SESSION_TTL_DAYS,
     metricsEnabled: parsed.METRICS_ENABLED,
+    attachments: {
+      dir: parsed.ATTACHMENTS_DIR ?? path.join(parsed.DATA_DIR, 'attachments'),
+      maxBytes: Math.round(parsed.ATTACHMENT_MAX_MB * 1024 * 1024),
+      retentionDays: parsed.ATTACHMENT_RETENTION_DAYS,
+    },
     push: {
       subject: parsed.PUSH_SUBJECT,
       allowedHosts: parsed.PUSH_ALLOWED_HOSTS.split(',')

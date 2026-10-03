@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import {
+  type Attachment,
+  attachmentSchema,
   type Block,
   blockAttrsSchema,
   type Conflict,
@@ -62,6 +64,10 @@ const blockMove = z.object({ sortKey: sortKeySchema }).strict()
 const tagCreate = z.object({ name: tagNameSchema }).strict()
 const documentTagCreate = z.object({ documentId: z.uuid(), tagId: z.uuid() }).strict()
 
+const attachmentCreate = attachmentSchema
+  .pick({ documentId: true, name: true, mimeType: true, size: true, sha256: true, createdAt: true })
+  .strict()
+
 /** Written by the server only; a client sending it is rejected. */
 const conflictCreate = conflictSchema
   .omit({ id: true, workspaceId: true, revision: true, deletedAt: true })
@@ -73,6 +79,7 @@ export const operationPayloadSchemas = {
   block: { create: blockCreate, update: blockUpdate, move: blockMove, delete: empty },
   tag: { create: tagCreate, update: tagCreate, move: null, delete: empty },
   document_tag: { create: documentTagCreate, update: null, move: null, delete: empty },
+  attachment: { create: attachmentCreate, update: null, move: null, delete: empty },
   conflict: { create: conflictCreate, update: conflictUpdate, move: null, delete: null },
 } as const satisfies Record<OperationEntity, Record<OperationKind, z.ZodType | null>>
 
@@ -84,6 +91,7 @@ export type BlockUpdatePayload = z.infer<typeof blockUpdate>
 export type BlockMovePayload = z.infer<typeof blockMove>
 export type TagCreatePayload = z.infer<typeof tagCreate>
 export type DocumentTagCreatePayload = z.infer<typeof documentTagCreate>
+export type AttachmentCreatePayload = z.infer<typeof attachmentCreate>
 export type ConflictCreatePayload = z.infer<typeof conflictCreate>
 export type ConflictUpdatePayload = z.infer<typeof conflictUpdate>
 
@@ -183,6 +191,7 @@ export interface SyncSnapshotResponse {
   blocks: Block[]
   tags: Tag[]
   documentTags: DocumentTag[]
+  attachments: Attachment[]
   conflicts: Conflict[]
   /** Change-log position the snapshot reflects; pulling continues from here. */
   cursor: number

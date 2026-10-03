@@ -51,6 +51,12 @@ export function blocksToMarkdown(blocks: MarkdownBlock[]): string {
           text = `${fence}${block.attrs.language ?? ''}\n${block.content}\n${fence}`
           break
         }
+        case 'image':
+          text = `![${block.content || 'Bild'}](attachment:${block.attrs.attachmentId ?? ''})`
+          break
+        case 'file':
+          text = `[${block.content || 'Datei'}](attachment:${block.attrs.attachmentId ?? ''})`
+          break
         default:
           text = block.content
       }

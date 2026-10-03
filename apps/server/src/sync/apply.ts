@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
+  type AttachmentCreatePayload,
   type BlockCreatePayload,
   type BlockMovePayload,
   type BlockUpdatePayload,
@@ -18,7 +19,7 @@ import type { Db } from '../db/database'
 import { findActiveDevice } from '../devices/repository'
 import { reindexDocument } from '../search/index'
 import { findWorkspaceForUser } from '../workspaces/repository'
-import { toBlock, toDocument, toDocumentTag, toTag } from './mapping'
+import { toAttachment, toBlock, toDocument, toDocumentTag, toTag } from './mapping'
 
 export type RejectCode =
   | 'workspace_not_found'
@@ -401,6 +402,52 @@ async function applyDocumentTag(
   return revision
 }
 
+/** Attachment metadata (ADR 0012); the content is uploaded separately and never changes. */
+async function applyAttachment(
+  db: Db,
+  op: Operation,
+  now: string,
+  ctx: ApplyContext,
+): Promise<number> {
+  const existing = await db
+    .selectFrom('attachments')
+    .selectAll()
+    .where('id', '=', op.entityId)
+    .executeTakeFirst()
+  if (existing && existing.workspace_id === op.workspaceId) {
+    await assertDocumentAlive(db, op, existing.document_id)
+  }
+  const revision = await nextRevision(db, op, existing, ctx)
+  if (op.kind === 'create') {
+    const p = op.payload as AttachmentCreatePayload
+    await assertDocumentAlive(db, op, p.documentId)
+    await db
+      .insertInto('attachments')
+      .values({
+        id: op.entityId,
+        workspace_id: op.workspaceId,
+        document_id: p.documentId,
+        name: p.name,
+        mime_type: p.mimeType,
+        size: p.size,
+        sha256: p.sha256,
+        created_at: p.createdAt,
+        stored_at: null,
+        revision,
+        deleted_at: null,
+      })
+      .execute()
+  } else {
+    // Tombstone; the file is removed after the retention period (purgeDeletedAttachments).
+    await db
+      .updateTable('attachments')
+      .set({ deleted_at: now, revision })
+      .where('id', '=', op.entityId)
+      .execute()
+  }
+  return revision
+}
+
 /** Resolving a conflict (the only conflict operation clients send). */
 async function applyConflict(db: Db, op: Operation, now: string): Promise<number> {
   const existing = await db
@@ -437,6 +484,7 @@ const appliers = {
   block: applyBlock,
   tag: applyTag,
   document_tag: applyDocumentTag,
+  attachment: applyAttachment,
   conflict: applyConflict,
 }
 
@@ -468,6 +516,14 @@ async function remoteState(db: Db, op: Operation): Promise<Record<string, unknow
         .executeTakeFirst()
       return row ? toDocumentTag(row) : null
     }
+    case 'attachment': {
+      const row = await db
+        .selectFrom('attachments')
+        .selectAll()
+        .where('id', '=', id)
+        .executeTakeFirst()
+      return row ? toAttachment(row) : null
+    }
     default:
       return null
   }
@@ -477,8 +533,12 @@ async function remoteState(db: Db, op: Operation): Promise<Record<string, unknow
 async function conflictDocument(db: Db, op: Operation): Promise<string | null> {
   if (op.entity === 'document') return op.entityId
   if (typeof op.payload.documentId === 'string') return op.payload.documentId
-  const table =
-    op.entity === 'block' ? 'blocks' : op.entity === 'document_tag' ? 'document_tags' : null
+  const tables = {
+    block: 'blocks',
+    document_tag: 'document_tags',
+    attachment: 'attachments',
+  } as const
+  const table = op.entity in tables ? tables[op.entity as keyof typeof tables] : null
   if (!table) return null
   const row = await db
     .selectFrom(table)

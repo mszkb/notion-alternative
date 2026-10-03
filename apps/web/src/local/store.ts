@@ -1,4 +1,6 @@
 import {
+  type Attachment,
+  type AttachmentCreatePayload,
   type Block,
   type BlockAttrs,
   type BlockCreatePayload,
@@ -28,10 +30,12 @@ import {
   type TagCreatePayload,
   tagNameSchema,
   tagSchema,
+  INLINE_IMAGE_TYPES,
+  attachmentSchema,
   validateOperationPayload,
   type Workspace,
 } from '@notion-alt/shared'
-import type { LocalDb, QueuedOperation } from './db'
+import type { AttachmentContent, LocalDb, QueuedOperation } from './db'
 
 export class LocalStoreError extends Error {
   override name = 'LocalStoreError'
@@ -75,6 +79,8 @@ const CONTENT_TABLES = [
   'operations',
   'links',
   'conflicts',
+  'attachments',
+  'attachmentContents',
 ]
 
 /**
@@ -132,6 +138,7 @@ export class LocalStore {
       block: this.db.blocks,
       tag: this.db.tags,
       document_tag: this.db.documentTags,
+      attachment: this.db.attachments,
       conflict: this.db.conflicts,
     } as const
   }
@@ -943,6 +950,10 @@ export class LocalStore {
       await this.db.blocks.bulkPut(keep(snapshot.blocks))
       await this.db.tags.bulkPut(keep(snapshot.tags))
       await this.db.documentTags.bulkPut(keep(snapshot.documentTags))
+      await this.db.attachments.bulkDelete(
+        drop(await this.db.attachments.where('workspaceId').equals(workspaceId).toArray()),
+      )
+      await this.db.attachments.bulkPut(keep(snapshot.attachments))
       await this.db.conflicts.bulkDelete(
         drop(await this.db.conflicts.where('workspaceId').equals(workspaceId).toArray()),
       )
@@ -1069,6 +1080,28 @@ export class LocalStore {
         }
         return
       }
+      case 'attachment': {
+        if (change.kind === 'create') {
+          const p = change.payload as AttachmentCreatePayload
+          await this.db.attachments.put({
+            id: change.entityId,
+            workspaceId,
+            ...p,
+            revision,
+            deletedAt: null,
+          })
+          this.mark(ctx, workspaceId, p.documentId)
+        } else if (local) {
+          await this.db.attachments.update(change.entityId, {
+            deletedAt: change.appliedAt,
+            revision,
+          })
+          // The content is no longer needed on this device.
+          await this.db.attachmentContents.delete(change.entityId)
+          this.mark(ctx, workspaceId, (local as Attachment).documentId)
+        }
+        return
+      }
       case 'document_tag': {
         let documentId = (local as DocumentTag | undefined)?.documentId
         if (change.kind === 'create') {
@@ -1093,6 +1126,102 @@ export class LocalStore {
     }
   }
 
+  // ---------------------------------------------------------------- attachments
+
+  /**
+   * Adds a file to a page (ADR 0012), offline too: content stays on this device until it is
+   * uploaded after the sync confirmed the metadata. Inserts an image block for raster images,
+   * otherwise a file block. `sha256` must be computed beforehand (see `sha256Hex`): awaiting
+   * crypto inside a Dexie transaction would commit it early.
+   */
+  async addAttachment(
+    documentId: string,
+    file: { name: string; type: string; data: ArrayBuffer; sha256: string },
+    position: Position = {},
+  ): Promise<{ attachment: Attachment; block: Block }> {
+    return this.write(async (ctx) => {
+      const document = await this.requireDocument(documentId)
+      const attachment = attachmentSchema.parse({
+        id: newId(),
+        workspaceId: document.workspaceId,
+        documentId,
+        name: file.name.trim().slice(0, 255) || 'Datei',
+        mimeType: /^[\w.+-]+\/[\w.+-]+$/.test(file.type) ? file.type : 'application/octet-stream',
+        size: file.data.byteLength,
+        sha256: file.sha256,
+        createdAt: this.now(),
+        revision: null,
+        deletedAt: null,
+      } satisfies Attachment)
+      await this.db.attachments.add(attachment)
+      await this.db.attachmentContents.put({ id: attachment.id, data: file.data, uploaded: false })
+      await this.enqueue(document.workspaceId, 'attachment', attachment.id, 'create', null, {
+        documentId,
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+        sha256: attachment.sha256,
+        createdAt: attachment.createdAt,
+      })
+      const image = INLINE_IMAGE_TYPES.includes(attachment.mimeType)
+      const block = await this.insertBlock(
+        ctx,
+        document,
+        {
+          type: image ? 'image' : 'file',
+          content: image ? '' : attachment.name,
+          attrs: { attachmentId: attachment.id },
+        },
+        position,
+      )
+      return { attachment, block }
+    })
+  }
+
+  /** Deletes an attachment (tombstone, replicated); its block shows it as removed. */
+  async deleteAttachment(id: string): Promise<void> {
+    await this.write(async (ctx) => {
+      const attachment = await this.db.attachments.get(id)
+      if (!attachment || attachment.deletedAt) return
+      await this.db.attachments.update(id, { deletedAt: this.now() })
+      await this.db.attachmentContents.delete(id)
+      await this.enqueue(
+        attachment.workspaceId,
+        'attachment',
+        id,
+        'delete',
+        attachment.revision,
+        {},
+      )
+      this.mark(ctx, attachment.workspaceId, attachment.documentId)
+    })
+  }
+
+  async getAttachment(id: string): Promise<Attachment | undefined> {
+    return this.db.attachments.get(id)
+  }
+
+  async attachmentContent(id: string): Promise<AttachmentContent | undefined> {
+    return this.db.attachmentContents.get(id)
+  }
+
+  /** Keeps downloaded content for offline use. */
+  async cacheAttachmentContent(id: string, data: ArrayBuffer): Promise<void> {
+    await this.db.attachmentContents.put({ id, data, uploaded: true })
+  }
+
+  /** Contents waiting for upload whose metadata the server already knows. */
+  async pendingUploads(): Promise<Attachment[]> {
+    const contents = await this.db.attachmentContents.toArray()
+    const waiting = contents.filter((content) => !content.uploaded).map((content) => content.id)
+    const attachments = await this.db.attachments.bulkGet(waiting)
+    return attachments.filter((a): a is Attachment => !!a && a.revision !== null && !a.deletedAt)
+  }
+
+  async markUploaded(id: string): Promise<void> {
+    await this.db.attachmentContents.update(id, { uploaded: true })
+  }
+
   async cacheWorkspaces(workspaces: Workspace[]): Promise<void> {
     await this.db.transaction('rw', this.db.workspaces, async () => {
       await this.db.workspaces.clear()
@@ -1114,4 +1243,10 @@ function sameAttrs(a: BlockAttrs, b: BlockAttrs): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof BlockAttrs>
   for (const key of keys) if (a[key] !== b[key]) return false
   return true
+}
+
+/** Hex SHA-256 of a file, as the server verifies it (ADR 0012). */
+export async function sha256Hex(data: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }

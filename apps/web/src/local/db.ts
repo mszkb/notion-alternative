@@ -1,4 +1,5 @@
 import type {
+  Attachment,
   Block,
   Conflict,
   Document,
@@ -29,6 +30,15 @@ export interface QueuedOperation extends Operation {
   issue?: QueuedOperationIssue
 }
 
+/** Content of an attachment on this device (own uploads and downloaded copies, ADR 0012). */
+export interface AttachmentContent {
+  id: string
+  /** ArrayBuffer rather than Blob: reliably storable in every browser's IndexedDB. */
+  data: ArrayBuffer
+  /** Uploaded to (or downloaded from) the server. */
+  uploaded: boolean
+}
+
 /** Derived index of page links per block, used for backlinks. Not synchronised. */
 export interface LinkEntry {
   blockId: string
@@ -48,6 +58,8 @@ export class LocalDb extends Dexie {
   operations!: EntityTable<QueuedOperation, 'seq'>
   links!: EntityTable<LinkEntry, 'blockId'>
   conflicts!: EntityTable<Conflict, 'id'>
+  attachments!: EntityTable<Attachment, 'id'>
+  attachmentContents!: EntityTable<AttachmentContent, 'id'>
 
   constructor(name: string) {
     super(name)
@@ -65,6 +77,11 @@ export class LocalDb extends Dexie {
     // Phase 3: conflict objects replicated from the server (ADR 0003). New table, no data to move.
     this.version(2).stores({
       conflicts: 'id, workspaceId, documentId, entityId',
+    })
+    // Phase 5: attachments (ADR 0012). New tables, no data to move.
+    this.version(3).stores({
+      attachments: 'id, workspaceId, documentId',
+      attachmentContents: 'id',
     })
   }
 }

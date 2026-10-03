@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { api } from '../api'
+import { api, uploadAttachment } from '../api'
 import { deviceStatus } from '../device'
 import type { LocalStore } from '../local/store'
 import { connection } from '../session'
@@ -31,12 +31,14 @@ export interface SyncTransport {
   push: PushSend
   pull: PullFetch
   snapshot: SnapshotFetch
+  upload?: (id: string, data: ArrayBuffer) => Promise<'stored' | 'gone'>
 }
 
 const defaultTransport: SyncTransport = {
   push: api.syncPush,
   pull: api.syncPull,
   snapshot: api.syncSnapshot,
+  upload: (id, data) => uploadAttachment(id, data),
 }
 
 export interface SyncOptions {
@@ -71,6 +73,7 @@ export function requestSync(
         if (outcome.deviceRevoked) {
           deviceStatus.value = 'revoked'
         } else {
+          if (transport.upload) await uploadPendingAttachments(store, transport.upload)
           for (const workspace of await store.cachedWorkspaces()) {
             await syncWorkspace(store, workspace.id, transport, options.full)
           }
@@ -104,6 +107,22 @@ export function requestSync(
     }
   })()
   return current
+}
+
+/** Uploads attachment contents whose metadata the server has confirmed (ADR 0012). */
+export async function uploadPendingAttachments(
+  store: LocalStore,
+  upload: NonNullable<SyncTransport['upload']>,
+): Promise<number> {
+  let uploaded = 0
+  for (const attachment of await store.pendingUploads()) {
+    const content = await store.attachmentContent(attachment.id)
+    if (!content) continue
+    await upload(attachment.id, content.data)
+    await store.markUploaded(attachment.id)
+    uploaded++
+  }
+  return uploaded
 }
 
 /**

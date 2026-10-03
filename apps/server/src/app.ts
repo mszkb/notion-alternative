@@ -1,5 +1,6 @@
 import cookie from '@fastify/cookie'
 import Fastify, { type FastifyServerOptions } from 'fastify'
+import { attachmentRoutes } from './attachments/routes'
 import { authRoutes } from './auth/routes'
 import type { Config } from './config'
 import type { Db } from './db/database'
@@ -77,6 +78,7 @@ export async function buildApp({ db, config, logger = false, push }: AppOptions)
       await api.register(syncRoutes)
       await api.register(searchRoutes)
       await api.register(pushRoutes)
+      await api.register(attachmentRoutes)
     },
     { prefix: '/api' },
   )

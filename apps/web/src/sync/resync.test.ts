@@ -79,6 +79,7 @@ function fakeServer(origin: () => LocalStore) {
           .toArray(),
         tags: await store.db.tags.toArray(),
         documentTags: await store.db.documentTags.toArray(),
+        attachments: [],
         conflicts: [],
         cursor: log.length,
       }

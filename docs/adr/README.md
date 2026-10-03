@@ -17,3 +17,4 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0009](0009-local-data-layer.md) | Lokale Datenschicht, Operationen und Suche | Accepted |
 | [0010](0010-reference-deployment-and-https.md) | Referenz-Deployment und HTTPS | Accepted |
 | [0011](0011-https-for-mobile-devices.md) | HTTPS für Smartphones und weitere Geräte | Proposed |
+| [0012](0012-attachments.md) | Dateianhänge | Accepted |

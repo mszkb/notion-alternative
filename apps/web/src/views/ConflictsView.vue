@@ -42,6 +42,7 @@ const ENTITIES: Record<Conflict['entity'], string> = {
   block: 'Block',
   tag: 'Tag',
   document_tag: 'Tag-Zuordnung',
+  attachment: 'Anhang',
 }
 
 const isMine = (conflict: Conflict) => conflict.local.deviceId === store.deviceId

@@ -65,6 +65,7 @@ function transport() {
       blocks: [],
       tags: [],
       documentTags: [],
+      attachments: [],
       conflicts: [],
       cursor: 0,
     }),

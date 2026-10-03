@@ -1,4 +1,5 @@
 import type {
+  Attachment,
   Block,
   BlockAttrs,
   BlockType,
@@ -11,6 +12,7 @@ import type {
   Tag,
 } from '@notion-alt/shared'
 import type {
+  AttachmentsTable,
   BlocksTable,
   ChangesTable,
   ConflictsTable,
@@ -98,6 +100,21 @@ export function toConflict(row: ConflictsTable): Conflict {
     createdAt: row.created_at,
     resolvedAt: row.resolved_at,
     resolution: row.resolution as Conflict['resolution'],
+    revision: row.revision,
+    deletedAt: row.deleted_at,
+  }
+}
+
+export function toAttachment(row: AttachmentsTable): Attachment {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    documentId: row.document_id,
+    name: row.name,
+    mimeType: row.mime_type,
+    size: row.size,
+    sha256: row.sha256,
+    createdAt: row.created_at,
     revision: row.revision,
     deletedAt: row.deleted_at,
   }

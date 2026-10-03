@@ -114,6 +114,19 @@ export interface ChangesTable {
   applied_at: string
 }
 
+export interface AttachmentsTable extends SyncColumns {
+  id: string
+  workspace_id: string
+  document_id: string
+  name: string
+  mime_type: string
+  size: number
+  sha256: string
+  created_at: string
+  /** Content uploaded and verified; null until then. */
+  stored_at: string | null
+}
+
 export interface SettingsTable {
   key: string
   value: string
@@ -141,6 +154,7 @@ export interface Database {
   document_tags: DocumentTagsTable
   changes: ChangesTable
   conflicts: ConflictsTable
+  attachments: AttachmentsTable
   settings: SettingsTable
   push_subscriptions: PushSubscriptionsTable
 }

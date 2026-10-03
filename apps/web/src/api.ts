@@ -96,4 +96,33 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
   }
 }
 
+/** Attachment content transfer (binary, outside the JSON API helper). */
+export async function uploadAttachment(
+  id: string,
+  data: ArrayBuffer,
+  fetchImpl: Fetch = (...args) => fetch(...args),
+): Promise<'stored' | 'gone'> {
+  const response = await fetchImpl(`/api/attachments/${id}/content`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/octet-stream' },
+    body: data,
+  })
+  if (response.status === 204) return 'stored'
+  // Deleted meanwhile: nothing left to upload.
+  if (response.status === 410) return 'gone'
+  const error = (await response.json().catch(() => null))?.error ?? {}
+  throw new ApiError(response.status, error.code ?? 'unknown', error.message ?? response.statusText)
+}
+
+export async function downloadAttachment(
+  id: string,
+  fetchImpl: Fetch = (...args) => fetch(...args),
+): Promise<ArrayBuffer | null> {
+  const response = await fetchImpl(`/api/attachments/${id}/content`, { credentials: 'same-origin' })
+  if (response.status === 404) return null
+  if (!response.ok) throw new ApiError(response.status, 'download_failed', response.statusText)
+  return response.arrayBuffer()
+}
+
 export const api = createApi()

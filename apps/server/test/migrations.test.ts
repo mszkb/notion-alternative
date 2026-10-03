@@ -12,6 +12,7 @@ describe('migrations', () => {
     // FTS5 keeps its data in shadow tables (search_index_*).
     const names = tables.map((t) => t.name).filter((name) => !name.startsWith('search_index_'))
     expect(names.sort()).toEqual([
+      'attachments',
       'blocks',
       'changes',
       'conflicts',

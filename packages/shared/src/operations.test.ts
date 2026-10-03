@@ -34,7 +34,7 @@ describe('validateOperationPayload', () => {
     expect(
       validateOperationPayload('block', 'create', {
         documentId: ID,
-        type: 'image',
+        type: 'video',
         content: '',
         attrs: {},
         sortKey: 'a0',

@@ -29,7 +29,16 @@ export const documentSchema = z.object({
 })
 export type Document = z.infer<typeof documentSchema>
 
-export const blockTypeSchema = z.enum(['paragraph', 'heading', 'list_item', 'quote', 'code'])
+export const blockTypeSchema = z.enum([
+  'paragraph',
+  'heading',
+  'list_item',
+  'quote',
+  'code',
+  // Attachment blocks (ADR 0012): `attrs.attachmentId`, `content` is the caption.
+  'image',
+  'file',
+])
 export type BlockType = z.infer<typeof blockTypeSchema>
 
 export const blockAttrsSchema = z
@@ -42,6 +51,8 @@ export const blockAttrsSchema = z
     indent: z.number().int().min(0).max(MAX_LIST_INDENT).optional(),
     /** Language hint (`code`). */
     language: z.string().max(40).optional(),
+    /** Attachment shown by an `image` or `file` block. */
+    attachmentId: z.uuid().optional(),
   })
   .strict()
 export type BlockAttrs = z.infer<typeof blockAttrsSchema>
@@ -79,7 +90,13 @@ export const documentTagSchema = z.object({
 export type DocumentTag = z.infer<typeof documentTagSchema>
 
 /** Content entities clients change directly. */
-export const contentEntitySchema = z.enum(['document', 'block', 'tag', 'document_tag'])
+export const contentEntitySchema = z.enum([
+  'document',
+  'block',
+  'tag',
+  'document_tag',
+  'attachment',
+])
 export type ContentEntity = z.infer<typeof contentEntitySchema>
 
 /** `conflict` is created by the server; clients only resolve it (ADR 0003). */
@@ -88,6 +105,7 @@ export const operationEntitySchema = z.enum([
   'block',
   'tag',
   'document_tag',
+  'attachment',
   'conflict',
 ])
 export type OperationEntity = z.infer<typeof operationEntitySchema>
@@ -147,3 +165,32 @@ export const conflictSchema = z.object({
   ...syncFields,
 })
 export type Conflict = z.infer<typeof conflictSchema>
+
+export const ATTACHMENT_NAME_MAX_LENGTH = 255
+
+/** File attached to a page (ADR 0012). The content never changes for a given id. */
+export const attachmentSchema = z.object({
+  id: z.uuid(),
+  workspaceId: z.uuid(),
+  documentId: z.uuid(),
+  name: z.string().trim().min(1).max(ATTACHMENT_NAME_MAX_LENGTH),
+  mimeType: z
+    .string()
+    .max(100)
+    .regex(/^[\w.+-]+\/[\w.+-]+$/),
+  size: z.number().int().nonnegative(),
+  /** Hex SHA-256 of the content; the upload must match. */
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  createdAt: z.string(),
+  ...syncFields,
+})
+export type Attachment = z.infer<typeof attachmentSchema>
+
+/** Raster images that may be shown inline; everything else is only offered as download. */
+export const INLINE_IMAGE_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+]
