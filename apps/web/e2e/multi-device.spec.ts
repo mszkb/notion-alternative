@@ -125,3 +125,33 @@ test('T-OFF-06: without push, the timer and "Jetzt synchronisieren" bring change
   await expect(other.getByRole('tree')).toContainText('Per Knopf', { timeout: 10_000 })
   await context.close()
 })
+
+test('server search complements local search with pages not on this device yet', async ({
+  page,
+  browser,
+}) => {
+  const email = await signIn(page)
+  const context = await browser.newContext()
+  const other = await context.newPage()
+  // Device B cannot sync, but the server can be searched.
+  await other.route('**/api/sync/**', (route) => route.abort('connectionrefused'))
+  await other.request.post('/api/auth/login', { data: { email, password: PASSWORD } })
+  await other.goto('/')
+  await expect(other).toHaveURL(/\/w\/[0-9a-f-]+$/)
+
+  await newPage(page, 'Nur auf dem Server')
+  await page.keyboard.type('Gesuchter Begriff Zwiebelkuchen')
+  await waitForSaved(page)
+  await synced(page)
+
+  await other.getByLabel('Seiten durchsuchen').fill('zwiebel')
+  const server = other.getByRole('list', { name: 'Weitere Treffer vom Server' })
+  await expect(server).toContainText('Nur auf dem Server', { timeout: 10_000 })
+  await expect(server).toContainText('Zwiebelkuchen')
+
+  await other.unroute('**/api/sync/**')
+  await server.getByRole('button').first().click()
+  await expect(other.getByLabel('Titel')).toHaveValue('Nur auf dem Server', { timeout: 10_000 })
+  await expect(blockInput(other, 0)).toHaveText('Gesuchter Begriff Zwiebelkuchen')
+  await context.close()
+})

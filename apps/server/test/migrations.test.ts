@@ -9,12 +9,15 @@ describe('migrations', () => {
     await migrateToLatest(db)
     await migrateToLatest(db)
     const tables = await db.introspection.getTables()
-    expect(tables.map((t) => t.name).sort()).toEqual([
+    // FTS5 keeps its data in shadow tables (search_index_*).
+    const names = tables.map((t) => t.name).filter((name) => !name.startsWith('search_index_'))
+    expect(names.sort()).toEqual([
       'blocks',
       'changes',
       'devices',
       'document_tags',
       'documents',
+      'search_index',
       'sessions',
       'tags',
       'users',

@@ -7,6 +7,7 @@ import { deviceRoutes } from './devices/routes'
 import { HttpError } from './errors'
 import { healthRoutes } from './health/routes'
 import { metricsRoutes, setupMetrics } from './metrics/plugin'
+import { searchRoutes } from './search/routes'
 import type { Registry } from './metrics/registry'
 import { syncRoutes } from './sync/routes'
 import { workspaceRoutes } from './workspaces/routes'
@@ -68,6 +69,7 @@ export async function buildApp({ db, config, logger = false }: AppOptions) {
       await api.register(workspaceRoutes)
       await api.register(deviceRoutes)
       await api.register(syncRoutes)
+      await api.register(searchRoutes)
     },
     { prefix: '/api' },
   )

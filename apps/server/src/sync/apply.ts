@@ -12,6 +12,7 @@ import {
 } from '@notion-alt/shared'
 import type { Db } from '../db/database'
 import { findActiveDevice } from '../devices/repository'
+import { reindexDocument } from '../search/index'
 import { findWorkspaceForUser } from '../workspaces/repository'
 
 export type RejectCode =
@@ -360,6 +361,18 @@ const appliers = {
   document_tag: applyDocumentTag,
 }
 
+/** Page whose search entry the operation changes (documents and their blocks). */
+async function indexedDocument(db: Db, op: Operation): Promise<string | null> {
+  if (op.entity === 'document') return op.entityId
+  if (op.entity !== 'block') return null
+  const block = await db
+    .selectFrom('blocks')
+    .select('document_id')
+    .where('id', '=', op.entityId)
+    .executeTakeFirst()
+  return block?.document_id ?? null
+}
+
 async function nextSeq(db: Db, workspaceId: string): Promise<number> {
   const row = await db
     .selectFrom('changes')
@@ -410,6 +423,8 @@ export async function applyOperation(
       if (invalid) reject('invalid_payload', invalid)
 
       const revision = await appliers[op.entity](trx, op, now)
+      const indexed = await indexedDocument(trx, op)
+      if (indexed) await reindexDocument(trx, indexed)
       const seq = await nextSeq(trx, op.workspaceId)
       await trx
         .insertInto('changes')

@@ -4,6 +4,7 @@ import * as m0001 from './migrations/0001_initial'
 import * as m0002 from './migrations/0002_devices'
 import * as m0003 from './migrations/0003_sync'
 import * as m0004 from './migrations/0004_change_log_floor'
+import * as m0005 from './migrations/0005_search'
 
 // Migrations are registered statically so they survive bundling.
 export const migrations: Record<string, Migration> = {
@@ -11,6 +12,7 @@ export const migrations: Record<string, Migration> = {
   '0002_devices': m0002,
   '0003_sync': m0003,
   '0004_change_log_floor': m0004,
+  '0005_search': m0005,
 }
 
 export async function migrateToLatest(db: Db): Promise<void> {

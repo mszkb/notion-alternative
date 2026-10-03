@@ -73,7 +73,7 @@ Offen bzw. später: „Lokale Daten löschen“ beim Abmelden (Phase 3, Gerätev
 - [x] Vollständiger Re-Sync (`GET /api/sync/snapshot`, `410`, „Neu synchronisieren“)
 - [x] Sync-Trigger: Start, Fokuswechsel, Push (Hook), periodisch
 - [ ] Konfliktanzeige (gemäß ADR 0003)
-- [ ] Serverseitige Volltextsuche (SQLite FTS5)
+- [x] Serverseitige Volltextsuche (SQLite FTS5)
 
 ## Phase 4 – PWA
 

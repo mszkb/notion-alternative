@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { Document } from '@notion-alt/shared'
+import type { Document, ServerSearchHit } from '@notion-alt/shared'
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
+import { api } from '../api'
 import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
 import { expanded } from '../composables/tree-state'
@@ -83,6 +84,41 @@ watch([query, documents], () => {
     hits.value = search.index.search(query.value)
   }, 120)
 })
+
+/**
+ * Server-side hits (FTS5) only complement the local search, e.g. for pages not synced to this
+ * device yet; offline the local search is all there is.
+ */
+const serverHits = ref<ServerSearchHit[]>([])
+let serverTimer: ReturnType<typeof setTimeout> | null = null
+watch([query, workspaceId], () => {
+  if (serverTimer) clearTimeout(serverTimer)
+  serverHits.value = []
+  const q = query.value.trim()
+  if (q.length < 2 || connection.value !== 'online') return
+  serverTimer = setTimeout(async () => {
+    try {
+      const { hits: found } = await api.search(workspaceId.value, q)
+      if (query.value.trim() === q) serverHits.value = found
+    } catch {
+      // Server unreachable: local results stand on their own.
+    }
+  }, 300)
+})
+const extraServerHits = computed(() => {
+  const local = new Set(hits.value.map((hit) => hit.id))
+  return serverHits.value.filter((hit) => !local.has(hit.documentId))
+})
+
+async function openServerHit(hit: ServerSearchHit) {
+  query.value = ''
+  // Not on this device yet: fetch it first.
+  if (!documentsById.value.has(hit.documentId)) await requestSync(store)
+  await router.push({
+    name: 'page',
+    params: { workspaceId: workspaceId.value, documentId: hit.documentId },
+  })
+}
 
 async function openHit(hit: SearchHit) {
   query.value = ''
@@ -213,7 +249,20 @@ watch(
             </button>
           </li>
         </ul>
-        <p v-if="hits.length === 0" class="muted empty">Keine Treffer</p>
+        <p v-if="hits.length === 0 && extraServerHits.length === 0" class="muted empty">
+          Keine Treffer
+        </p>
+        <template v-if="extraServerHits.length">
+          <h2 id="nav-server-hits">Weitere Treffer vom Server</h2>
+          <ul class="nav-list search-results" aria-labelledby="nav-server-hits">
+            <li v-for="hit in extraServerHits" :key="hit.documentId">
+              <button type="button" class="nav-item" @click="openServerHit(hit)">
+                <strong>{{ hit.title || 'Unbenannt' }}</strong>
+                <small v-if="hit.snippet" class="muted">{{ hit.snippet }}</small>
+              </button>
+            </li>
+          </ul>
+        </template>
       </section>
 
       <template v-else>

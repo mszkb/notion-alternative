@@ -5,6 +5,7 @@ import type {
   LoginInput,
   RegisterDeviceInput,
   RegisterInput,
+  ServerSearchHit,
   SyncPullQuery,
   SyncPullResponse,
   SyncPushInput,
@@ -76,6 +77,11 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
       request<SyncSnapshotResponse>(
         'GET',
         `/sync/snapshot?${new URLSearchParams({ workspaceId })}`,
+      ),
+    search: (workspaceId: string, q: string) =>
+      request<{ hits: ServerSearchHit[] }>(
+        'GET',
+        `/search?${new URLSearchParams({ workspaceId, q })}`,
       ),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
