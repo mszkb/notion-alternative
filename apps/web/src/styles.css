@@ -494,6 +494,20 @@ kbd {
   position: relative;
 }
 
+.editor:focus {
+  outline: none;
+}
+
+/* Whole blocks selected across block boundaries (Escape, Shift+arrow, dragging). */
+.editor.selecting .block-input {
+  user-select: none;
+}
+
+.block.selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 6px;
+}
+
 .save-state {
   position: absolute;
   top: -2.2rem;

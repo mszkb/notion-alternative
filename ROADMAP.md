@@ -59,7 +59,9 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Lokale Volltextsuche
 - [x] App startet ohne Server aus lokalen Daten (T-OFF-01, T-OFF-02 automatisiert)
 
-Offen bzw. später: blockübergreifendes Undo und Markieren über Blockgrenzen ([ADR 0008](docs/adr/0008-block-editor.md)); „Lokale Daten löschen“ beim Abmelden (Phase 3, Geräteverwaltung); App-Dateien offline cachen (Phase 4, Service Worker).
+- [x] Blockübergreifendes Undo/Redo und Markieren ganzer Blöcke (Kopieren als Markdown, Löschen) – [ADR 0008](docs/adr/0008-block-editor.md)
+
+Offen bzw. später: „Lokale Daten löschen“ beim Abmelden (Phase 3, Geräteverwaltung); App-Dateien offline cachen (Phase 4, Service Worker).
 
 ## Phase 3 – Sync
 

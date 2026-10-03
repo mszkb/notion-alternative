@@ -4,14 +4,16 @@ import {
   type BlockAttrs,
   type BlockType,
   inlineToPlainText,
+  blocksToMarkdown,
   MAX_LIST_INDENT,
   newId,
   serializeInline,
 } from '@notion-alt/shared'
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLiveQuery } from '../composables/live-query'
 import { displayTitle, useWorkspace } from '../composables/workspace'
+import type { BlockState } from '../local/store'
 import {
   getCaretOffset,
   isCaretAtEnd,
@@ -20,6 +22,7 @@ import {
   setCaretOffset,
   textLength,
 } from './caret'
+import { EditHistory } from './history'
 import { renderInline, serializeDom } from './inline-dom'
 import PagePicker, { type PickerChoice } from './PagePicker.vue'
 
@@ -86,6 +89,262 @@ function draftBlock(input: Pick<Block, 'type' | 'attrs' | 'content'>): Block {
 }
 
 const blockById = computed(() => new Map((blocks.value ?? []).map((b) => [b.id, b])))
+
+// ------------------------------------------------------------------ undo/redo across blocks
+
+const history = new EditHistory()
+/** A typing burst is running; the state before it is already recorded. Ends on save or a step. */
+let typing = false
+let restoring = false
+
+function snapshot(): BlockState[] {
+  return (blocks.value ?? []).map((b) => ({
+    id: b.id,
+    type: b.type,
+    content: currentContent(b),
+    attrs: b.attrs,
+  }))
+}
+
+/** Records the state before an undoable step. */
+function checkpoint() {
+  if (restoring) return
+  history.record(snapshot())
+  typing = false
+}
+
+/** Text input: one undo step per burst of typing (until the debounced save). */
+function noteTyping() {
+  if (!typing) checkpoint()
+  typing = true
+}
+
+function onBeforeInput(event: InputEvent) {
+  if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+    // Native undo stops at the block boundary and would bypass the shared history.
+    event.preventDefault()
+    void restore(event.inputType === 'historyUndo' ? 'undo' : 'redo')
+    return
+  }
+  noteTyping()
+}
+
+/** Id of the first block in `target` that differs from `current` (focus goes there). */
+function firstChange(current: BlockState[], target: BlockState[]): string | null {
+  for (let i = 0; i < Math.max(current.length, target.length); i++) {
+    const a = current[i]
+    const b = target[i]
+    if (!b) return target[target.length - 1]?.id ?? null
+    if (!a || JSON.stringify(a) !== JSON.stringify(b)) return b.id
+  }
+  return null
+}
+
+/** Undo/redo steps run one after another, so fast repeated shortcuts are not lost. */
+let restoreQueue: Promise<void> = Promise.resolve()
+
+function restore(direction: 'undo' | 'redo'): Promise<void> {
+  restoreQueue = restoreQueue.then(() => restoreStep(direction))
+  return restoreQueue
+}
+
+async function restoreStep(direction: 'undo' | 'redo') {
+  if (!blocks.value) return
+  const current = snapshot()
+  const target = direction === 'undo' ? history.undo(current) : history.redo(current)
+  if (!target) return
+  typing = false
+  restoring = true
+  for (const id of [...timers.keys()]) cancelTimer(id)
+  const changed = firstChange(current, target)
+  structuralWrites += 1
+  try {
+    const recreated = await track(props.documentId, store.applyBlockState(props.documentId, target))
+    if (recreated) history.rename(recreated)
+    blocks.value = await store.listBlocks(props.documentId)
+    await nextTick()
+    // Also re-render the focused block: its content is replaced, not edited.
+    for (const block of blocks.value) {
+      const el = elements.get(block.id)
+      if (el && rendered.get(block.id) !== block.content) renderBlock(block, el)
+    }
+    const focusId = changed ? (recreated?.get(changed) ?? changed) : null
+    if (focusId && elements.has(focusId)) focusBlock(focusId, 'end')
+  } finally {
+    structuralWrites -= 1
+    restoring = false
+  }
+}
+
+function isUndoKey(event: KeyboardEvent): 'undo' | 'redo' | null {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey) return null
+  const key = event.key.toLowerCase()
+  if (key === 'z') return event.shiftKey ? 'redo' : 'undo'
+  if (key === 'y' && !event.shiftKey) return 'redo'
+  return null
+}
+
+// ------------------------------------------------------------------ block selection
+
+const root = ref<HTMLElement | null>(null)
+/** Blocks selected as a whole (across block boundaries), from anchor to focus. */
+const blockSelection = ref<{ anchor: string; focus: string } | null>(null)
+let dragStart: string | null = null
+
+const selectedIds = computed(() => {
+  const sel = blockSelection.value
+  const list = blocks.value ?? []
+  if (!sel) return [] as string[]
+  const a = list.findIndex((b) => b.id === sel.anchor)
+  const f = list.findIndex((b) => b.id === sel.focus)
+  if (a === -1 || f === -1) return []
+  return list.slice(Math.min(a, f), Math.max(a, f) + 1).map((b) => b.id)
+})
+const selectedSet = computed(() => new Set(selectedIds.value))
+
+function selectBlocks(anchor: string, focus: string) {
+  flushAll()
+  typing = false
+  const active = document.activeElement
+  if (active instanceof HTMLElement && root.value?.contains(active)) active.blur()
+  document.getSelection()?.removeAllRanges()
+  blockSelection.value = { anchor, focus }
+  root.value?.focus({ preventScroll: true })
+}
+
+function clearSelection() {
+  blockSelection.value = null
+}
+
+/** Whether the text selection reaches the start/end of the block, so Shift+arrow leaves it. */
+function selectionTouches(el: HTMLElement, edge: 'first' | 'last'): boolean {
+  if (isTextarea(el))
+    return edge === 'first' ? el.selectionStart === 0 : el.selectionEnd === el.value.length
+  const selection = document.getSelection()
+  if (!selection?.rangeCount) return false
+  const range = selection.getRangeAt(0)
+  if (!el.contains(range.commonAncestorContainer)) return false
+  const probe = document.createRange()
+  probe.selectNodeContents(el)
+  if (edge === 'first') probe.setEnd(range.startContainer, range.startOffset)
+  else probe.setStart(range.endContainer, range.endOffset)
+  return probe.toString().length === 0
+}
+
+function selectedBlocks(): Block[] {
+  return (blocks.value ?? []).filter((b) => selectedSet.value.has(b.id))
+}
+
+function selectionMarkdown(): string {
+  return blocksToMarkdown(selectedBlocks().map((b) => ({ ...b, content: currentContent(b) })))
+}
+
+async function deleteSelected() {
+  const ids = selectedSet.value
+  const list = blocks.value ?? []
+  if (ids.size === 0) return
+  checkpoint()
+  const first = list.findIndex((b) => ids.has(b.id))
+  const before = list[first - 1]
+  const after = list.slice(first).find((b) => !ids.has(b.id))
+  const keep = snapshot().filter((b) => !ids.has(b.id))
+  for (const id of ids) cancelTimer(id)
+  clearSelection()
+  if (before) pendingFocus = { id: before.id, offset: 'end' }
+  else if (after) pendingFocus = { id: after.id, offset: 0 }
+  await structural(
+    before?.id ?? after?.id ?? props.documentId,
+    (current) => current.filter((b) => !ids.has(b.id)),
+    () => store.applyBlockState(props.documentId, keep),
+  )
+}
+
+function onRootKeydown(event: KeyboardEvent) {
+  const sel = blockSelection.value
+  if (!sel || event.target !== root.value) return
+  const list = blocks.value ?? []
+  const undo = isUndoKey(event)
+  if (undo) {
+    event.preventDefault()
+    clearSelection()
+    void restore(undo)
+    return
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+    event.preventDefault()
+    if (list.length) blockSelection.value = { anchor: list[0]!.id, focus: list.at(-1)!.id }
+    return
+  }
+  switch (event.key) {
+    case 'ArrowUp':
+    case 'ArrowDown': {
+      event.preventDefault()
+      const index = list.findIndex((b) => b.id === sel.focus)
+      const next = list[index + (event.key === 'ArrowUp' ? -1 : 1)]
+      if (event.shiftKey) {
+        if (next) blockSelection.value = { anchor: sel.anchor, focus: next.id }
+      } else {
+        const id = (next ?? list[index])?.id
+        if (id) blockSelection.value = { anchor: id, focus: id }
+      }
+      return
+    }
+    case 'Escape':
+      event.preventDefault()
+      clearSelection()
+      return
+    case 'Enter': {
+      event.preventDefault()
+      const id = sel.focus
+      clearSelection()
+      focusBlock(id, 'end')
+      return
+    }
+    case 'Backspace':
+    case 'Delete':
+      event.preventDefault()
+      void deleteSelected()
+  }
+}
+
+function onClipboard(event: ClipboardEvent) {
+  if (!blockSelection.value || document.activeElement !== root.value) return
+  event.preventDefault()
+  event.clipboardData?.setData('text/plain', selectionMarkdown())
+  if (event.type === 'cut') void deleteSelected()
+}
+
+function onRootMousedown(event: MouseEvent) {
+  const target = event.target as Element | null
+  if (blockSelection.value) clearSelection()
+  dragStart =
+    target?.closest?.('.block-input')?.closest<HTMLElement>('[data-block-id]')?.dataset.blockId ??
+    null
+}
+
+function onRootMousemove(event: MouseEvent) {
+  if (!dragStart || !(event.buttons & 1)) return
+  const over = (event.target as Element | null)?.closest?.<HTMLElement>('[data-block-id]')?.dataset
+    .blockId
+  // Dragging out of the start block switches from text to block selection.
+  if (over && (over !== dragStart || blockSelection.value)) {
+    event.preventDefault()
+    if (blockSelection.value?.focus !== over) selectBlocks(dragStart, over)
+  }
+}
+
+function endDrag() {
+  dragStart = null
+}
+
+watch(
+  () => props.documentId,
+  () => {
+    history.clear()
+    typing = false
+    clearSelection()
+  },
+)
 
 /** Editable element per block: contenteditable div, or textarea for code. */
 const elements = new Map<string, HTMLElement>()
@@ -242,6 +501,7 @@ function scheduleSave(id: string) {
 
 async function flush(id: string) {
   cancelTimer(id)
+  typing = false
   const block = blockById.value.get(id)
   const el = elements.get(id)
   if (!block || !el) return
@@ -262,6 +522,9 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('pagehide', flushAll)
   document.addEventListener('mousedown', closeMenuOnOutsideClick)
+  document.addEventListener('mouseup', endDrag)
+  document.addEventListener('copy', onClipboard)
+  document.addEventListener('cut', onClipboard)
 })
 
 onBeforeUnmount(() => {
@@ -269,6 +532,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
   window.removeEventListener('pagehide', flushAll)
   document.removeEventListener('mousedown', closeMenuOnOutsideClick)
+  document.removeEventListener('mouseup', endDrag)
+  document.removeEventListener('copy', onClipboard)
+  document.removeEventListener('cut', onClipboard)
 })
 
 // ------------------------------------------------------------------ structure helpers
@@ -310,6 +576,7 @@ async function setType(block: Block, type: BlockType, attrs: BlockAttrs, offset?
 async function splitAtCaret(block: Block, el: HTMLElement) {
   const selection = document.getSelection()
   if (!selection?.rangeCount) return
+  checkpoint()
   const range = selection.getRangeAt(0)
   if (!el.contains(range.startContainer) && range.startContainer !== el) return
 
@@ -341,6 +608,7 @@ async function splitAtCaret(block: Block, el: HTMLElement) {
 }
 
 async function backspaceAtStart(block: Block, el: HTMLElement) {
+  checkpoint()
   if (block.type === 'list_item' && (block.attrs.indent ?? 0) > 0) {
     await setIndent(block, -1)
     return
@@ -370,6 +638,7 @@ async function backspaceAtStart(block: Block, el: HTMLElement) {
 async function mergeNext(block: Block, el: HTMLElement) {
   const next = neighbour(block.id, 1)
   if (!next || block.type === 'code') return
+  checkpoint()
   const own = readContent(block, el)
   const offset = textLength(el)
   const merged = own + convertContent(currentContent(next), next.type, block.type)
@@ -385,6 +654,7 @@ async function mergeNext(block: Block, el: HTMLElement) {
 }
 
 async function setIndent(block: Block, delta: number) {
+  checkpoint()
   const indent = Math.min(MAX_LIST_INDENT, Math.max(0, (block.attrs.indent ?? 0) + delta))
   if (indent === (block.attrs.indent ?? 0)) return
   await setType(block, 'list_item', { ...block.attrs, indent })
@@ -395,6 +665,7 @@ async function move(block: Block, direction: -1 | 1) {
   const index = list.findIndex((b) => b.id === block.id)
   const target = index + direction
   if (index === -1 || target < 0 || target >= list.length) return
+  checkpoint()
   const afterId = direction === -1 ? (list[target - 1]?.id ?? null) : list[target]!.id
   const el = elements.get(block.id)
   pendingFocus = { id: block.id, offset: el ? caretOf(el) : 0 }
@@ -410,6 +681,7 @@ async function move(block: Block, direction: -1 | 1) {
 }
 
 async function remove(block: Block) {
+  checkpoint()
   const previous = neighbour(block.id, -1) ?? neighbour(block.id, 1)
   cancelTimer(block.id)
   if (previous) pendingFocus = { id: previous.id, offset: 'end' }
@@ -431,6 +703,7 @@ async function appendParagraph() {
 }
 
 async function insertParagraphAfter(afterId: string | null) {
+  checkpoint()
   const created = draftBlock({ type: 'paragraph', attrs: {}, content: '' })
   pendingFocus = { id: created.id, offset: 0 }
   await structural(
@@ -470,6 +743,7 @@ function applyShortcut(block: Block, el: HTMLElement): boolean {
   for (const [pattern, type, attrs] of SHORTCUTS) {
     const match = pattern.exec(text)
     if (!match || getCaretOffset(el) !== match[0].length) continue
+    checkpoint()
     deleteLeadingText(el, match[0].length)
     void setType({ ...block, content: serializeDom(el) }, type, attrs, 0)
     return true
@@ -528,6 +802,25 @@ function onKeydown(block: Block, event: KeyboardEvent) {
   if (event.isComposing) return
   const mod = event.metaKey || event.ctrlKey
 
+  const undo = isUndoKey(event)
+  if (undo) {
+    event.preventDefault()
+    void restore(undo)
+    return
+  }
+  if (
+    event.shiftKey &&
+    !mod &&
+    !event.altKey &&
+    (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+  ) {
+    const up = event.key === 'ArrowUp'
+    if (selectionTouches(el, up ? 'first' : 'last')) {
+      event.preventDefault()
+      selectBlocks(block.id, neighbour(block.id, up ? -1 : 1)?.id ?? block.id)
+      return
+    }
+  }
   if (event.altKey && event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
     event.preventDefault()
     void move(block, event.key === 'ArrowUp' ? -1 : 1)
@@ -541,12 +834,14 @@ function onKeydown(block: Block, event: KeyboardEvent) {
     const key = event.key.toLowerCase()
     if (key === 'b' || key === 'i') {
       event.preventDefault()
+      checkpoint()
       document.execCommand(key === 'b' ? 'bold' : 'italic')
       scheduleSave(block.id)
       return
     }
     if (key === 'e') {
       event.preventDefault()
+      checkpoint()
       toggleInlineCode(el)
       scheduleSave(block.id)
       return
@@ -592,7 +887,9 @@ function onKeydown(block: Block, event: KeyboardEvent) {
       return
     }
     case 'Escape':
-      el.blur()
+      // Like Notion: Escape selects the block as a whole (copy, delete, extend with Shift+arrow).
+      event.preventDefault()
+      selectBlocks(block.id, block.id)
   }
 }
 
@@ -606,9 +903,11 @@ function onCodeKeydown(block: Block, el: HTMLTextAreaElement, event: KeyboardEve
     void insertParagraphAfter(block.id)
   } else if (event.key === 'Tab' && !event.shiftKey) {
     event.preventDefault()
+    noteTyping()
     document.execCommand('insertText', false, '  ')
   } else if (event.key === 'Backspace' && atStart && el.value === '') {
     event.preventDefault()
+    checkpoint()
     void setType(block, 'paragraph', {}, 0)
   } else if (event.key === 'ArrowUp' && atStart) {
     const previous = neighbour(block.id, -1)
@@ -623,7 +922,8 @@ function onCodeKeydown(block: Block, el: HTMLTextAreaElement, event: KeyboardEve
       focusBlock(next.id, 0)
     }
   } else if (event.key === 'Escape') {
-    el.blur()
+    event.preventDefault()
+    selectBlocks(block.id, block.id)
   }
 }
 
@@ -635,6 +935,7 @@ function onPaste(event: ClipboardEvent) {
   // Only plain text enters the editor; foreign HTML never reaches the DOM.
   event.preventDefault()
   const text = event.clipboardData?.getData('text/plain') ?? ''
+  if (text) checkpoint()
   if (text) document.execCommand('insertText', false, text.replace(/\r\n?/g, '\n'))
 }
 
@@ -643,6 +944,7 @@ function onDrop(event: DragEvent) {
   event.preventDefault()
   const text = event.dataTransfer?.getData('text/plain') ?? ''
   if (!text) return
+  checkpoint()
   const el = event.currentTarget as HTMLElement
   const range = document.caretRangeFromPoint?.(event.clientX, event.clientY)
   if (range && el.contains(range.startContainer)) {
@@ -709,6 +1011,7 @@ async function choose(choice: PickerChoice) {
   const state = picker.value
   picker.value = null
   if (!state) return
+  checkpoint()
   linking.value = state.blockId
   try {
     await insertLink(state, choice)
@@ -796,6 +1099,7 @@ function closeMenuOnOutsideClick(event: MouseEvent) {
 
 async function menuAction(action: () => Promise<void>) {
   menuFor.value = null
+  checkpoint()
   await action()
 }
 
@@ -847,7 +1151,15 @@ function blockLabel(block: Block): string {
 </script>
 
 <template>
-  <div class="editor">
+  <div
+    ref="root"
+    class="editor"
+    :class="{ selecting: blockSelection }"
+    tabindex="-1"
+    @keydown="onRootKeydown"
+    @mousedown="onRootMousedown"
+    @mousemove="onRootMousemove"
+  >
     <p class="save-state muted" aria-live="polite">
       <span v-if="error" class="error" role="alert">{{ error }}</span>
       <span v-else-if="saving > 0">Speichert…</span>
@@ -858,9 +1170,10 @@ function blockLabel(block: Block): string {
       v-for="block in blocks ?? []"
       :key="block.id"
       class="block"
-      :class="blockClass(block)"
+      :class="[blockClass(block), { selected: selectedSet.has(block.id) }]"
       :style="{ '--indent': block.attrs.indent ?? 0 }"
       :data-block-id="block.id"
+      :aria-selected="selectedSet.has(block.id) || undefined"
     >
       <button
         type="button"
@@ -881,6 +1194,7 @@ function blockLabel(block: Block): string {
         spellcheck="false"
         rows="1"
         :aria-label="blockLabel(block)"
+        @beforeinput="onBeforeInput"
         @input="onInput(block, $event)"
         @keydown="onKeydown(block, $event)"
         @blur="onBlur(block)"
@@ -898,6 +1212,7 @@ function blockLabel(block: Block): string {
             ? 'Schreiben … (# Überschrift, - Liste, [[ Seitenlink)'
             : blockLabel(block)
         "
+        @beforeinput="onBeforeInput"
         @input="onInput(block, $event)"
         @keydown="onKeydown(block, $event)"
         @blur="onBlur(block)"

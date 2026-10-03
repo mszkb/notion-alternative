@@ -48,6 +48,9 @@ export interface NewBlock {
 
 export type BlockPatch = Partial<Pick<Block, 'type' | 'content' | 'attrs'>>
 
+/** A block as seen by undo/redo: everything the user can change, in document order. */
+export type BlockState = Pick<Block, 'id' | 'type' | 'content' | 'attrs'>
+
 interface WriteContext {
   touched: Map<string, Set<string>>
 }
@@ -415,14 +418,53 @@ export class LocalStore {
     return this.write(async (ctx) => this.patchBlock(ctx, id, patch))
   }
 
+  private async relocateBlock(ctx: WriteContext, id: string, position: Position): Promise<void> {
+    const { block, document } = await this.requireBlock(id)
+    const sortKey = LocalStore.sortKeyAt(await this.listBlocks(document.id), position, id)
+    if (sortKey === block.sortKey) return
+    await this.db.blocks.update(id, { sortKey })
+    await this.enqueue(document.workspaceId, 'block', id, 'move', block.revision, { sortKey })
+    await this.touch(ctx, document)
+  }
+
   async moveBlock(id: string, position: Position): Promise<void> {
-    await this.write(async (ctx) => {
-      const { block, document } = await this.requireBlock(id)
-      const sortKey = LocalStore.sortKeyAt(await this.listBlocks(document.id), position, id)
-      if (sortKey === block.sortKey) return
-      await this.db.blocks.update(id, { sortKey })
-      await this.enqueue(document.workspaceId, 'block', id, 'move', block.revision, { sortKey })
-      await this.touch(ctx, document)
+    await this.write((ctx) => this.relocateBlock(ctx, id, position))
+  }
+
+  /**
+   * Brings a document's blocks to `target` (undo/redo, deleting a selection) with ordinary
+   * operations in one transaction. Blocks that no longer exist are recreated under a new id,
+   * because tombstones stay final (sync invariant). Returns the old → new ids of recreated blocks.
+   */
+  async applyBlockState(documentId: string, target: BlockState[]): Promise<Map<string, string>> {
+    return this.write(async (ctx) => {
+      const document = await this.requireDocument(documentId)
+      const current = await this.listBlocks(documentId)
+      const wanted = new Set(target.map((state) => state.id))
+      for (const block of current) {
+        if (!wanted.has(block.id)) await this.removeBlock(ctx, block.id)
+      }
+      const existing = new Set(current.map((block) => block.id))
+      const recreated = new Map<string, string>()
+      // Invariant: after each step, the processed target blocks lead the list in target order.
+      let previousId: string | null = null
+      for (const state of target) {
+        const fields = { type: state.type, content: state.content, attrs: state.attrs }
+        let id = state.id
+        if (existing.has(id)) {
+          await this.patchBlock(ctx, id, fields)
+          const list = await this.listBlocks(documentId)
+          const index = list.findIndex((block) => block.id === id)
+          if ((index > 0 ? list[index - 1]!.id : null) !== previousId) {
+            await this.relocateBlock(ctx, id, { afterId: previousId })
+          }
+        } else {
+          id = (await this.insertBlock(ctx, document, fields, { afterId: previousId })).id
+          recreated.set(state.id, id)
+        }
+        previousId = id
+      }
+      return recreated
     })
   }
 
