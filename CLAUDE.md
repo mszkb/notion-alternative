@@ -21,6 +21,7 @@ Entschieden (`Accepted`):
 - **Bibliotheken** ([ADR 0007](docs/adr/0007-foundation-libraries.md)): pnpm, Kysely + better-sqlite3, zod, esbuild, Vitest, ESLint + Prettier, nginx.
 - **Editor** ([ADR 0008](docs/adr/0008-block-editor.md)): eigener Block-Editor (ein `contenteditable` pro Block); `Block.content` ist Markdown-Inline, Seitenlinks `[Titel](page:<uuid>)`, kursiv wird als `_x_` geschrieben.
 - **Lokale Datenschicht** ([ADR 0009](docs/adr/0009-local-data-layer.md)): eine Dexie-DB pro Benutzer, Operationen in derselben Transaktion, Entität `document_tag`, Feldnamen camelCase, MiniSearch für die lokale Suche, Offline-Start mit zwischengespeichertem Benutzer.
+- **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. HTTPS für Smartphones wird in Phase 4 entschieden, kein dritter Container.
 
 Noch offen in Phase 0: Zielgruppe schärfen.
 
@@ -92,6 +93,7 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Neue DB-Migration: Datei in `apps/server/src/db/migrations/` anlegen **und** in `src/db/migrate.ts` registrieren; Migrationen nie nachträglich ändern.
 - Lokale Inhalte nur über `LocalStore` schreiben (`apps/web/src/local/store.ts`): Er schreibt Entität und Operation in einer Transaktion. Dexie-Transaktions-Scopes müssen `async`-Funktionen sein, sonst committet Dexie bei nativen `await`s zu früh.
 - Lokales Schema ändern: neue `this.version(n + 1)` in `apps/web/src/local/db.ts` mit Upgrade; bestehende Versionen nie ändern (T-MIG-02).
+- Neue Abhängigkeiten im Server-Image müssen auf `linux/arm64` ohne Compiler installierbar sein (Prebuild im Paket); der CI-Job `docker-arm64` prüft das.
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
 - Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.
 - Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`findWorkspaceForUser`).
