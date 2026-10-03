@@ -77,7 +77,7 @@ Offen bzw. später: App-Dateien offline cachen (Phase 4, Service Worker). „Lok
 
 ## Phase 4 – PWA
 
-- [ ] Web App Manifest
+- [x] Web App Manifest (Icons inkl. maskable/Apple, iOS-Meta-Tags)
 - [ ] Service Worker
 - [ ] Installationsflow (inkl. iOS-Hinweise)
 - [ ] Cache-Strategie
