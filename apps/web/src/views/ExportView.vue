@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { api, downloadAttachment } from '../api'
+import { useRouter } from 'vue-router'
+import { api, ApiError, downloadAttachment } from '../api'
 import { useWorkspace } from '../composables/workspace'
 import { buildArchiveExport } from '../export/archive'
 import { buildJsonExport } from '../export/json'
+import { importWorkspace, readImportFile, type ImportSource } from '../export/import'
 import { buildMarkdownExport, saveFile } from '../export/markdown'
-import { workspaces } from '../local/context'
+import { refreshWorkspaces, workspaces } from '../local/context'
 import { connection } from '../session'
 
 const { store, workspaceId } = useWorkspace()
@@ -82,11 +84,75 @@ const exportJson = () =>
         ? ', ohne Verlauf.'
         : `, ${exported.changes} Änderungen im Verlauf.`)
   })
+
+// ---------------------------------------------------------------- import
+
+const router = useRouter()
+const importSource = ref<ImportSource | null>(null)
+const importName = ref('')
+const importError = ref<string | null>(null)
+const idsExist = ref(false)
+const importing = ref(false)
+const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+
+const importSummary = computed(() => {
+  const source = importSource.value
+  if (!source) return null
+  const active = source.data.documents.filter((d) => !d.deletedAt).length
+  const attachments = source.data.attachments.filter((a) => !a.deletedAt).length
+  return {
+    pages: active,
+    trashed: source.data.documents.length - active,
+    attachments,
+    contents: source.attachments.size,
+    history: source.data.history?.changes.length ?? null,
+    exportedAt: dateFormat.format(new Date(source.data.exported_at)),
+  }
+})
+
+async function chooseImportFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  importSource.value = null
+  importError.value = null
+  idsExist.value = false
+  if (!file) return
+  try {
+    importSource.value = await readImportFile(file)
+    importName.value = importSource.value.data.workspace.name
+  } catch (cause) {
+    importError.value = `Datei kann nicht importiert werden: ${cause instanceof Error ? cause.message : String(cause)}`
+    input.value = ''
+  }
+}
+
+async function runImport(newIds: boolean) {
+  if (!importSource.value) return
+  importing.value = true
+  importError.value = null
+  try {
+    const created = await importWorkspace(store, importSource.value, {
+      name: importName.value.trim() || importSource.value.data.workspace.name,
+      newIds,
+      send: api.importWorkspace,
+    })
+    await refreshWorkspaces(store)
+    await router.push({ name: 'workspace', params: { workspaceId: created.id } })
+  } catch (cause) {
+    if (cause instanceof ApiError && cause.code === 'ids_exist') {
+      idsExist.value = true
+    } else {
+      importError.value = `Import fehlgeschlagen: ${cause instanceof Error ? cause.message : String(cause)}`
+    }
+  } finally {
+    importing.value = false
+  }
+}
 </script>
 
 <template>
   <article class="page export">
-    <h1>Export</h1>
+    <h1>Export und Import</h1>
     <p class="muted">
       Der Export entsteht aus den Daten auf diesem Gerät und funktioniert auch offline. Online
       werden zusätzlich der Verlauf und fehlende Anhänge vom Server geholt.
@@ -148,6 +214,71 @@ const exportJson = () =>
       </ul>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
+
+    <section class="page-section import" aria-labelledby="import">
+      <h2 id="import">Import</h2>
+      <p>
+        Stellt einen vollständigen Export (ZIP) oder einen JSON-Export als <strong>neuen</strong>
+        Workspace her, z. B. in einer frischen Installation. Bestehende Workspaces bleiben
+        unverändert. Prüfsummen und Format werden vor dem Import geprüft.
+      </p>
+      <p v-if="!online" class="hint muted">
+        Der Import legt den Workspace auf dem Server an und ist nur online möglich.
+      </p>
+      <label>
+        Exportdatei
+        <input
+          type="file"
+          accept=".zip,.json,application/zip,application/json"
+          :disabled="importing"
+          data-testid="import-file"
+          @change="chooseImportFile"
+        />
+      </label>
+
+      <div v-if="importSummary" class="import-summary" data-testid="import-summary">
+        <p>
+          Export vom {{ importSummary.exportedAt }}:
+          {{ plural(importSummary.pages, 'Seite', 'Seiten')
+          }}<template v-if="importSummary.trashed"
+            >, {{ importSummary.trashed }} im Papierkorb</template
+          >, {{ plural(importSummary.attachments, 'Anhang', 'Anhänge') }}
+          <template v-if="importSummary.contents < importSummary.attachments">
+            (davon {{ importSummary.contents }} mit Inhalt)
+          </template>
+          ·
+          {{
+            importSummary.history === null
+              ? 'ohne Verlauf'
+              : `${importSummary.history} Änderungen im Verlauf`
+          }}
+        </p>
+        <label>
+          Name des neuen Workspaces
+          <input v-model="importName" maxlength="100" />
+        </label>
+        <button
+          v-if="!idsExist"
+          type="button"
+          :disabled="importing || !online"
+          @click="runImport(false)"
+        >
+          Als neuen Workspace importieren
+        </button>
+        <div v-else class="error" data-testid="import-ids-exist">
+          <p>
+            Diese Daten gibt es auf dem Server schon (z. B. wurde derselbe Export bereits
+            importiert). Es wurde nichts verändert. Als Kopie importieren? Seiten, Links und Anhänge
+            bekommen dabei neue IDs.
+          </p>
+          <button type="button" :disabled="importing || !online" @click="runImport(true)">
+            Als Kopie importieren
+          </button>
+        </div>
+      </div>
+      <p v-if="importing" class="muted" role="status">Importiere…</p>
+      <p v-if="importError" class="error" data-testid="import-error">{{ importError }}</p>
+    </section>
   </article>
 </template>
 
@@ -157,5 +288,10 @@ const exportJson = () =>
   gap: 0.5rem;
   align-items: flex-start;
   margin-bottom: 0.75rem;
+}
+.import-summary {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
 }
 </style>

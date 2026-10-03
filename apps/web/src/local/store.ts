@@ -1277,6 +1277,11 @@ export class LocalStore {
     await this.db.attachmentContents.put({ id, data, uploaded: true })
   }
 
+  /** Content from an import: kept here and uploaded once the metadata arrived by sync. */
+  async stageAttachmentContent(id: string, data: ArrayBuffer): Promise<void> {
+    await this.db.attachmentContents.put({ id, data, uploaded: false })
+  }
+
   /** Contents waiting for upload whose metadata the server already knows. */
   async pendingUploads(): Promise<Attachment[]> {
     const contents = await this.db.attachmentContents.toArray()

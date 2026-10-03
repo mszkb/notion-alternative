@@ -97,7 +97,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Markdown-Export
 - [x] JSON-Export
 - [x] ZIP-Export (inkl. Anhänge)
-- [ ] Import in frische Installation
+- [x] Import in frische Installation
 - [ ] Round-Trip-Importtests
 
 ## Phase 7 – Hardening

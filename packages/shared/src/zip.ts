@@ -121,12 +121,31 @@ export interface ZipFile {
   data: Uint8Array
 }
 
+/** Rejects names that would escape a target folder or are ambiguous (zip slip). */
+function checkEntryPath(path: string): void {
+  const segments = path.split('/')
+  if (
+    !path ||
+    path.startsWith('/') ||
+    path.includes('\\') ||
+    path.includes('\0') ||
+    /^[a-zA-Z]:/.test(path) ||
+    segments.some((s) => s === '..' || s === '.')
+  ) {
+    throw new Error(`Unsafe path in ZIP archive: ${JSON.stringify(path)}`)
+  }
+}
+
 /**
  * Reads a ZIP archive with stored entries (as written by `createZip`); compressed entries
- * are rejected. Checks the CRC of every entry.
+ * are rejected, so the content can never be larger than the archive (no zip bombs). Checks
+ * bounds, paths (no zip slip), duplicates and the CRC of every entry.
  */
 export function readZip(archive: Uint8Array): ZipFile[] {
   const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength)
+  const fail = (reason: string): never => {
+    throw new Error(reason)
+  }
   let endOffset = -1
   for (let i = archive.length - 22; i >= Math.max(0, archive.length - 22 - 0xffff); i--) {
     if (view.getUint32(i, true) === 0x06054b50) {
@@ -134,28 +153,48 @@ export function readZip(archive: Uint8Array): ZipFile[] {
       break
     }
   }
-  if (endOffset < 0) throw new Error('Not a ZIP archive')
+  if (endOffset < 0) fail('Not a ZIP archive')
   const count = view.getUint16(endOffset + 10, true)
   let position = view.getUint32(endOffset + 16, true)
-  const decoder = new TextDecoder()
+  const within = (offset: number, length: number) => offset + length <= archive.length
+  const decoder = new TextDecoder('utf-8', { fatal: true })
   const files: ZipFile[] = []
+  const seen = new Set<string>()
   for (let i = 0; i < count; i++) {
-    if (view.getUint32(position, true) !== 0x02014b50) throw new Error('Corrupt ZIP directory')
+    if (!within(position, 46) || view.getUint32(position, true) !== 0x02014b50) {
+      fail('Corrupt ZIP directory')
+    }
+    const flags = view.getUint16(position + 8, true)
     const method = view.getUint16(position + 10, true)
     const crc = view.getUint32(position + 16, true)
-    const size = view.getUint32(position + 20, true)
+    const compressed = view.getUint32(position + 20, true)
+    const size = view.getUint32(position + 24, true)
     const nameLength = view.getUint16(position + 28, true)
     const extraLength = view.getUint16(position + 30, true)
     const commentLength = view.getUint16(position + 32, true)
     const localOffset = view.getUint32(position + 42, true)
-    const path = decoder.decode(archive.subarray(position + 46, position + 46 + nameLength))
-    if (method !== 0) throw new Error(`Unsupported compression in ${path}`)
+    if (!within(position + 46, nameLength)) fail('Corrupt ZIP directory')
+    let path = ''
+    try {
+      path = decoder.decode(archive.subarray(position + 46, position + 46 + nameLength))
+    } catch {
+      fail('Invalid file name in ZIP archive')
+    }
+    checkEntryPath(path)
+    if (seen.has(path)) fail(`Duplicate entry in ZIP archive: ${path}`)
+    seen.add(path)
+    if (method !== 0 || compressed !== size) fail(`Unsupported compression in ${path}`)
+    if (flags & 0x1) fail(`Encrypted entry in ${path}`)
+    if (!within(localOffset, 30) || view.getUint32(localOffset, true) !== 0x04034b50) {
+      fail(`Corrupt entry ${path}`)
+    }
     const localNameLength = view.getUint16(localOffset + 26, true)
     const localExtraLength = view.getUint16(localOffset + 28, true)
     const start = localOffset + 30 + localNameLength + localExtraLength
+    if (!within(start, size)) fail(`Entry ${path} exceeds the archive`)
     const data = archive.slice(start, start + size)
-    if (crc32(data) !== crc) throw new Error(`CRC mismatch in ${path}`)
-    files.push({ path, data })
+    if (crc32(data) !== crc) fail(`CRC mismatch in ${path}`)
+    if (!path.endsWith('/')) files.push({ path, data })
     position += 46 + nameLength + extraLength + commentLength
   }
   return files

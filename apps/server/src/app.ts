@@ -8,6 +8,7 @@ import type { Db } from './db/database'
 import { deviceRoutes } from './devices/routes'
 import { HttpError } from './errors'
 import { historyRoutes } from './history/routes'
+import { importRoutes } from './import/routes'
 import { healthRoutes } from './health/routes'
 import { metricsRoutes, setupMetrics } from './metrics/plugin'
 import { pushRoutes } from './push/routes'
@@ -86,6 +87,7 @@ export async function buildApp({ db, config, logger = false, push, contentStore 
       await api.register(pushRoutes)
       await api.register(attachmentRoutes)
       await api.register(historyRoutes)
+      await api.register(importRoutes)
     },
     { prefix: '/api' },
   )

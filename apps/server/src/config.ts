@@ -36,6 +36,8 @@ const envSchema = z.object({
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_FORCE_PATH_STYLE: booleanFromEnv.default(true),
+  // Largest JSON body accepted by the import (attachments are uploaded separately).
+  IMPORT_MAX_MB: z.coerce.number().min(1).max(4096).default(200),
   // Push services the server may send to (subscription endpoints come from clients: no SSRF).
   PUSH_ALLOWED_HOSTS: z
     .string()
@@ -53,6 +55,8 @@ export interface Config {
   cookieSecure: boolean
   sessionTtlDays: number
   metricsEnabled: boolean
+  /** Request body limit of `POST /api/import`. */
+  importMaxBytes: number
   attachments: {
     dir: string
     maxBytes: number
@@ -104,6 +108,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure: parsed.COOKIE_SECURE,
     sessionTtlDays: parsed.SESSION_TTL_DAYS,
     metricsEnabled: parsed.METRICS_ENABLED,
+    importMaxBytes: Math.round(parsed.IMPORT_MAX_MB * 1_000_000),
     attachments: {
       dir: parsed.ATTACHMENTS_DIR ?? path.join(parsed.DATA_DIR, 'attachments'),
       // Decimal megabytes, like the browsers' storage pages and the app's display.

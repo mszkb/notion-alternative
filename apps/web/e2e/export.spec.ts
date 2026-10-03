@@ -19,7 +19,7 @@ test('exports the workspace as Markdown, offline too', async ({ signedIn: page }
 
   // The export reads the local database only.
   await takeServerDown(page)
-  await page.getByRole('link', { name: 'Export', exact: true }).click()
+  await page.getByRole('link', { name: 'Export & Import' }).click()
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Markdown herunterladen (ZIP)' }).click()
   const download = await downloadPromise
@@ -45,7 +45,7 @@ test('exports JSON with and without history', async ({ signedIn: page }) => {
   await page.getByRole('button', { name: 'Jetzt synchronisieren' }).click()
   await expect(page.getByTestId('sync-status')).toContainText('Synchronisiert um')
 
-  await page.getByRole('link', { name: 'Export', exact: true }).click()
+  await page.getByRole('link', { name: 'Export & Import' }).click()
   const readJson = async () => {
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'JSON herunterladen' }).click()
@@ -119,7 +119,7 @@ test('T-EXP-01: complete ZIP with attachments, manifest and checksums', async ({
   await expect(page.locator('a.attachment-file')).toContainText('bericht.pdf')
   await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
 
-  await page.getByRole('link', { name: 'Export', exact: true }).click()
+  await page.getByRole('link', { name: 'Export & Import' }).click()
   const download = await downloadVia(page, 'Vollständigen Export herunterladen')
   expect(download.suggestedFilename()).toMatch(/-export-\d{4}-\d{2}-\d{2}\.zip$/)
   const verified = await verifyExportArchive(new Uint8Array(readFileSync((await download.path())!)))
@@ -147,4 +147,70 @@ test('T-EXP-01: complete ZIP with attachments, manifest and checksums', async ({
   expect(offline.manifest.history).toBe(false)
   expect(offline.manifest.missing_attachments.map((a) => a.name)).toEqual(['bericht.pdf'])
   await expect(page.getByTestId('export-missing')).toContainText('bericht.pdf')
+})
+
+test('T-EXP-02: imports a complete export as a new workspace', async ({ signedIn: page }) => {
+  await newPage(page, 'Archiv')
+  await page.keyboard.type('Wichtiger Inhalt')
+  await waitForSaved(page)
+  await createVia(page, '+ Unterseite', 'Bilder')
+  await waitForSaved(page)
+  await page
+    .getByTestId('attachment-input')
+    .setInputFiles([{ name: 'punkt.png', mimeType: 'image/png', buffer: PNG }])
+  await expect(page.locator('.attachment img')).toBeVisible()
+  await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
+
+  await page.getByRole('link', { name: 'Export & Import' }).click()
+  const download = await downloadVia(page, 'Vollständigen Export herunterladen')
+  const archive = readFileSync((await download.path())!)
+
+  // Garbage and tampered archives are refused before anything is sent.
+  const fileInput = page.getByTestId('import-file')
+  await fileInput.setInputFiles({
+    name: 'x.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{}'),
+  })
+  await expect(page.getByTestId('import-error')).toContainText('schema_version fehlt')
+  const tampered = Buffer.from(archive)
+  const at = tampered.indexOf('Wichtiger Inhalt')
+  tampered.write('W', at)
+  tampered.write('w', at)
+  await fileInput.setInputFiles({ name: 't.zip', mimeType: 'application/zip', buffer: tampered })
+  await expect(page.getByTestId('import-error')).toContainText(/CRC|Prüfsumme/)
+
+  await fileInput.setInputFiles({
+    name: 'export.zip',
+    mimeType: 'application/zip',
+    buffer: archive,
+  })
+  await expect(page.getByTestId('import-summary')).toContainText('2 Seiten, 1 Anhang')
+  await page.getByLabel('Name des neuen Workspaces').fill('Wiederhergestellt')
+  await page.getByRole('button', { name: 'Als neuen Workspace importieren' }).click()
+  // Same server: the ids exist already, nothing is overwritten.
+  await expect(page.getByTestId('import-ids-exist')).toBeVisible()
+  await page.getByRole('button', { name: 'Als Kopie importieren' }).click()
+
+  await expect(page.locator('.workspace-name')).toHaveText('Wiederhergestellt')
+  const tree = page.getByRole('tree')
+  await tree.getByRole('link', { name: 'Archiv' }).click()
+  await expect(page.locator('.editor')).toContainText('Wichtiger Inhalt')
+  await page.getByRole('link', { name: 'Bilder' }).first().click()
+  await expect
+    .poll(() =>
+      page.locator('.attachment img').evaluate((img: HTMLImageElement) => img.naturalWidth),
+    )
+    .toBe(1)
+  // The staged content is uploaded by the sync.
+  const workspaceId = new URL(page.url()).pathname.split('/')[2]!
+  const snapshot = await (
+    await page.request.get(`/api/sync/snapshot?workspaceId=${workspaceId}`)
+  ).json()
+  const imported = snapshot.attachments[0].id as string
+  await expect
+    .poll(async () => (await page.request.get(`/api/attachments/${imported}/content`)).status(), {
+      timeout: 10_000,
+    })
+    .toBe(200)
 })

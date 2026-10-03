@@ -4,10 +4,10 @@ import {
   EXPORT_SCHEMA_VERSION,
   type ExportHistory,
   jsonExportChunks,
-  jsonExportSchema,
   type JsonExport,
 } from './export-json'
 import { exportMarkdown, type ExportInput } from './export-markdown'
+import { migrateExport } from './import'
 import { createZipParts, readZip, type ZipEntry } from './zip'
 
 /** Marks the archive as ours; checked on import. */
@@ -132,7 +132,7 @@ export interface VerifiedArchive {
 /**
  * Reads an archive written by `buildExportArchive` and checks it completely: manifest, size
  * and SHA-256 of every file, attachment contents against their metadata, JSON against the
- * schema. Throws `ExportArchiveError` with a reason otherwise.
+ * schema (older versions migrated). Throws `ExportArchiveError` with a reason otherwise.
  */
 export async function verifyExportArchive(archive: Uint8Array): Promise<VerifiedArchive> {
   let entries
@@ -161,9 +161,12 @@ export async function verifyExportArchive(archive: Uint8Array): Promise<Verified
   if (!jsonBytes || !manifest.files.some((f) => f.path === JSON_EXPORT_PATH)) {
     throw new ExportArchiveError('workspace.json fehlt')
   }
-  const parsedData = jsonExportSchema.safeParse(parseJson(decoder.decode(jsonBytes)))
-  if (!parsedData.success) throw new ExportArchiveError('workspace.json ist ungültig')
-  const data = parsedData.data
+  let data: JsonExport
+  try {
+    data = migrateExport(parseJson(decoder.decode(jsonBytes)))
+  } catch (error) {
+    throw new ExportArchiveError(`workspace.json: ${(error as Error).message}`)
+  }
 
   const metadata = new Map(data.attachments.map((a) => [a.id, a]))
   const attachments = new Map<string, Uint8Array>()

@@ -5,6 +5,7 @@ import type {
   Device,
   DocumentVersion,
   DocumentVersionState,
+  ImportInput,
   LoginInput,
   LogoutInput,
   PushSubscriptionInput,
@@ -116,6 +117,8 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
         'GET',
         `/documents/${documentId}/history/${seq}?${new URLSearchParams({ workspaceId })}`,
       ),
+    importWorkspace: (input: ImportInput) =>
+      request<{ workspace: Workspace }>('POST', '/import', input),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<{ workspace: Workspace }>('POST', '/workspaces', input),

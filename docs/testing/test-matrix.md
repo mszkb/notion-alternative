@@ -51,7 +51,7 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | ID | Szenario | Erwartung | AC | Auto |
 | --- | --- | --- | --- | --- |
 | T-EXP-01 | Vollständiger Export (MD, JSON, ZIP) | Alle Dokumente, Tags, Links, Anhänge enthalten | AC-04 | ☑ ¹² |
-| T-EXP-02 | Export → Import in frische Installation | Round-Trip ohne Verlust | AC-05 | ☐ |
+| T-EXP-02 | Export → Import in frische Installation | Round-Trip ohne Verlust | AC-05 | ☑ ¹³ |
 
 ## PWA / Push
 
@@ -78,3 +78,5 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 ¹¹ Eigenschaftstest gegen den echten Server in `apps/web/src/sync/convergence.integration.test.ts`: drei `LocalStore`-Geräte, 60 zufällige Schritte (Bearbeiten, Anlegen, Löschen, Verschieben, Sync) mit verlorenen Push-Antworten und abgebrochenen Pulls, feste Seeds. Danach: leere Queues, identische Blöcke auf allen Geräten und dem Server, jede Bearbeitung in einem Block oder Konfliktobjekt auffindbar.
 
 ¹² Markdown: `packages/shared/src/export-markdown.test.ts` (Dateinamen, Kollisionen, Ordner, Front Matter, Linkauflösung, Anhänge, Tombstones), `packages/shared/src/zip.test.ts`, `apps/web/e2e/export.spec.ts` (Download offline, Inhalt des ZIP). JSON: `packages/shared/src/export-json.test.ts` (Tombstones, Links, Chunk-Serialisierung gegen das Schema), `apps/server/test/sync-snapshot.test.ts` (`/api/sync/log` nach Kompaktierung), `apps/server/test/export-schema.test.ts` (JSON Schema aktuell), E2E mit/ohne Verlauf und offline. Vollständiges ZIP: `packages/shared/src/export-archive.test.ts` (Aufbau, Manifest, Prüfsummen, Manipulation erkannt), E2E `T-EXP-01` mit Anhängen online und offline (fehlender Anhang ausgewiesen).
+
+¹³ Server: `apps/server/test/import.test.ts` (Export einer Instanz in eine zweite, leere Instanz: Entitäten identisch, Papierkorb, Verlauf, Suche, Anhang-Upload, Weiterarbeiten; `409` bei vorhandenen IDs, Kopie mit neuen IDs; Referenzen, Version, Speicherlimit). Shared: `import.test.ts` (Migration über mehrere Versionen, ID-Umschreibung, bösartige ZIPs: Zip-Slip, Duplikate, Größen, Komprimierung). E2E: `apps/web/e2e/export.spec.ts` (ZIP-Import über die Oberfläche, ungültige und manipulierte Dateien, Kopie, Anhang wird hochgeladen).

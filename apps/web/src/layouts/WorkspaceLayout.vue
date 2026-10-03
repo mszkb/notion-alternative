@@ -390,7 +390,7 @@ watch(
         <p class="muted">
           {{ currentUser?.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
           <RouterLink :to="{ name: 'trash', params: { workspaceId } }">Papierkorb</RouterLink> ·
-          <RouterLink :to="{ name: 'export', params: { workspaceId } }">Export</RouterLink>
+          <RouterLink :to="{ name: 'export', params: { workspaceId } }">Export & Import</RouterLink>
         </p>
       </footer>
     </aside>
