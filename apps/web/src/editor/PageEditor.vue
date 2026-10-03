@@ -368,6 +368,10 @@ const elements = new Map<string, HTMLElement>()
 const rendered = new Map<string, string>()
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
 const inFlight = new Map<string, Promise<unknown>>()
+/** Blocks whose last save failed (e.g. storage full): their DOM is the only copy, retried. */
+const failed = new Set<string>()
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+const RETRY_DELAY_MS = 5000
 const saving = ref(0)
 const error = ref<string | null>(null)
 let pendingFocus: { id: string; offset: number | 'end' } | null = null
@@ -414,6 +418,7 @@ function isBusy(id: string, allowFocused = false): boolean {
   return (
     timers.has(id) ||
     inFlight.has(id) ||
+    failed.has(id) ||
     picker.value?.blockId === id ||
     linking.value === id ||
     (!allowFocused && !!el && el === document.activeElement)
@@ -491,16 +496,35 @@ function caretOf(el: HTMLElement): number {
 
 // ------------------------------------------------------------------ saving
 
+function isQuotaError(e: unknown): boolean {
+  const names = [(e as Error)?.name, (e as { inner?: Error })?.inner?.name]
+  return names.includes('QuotaExceededError')
+}
+
+function scheduleRetry() {
+  if (retryTimer) return
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    for (const id of failed) void flush(id)
+  }, RETRY_DELAY_MS)
+}
+
 function track<T>(id: string, promise: Promise<T>): Promise<T | undefined> {
   saving.value += 1
   const tracked = promise
     .then((value) => {
-      error.value = null
+      failed.delete(id)
+      if (failed.size === 0) error.value = null
       return value
     })
     .catch((e: unknown) => {
       console.error(e)
-      error.value = 'Änderung konnte nicht gespeichert werden.'
+      // Keep the text on screen and try again; never let older stored content replace it.
+      failed.add(id)
+      scheduleRetry()
+      error.value = isQuotaError(e)
+        ? 'Speicher voll: Änderung nicht gespeichert. Bitte Platz schaffen, es wird erneut versucht.'
+        : 'Änderung konnte nicht gespeichert werden, es wird erneut versucht.'
       return undefined
     })
     .finally(() => {
@@ -530,14 +554,17 @@ async function flush(id: string) {
   typing = false
   const block = blockById.value.get(id)
   const el = elements.get(id)
-  if (!block || !el) return
+  if (!block || !el) {
+    failed.delete(id)
+    return
+  }
   const content = readContent(block, el)
   rendered.set(id, content)
   await track(id, store.updateBlock(id, { content }))
 }
 
 function flushAll() {
-  for (const id of [...timers.keys()]) void flush(id)
+  for (const id of new Set([...timers.keys(), ...failed])) void flush(id)
 }
 
 /** Before a reload (app update): write debounced edits and wait for all saves. */
@@ -546,6 +573,11 @@ const stopPendingEdits = registerPendingEdits(async () => {
   await Promise.all(inFlight.values())
 })
 
+/** Text that could not be stored exists only on screen: ask before the page goes away. */
+function onBeforeUnload(event: BeforeUnloadEvent) {
+  if (failed.size > 0) event.preventDefault()
+}
+
 function onVisibilityChange() {
   if (document.visibilityState === 'hidden') flushAll()
 }
@@ -553,6 +585,7 @@ function onVisibilityChange() {
 onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('pagehide', flushAll)
+  window.addEventListener('beforeunload', onBeforeUnload)
   document.addEventListener('mousedown', closeMenuOnOutsideClick)
   document.addEventListener('mouseup', endDrag)
   document.addEventListener('copy', onClipboard)
@@ -561,9 +594,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   flushAll()
+  if (retryTimer) clearTimeout(retryTimer)
   stopPendingEdits()
   document.removeEventListener('visibilitychange', onVisibilityChange)
   window.removeEventListener('pagehide', flushAll)
+  window.removeEventListener('beforeunload', onBeforeUnload)
   document.removeEventListener('mousedown', closeMenuOnOutsideClick)
   document.removeEventListener('mouseup', endDrag)
   document.removeEventListener('copy', onClipboard)

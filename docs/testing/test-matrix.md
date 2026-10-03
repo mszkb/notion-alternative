@@ -12,8 +12,13 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | T-OFF-04 | Server down, Netz vorhanden | Lesen & Bearbeiten möglich, Queue wächst | AC-08 | ☑ ³ |
 | T-OFF-05 | Verbindung bricht während Sync ab | Kein Datenverlust, Wiederholung idempotent | AC-02 | ☑ ³ |
 | T-OFF-06 | Push deaktiviert | Sync bei Start/Fokus/Timer | AC-07 | ☑ ⁶ |
+| T-OFF-07 | Server-Neustart (Absturz) während Sync | Nichts verloren, nichts doppelt angewendet | AC-02 | ☑ ¹⁴ |
+| T-OFF-08 | Sitzung läuft offline ab | Lokale Daten les-/bearbeitbar, nach Anmeldung gesynct | AC-01, AC-08 | ☑ ¹⁴ |
+| T-OFF-09 | Lokaler Speicher voll | Sichtbare Meldung, Text bleibt erhalten und wird erneut gespeichert | AC-01 | ☑ ¹⁴ |
+| T-OFF-10 | Mehrere Tabs offline | Änderungen aller Tabs bleiben, werden genau einmal gesendet | AC-02 | ☑ ¹⁴ |
+| T-OFF-11 | Smartphone: Flugmodus, Hintergrund, Neustart | Siehe Prüfliste | AC-01, AC-08 | manuell ¹⁵ |
 
-¹ Playwright (`apps/web/e2e/offline.spec.ts`): Server nicht erreichbar (alle `/api`-Requests schlagen fehl) sowie Netzverlust in der geladenen App; T-OFF-02 zusätzlich auf Datenebene (`apps/web/src/local/store.test.ts`). Neuladen bei echtem Netz-Offline (`context.setOffline`) gegen den Production-Build mit Service Worker in `apps/web/e2e/pwa-offline.spec.ts` (Playwright-Projekt `pwa`).
+¹ Playwright (`apps/web/e2e/offline.spec.ts`): Server nicht erreichbar (alle `/api`-Requests schlagen fehl) sowie Netzverlust in der geladenen App; T-OFF-02 zusätzlich auf Datenebene (`apps/web/src/local/store.test.ts`). Neuladen bei echtem Netz-Offline (`context.setOffline`) gegen den Production-Build mit Service Worker in `apps/web/e2e/pwa-offline.spec.ts` (Playwright-Projekt `pwa`); dort auch T-OFF-03 mit echtem Netz: wieder online, die Offline-Änderung erreicht ohne Zutun den Server.
 
 ³ Push (`POST /api/sync/push`): `apps/server/test/sync-push.test.ts` (Duplikate, verlorene Antwort), `apps/web/src/sync/push.test.ts` (Abbruch nach Server-Commit, Wiederholung), `apps/web/e2e/sync.spec.ts` (Server down, Queue wächst und wird danach gesendet).
 
@@ -80,3 +85,7 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 ¹² Markdown: `packages/shared/src/export-markdown.test.ts` (Dateinamen, Kollisionen, Ordner, Front Matter, Linkauflösung, Anhänge, Tombstones), `packages/shared/src/zip.test.ts`, `apps/web/e2e/export.spec.ts` (Download offline, Inhalt des ZIP). JSON: `packages/shared/src/export-json.test.ts` (Tombstones, Links, Chunk-Serialisierung gegen das Schema), `apps/server/test/sync-snapshot.test.ts` (`/api/sync/log` nach Kompaktierung), `apps/server/test/export-schema.test.ts` (JSON Schema aktuell), E2E mit/ohne Verlauf und offline. Vollständiges ZIP: `packages/shared/src/export-archive.test.ts` (Aufbau, Manifest, Prüfsummen, Manipulation erkannt), E2E `T-EXP-01` mit Anhängen online und offline (fehlender Anhang ausgewiesen).
 
 ¹³ Round-Trip: `apps/server/test/export-roundtrip.test.ts` – Workspace mit allen Blocktypen, verschachtelten Seiten, Tags, Favoriten, Seitenlinks, Anhängen, Verlauf und Tombstones → ZIP → frische Instanz; Entitäten, Änderungslog, Anhang-Bytes und Markdown identisch. Dazu wird jedes Fixture in `apps/server/test/fixtures/exports/` (eins pro `schema_version`) bei jedem Lauf importiert. Weitere Fälle: `apps/server/test/import.test.ts` (Export einer Instanz in eine zweite, leere Instanz: Entitäten identisch, Papierkorb, Verlauf, Suche, Anhang-Upload, Weiterarbeiten; `409` bei vorhandenen IDs, Kopie mit neuen IDs; Referenzen, Version, Speicherlimit). Shared: `import.test.ts` (Migration über mehrere Versionen, ID-Umschreibung, bösartige ZIPs: Zip-Slip, Duplikate, Größen, Komprimierung). E2E: `apps/web/e2e/export.spec.ts` (ZIP-Import über die Oberfläche, ungültige und manipulierte Dateien, Kopie, Anhang wird hochgeladen).
+
+¹⁴ T-OFF-07: `apps/web/src/sync/restart.integration.test.ts` – echter Server-Prozess wird mitten im Push per `SIGKILL` beendet und mit derselben Datenbank neu gestartet; danach leere Queue, Serverstand gleich lokalem Stand, jede Operation genau einmal im Änderungslog. T-OFF-08/09/10: `apps/web/e2e/offline-hardening.spec.ts` (Sitzung offline abgelaufen und neu angemeldet; IndexedDB-Schreibfehler `QuotaExceededError` – der Text bleibt sichtbar, auch wenn die Seite aus der Datenbank neu gerendert wird, und wird nach 5 s erneut gespeichert; zwei Tabs offline mit gemeinsamer lokaler Datenbank).
+
+¹⁵ [`docs/testing/mobile-offline-checklist.md`](mobile-offline-checklist.md)

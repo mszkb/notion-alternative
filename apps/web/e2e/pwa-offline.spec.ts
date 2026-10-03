@@ -26,7 +26,7 @@ test('the service worker controls the app and makes it installable', async ({ si
   expect(errors.filter((id) => id !== 'in-incognito')).toEqual([])
 })
 
-test('T-OFF-01/02 with the network really offline: reload works and edits survive', async ({
+test('T-OFF-01/02/03 with the network really offline: reload works, edits survive and sync', async ({
   signedIn: page,
   context,
 }) => {
@@ -51,6 +51,17 @@ test('T-OFF-01/02 with the network really offline: reload works and edits surviv
   } finally {
     await context.setOffline(false)
   }
+
+  // T-OFF-03: back online, the offline edit reaches the server without any user action.
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 15_000 })
+  const workspaceId = new URL(page.url()).pathname.split('/')[2]!
+  const snapshot = await (
+    await page.request.get(`/api/sync/snapshot?workspaceId=${workspaceId}`)
+  ).json()
+  expect(snapshot.blocks.map((b: { content: string }) => b.content)).toContain(
+    'Inhalt – offline ergänzt',
+  )
 })
 
 test('a new version offers a reload that keeps unsaved edits', async ({ signedIn: page }) => {

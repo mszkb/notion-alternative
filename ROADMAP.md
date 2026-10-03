@@ -103,7 +103,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 ## Phase 7 – Hardening
 
 - [x] Konflikttests (Mehrgeräte)
-- [ ] Offline-Tests
+- [x] Offline-Tests
 - [ ] Security Review
 - [ ] Backup/Restore automatisiert getestet
 - [ ] Backup-/Restore-Dokumentation
