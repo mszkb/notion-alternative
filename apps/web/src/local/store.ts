@@ -37,7 +37,7 @@ import {
   type Workspace,
 } from '@notion-alt/shared'
 import type { Table } from 'dexie'
-import type { AttachmentContent, LinkEntry, LocalDb, QueuedOperation } from './db'
+import type { AttachmentContent, LinkEntry, LocalDb, QueuedOperation, SearchIndexCache } from './db'
 
 export class LocalStoreError extends Error {
   override name = 'LocalStoreError'
@@ -89,6 +89,7 @@ const CONTENT_TABLES = [
   'conflicts',
   'attachments',
   'attachmentContents',
+  'searchDirty',
 ]
 
 /** Backlink index entry of a block, or null when it links to no page. */
@@ -134,7 +135,11 @@ export class LocalStore {
     const ctx: WriteContext = { touched: new Map() }
     // The scope must be an `async` function: Dexie only then tracks native awaits and keeps the
     // transaction alive across them (otherwise it may commit early).
-    const result = await this.db.transaction('rw', CONTENT_TABLES, async () => fn(ctx))
+    const result = await this.db.transaction('rw', CONTENT_TABLES, async () => {
+      const value = await fn(ctx)
+      await this.persistTouched(ctx)
+      return value
+    })
     this.notify(ctx)
     return result
   }
@@ -156,6 +161,14 @@ export class LocalStore {
       attachment: this.db.attachments,
       conflict: this.db.conflicts,
     } as const
+  }
+
+  /** Marks the touched pages for the saved search index, inside the write's transaction (#98). */
+  private async persistTouched(ctx: WriteContext) {
+    const rows = [...ctx.touched].flatMap(([workspaceId, ids]) =>
+      [...ids].map((documentId) => ({ documentId, workspaceId, mark: newId() })),
+    )
+    if (rows.length > 0) await this.db.searchDirty.bulkPut(rows)
   }
 
   private mark(ctx: WriteContext, workspaceId: string, documentId: string) {
@@ -778,6 +791,35 @@ export class LocalStore {
     })
   }
 
+  // ---------------------------------------------------------------- search index cache
+
+  /** Saved search index of a workspace (#98), if any. */
+  async searchIndexCache(workspaceId: string): Promise<SearchIndexCache | undefined> {
+    return this.db.searchIndexes.get(workspaceId)
+  }
+
+  /** Pages changed since the saved search index, with their current marks. */
+  async searchDirtyMarks(workspaceId: string): Promise<Map<string, string>> {
+    const rows = await this.db.searchDirty.where('workspaceId').equals(workspaceId).toArray()
+    return new Map(rows.map((row) => [row.documentId, row.mark]))
+  }
+
+  /**
+   * Saves the search index. `marks` were read before the index took in those pages; a mark
+   * that changed since stays, so the page is indexed again at the next start.
+   */
+  async saveSearchIndex(cache: SearchIndexCache, marks: Map<string, string>): Promise<void> {
+    await this.db.transaction('rw', ['searchIndexes', 'searchDirty'], async () => {
+      const current = await this.db.searchDirty.bulkGet([...marks.keys()])
+      await this.db.searchDirty.bulkDelete(
+        current
+          .filter((row) => row && marks.get(row.documentId) === row.mark)
+          .map((row) => row!.documentId),
+      )
+      await this.db.searchIndexes.put(cache)
+    })
+  }
+
   // ---------------------------------------------------------------- pull
 
   private static cursorKey(workspaceId: string): string {
@@ -800,6 +842,7 @@ export class LocalStore {
     const ctx: WriteContext = { touched: new Map() }
     await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
       for (const change of changes) await this.applyRemoteChange(ctx, workspaceId, change)
+      await this.persistTouched(ctx)
       await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
     })
     this.notify(ctx)
@@ -1074,6 +1117,7 @@ export class LocalStore {
       await this.db.links.bulkPut(links)
       for (const d of page.documents) this.mark(ctx, workspaceId, d.id)
       for (const b of page.blocks) this.mark(ctx, workspaceId, b.documentId)
+      await this.persistTouched(ctx)
     })
     for (const id of all) progress.seen.add(id)
     this.notify(ctx)
@@ -1140,6 +1184,7 @@ export class LocalStore {
       await this.db.conflicts.bulkDelete(drop(local.conflicts))
       for (const d of local.documents) this.mark(ctx, workspaceId, d.id)
       for (const b of local.blocks) this.mark(ctx, workspaceId, b.documentId)
+      await this.persistTouched(ctx)
       await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
     })
     this.notify(ctx)

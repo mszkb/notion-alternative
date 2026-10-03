@@ -84,7 +84,7 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 
 ⁸ Manuelle Prüfliste in [`docs/user/installation.md`](../user/installation.md#prüfliste-t-pwa-01-manuell). Automatisiert: Installierbarkeit in Chromium (`apps/web/e2e/pwa-offline.spec.ts`), Installations-Button und iOS-Hinweis (`apps/web/e2e/install.spec.ts`).
 
-⁹ Dexie-Version 1 → 2 mit Inhalten und Queue-Eintrag in `apps/web/src/local/conflicts.test.ts`; die erhaltenen Operationen werden danach normal gepusht.
+⁹ Dexie-Version 1 → 2 mit Inhalten und Queue-Eintrag in `apps/web/src/local/conflicts.test.ts`; die erhaltenen Operationen werden danach normal gepusht. Version 2 → 3 in `apps/web/src/local/attachments.test.ts`, Version 3 → 4 (gespeicherter Suchindex, #98) in `apps/web/src/local/search.test.ts`: Inhalte und Queue bleiben, der erste Start baut den Index auf und speichert ihn. Invalidierung des gespeicherten Index (Änderungen ohne laufende Suche, Änderung während des Speicherns, Re-Sync, beschädigter oder veralteter Cache) ebenda.
 
 ¹⁰ Server: `apps/server/test/push.test.ts` (Versand an andere Geräte, entschlüsselter Payload ohne Inhalte, Bündelung, `410`, Allowlist), `push-crypto.test.ts` (RFC-8291-Testvektor, VAPID). Client: `apps/web/e2e/pwa-push.spec.ts` – Push-Event per Chromium-CDP an den Service Worker löst den Sync aus; Aktivieren nur per Klick (Browser-Subscription in Headless-Chromium gestubbt). Zustellung über einen echten Push-Dienst manuell prüfen.
 

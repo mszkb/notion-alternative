@@ -113,6 +113,8 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
   const [, contentReadMs] = await time(() => store.documentsWithContent(workspaceId))
   const search = new WorkspaceSearch(store, workspaceId)
   const [, indexMs] = await time(() => search.start())
+  // Saving the index (in idle time in the app); the next start loads it (#98).
+  const [, saveMs] = await time(() => search.saved())
   const heapAfterIndex = heapMb()
 
   const queries: number[] = []
@@ -122,6 +124,10 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
   }
   queries.sort((a, b) => a - b)
   search.stop()
+  // Next start, from the saved index (#98).
+  const cached = new WorkspaceSearch(store, workspaceId)
+  const [, cachedStartMs] = await time(() => cached.start())
+  cached.stop()
 
   return {
     config: { pages, blocksPerPage },
@@ -135,6 +141,11 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
     /** Bulk read of all pages, blocks and tags (part of the index build). */
     contentReadMs,
     searchIndexBuildMs: indexMs,
+    /** Serializing and storing the built index (#98). */
+    searchIndexSaveMs: saveMs,
+    /** Start from the saved index; `startedFrom` must be `cache`. */
+    searchIndexCachedStartMs: cachedStartMs,
+    searchIndexStartedFrom: cached.startedFrom,
     searchQueryMs: { p50: queries[25], p95: queries[47], max: queries.at(-1) },
     heapMb: { before: heapBefore, afterIndex: heapAfterIndex },
   }

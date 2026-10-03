@@ -108,6 +108,8 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Backup/Restore automatisiert getestet
 - [ ] Backup-/Restore-Dokumentation ([`backup.md`](docs/operations/backup.md) vorhanden; offen: einmal auf frischem Host durchspielen)
 - [x] Lasttests ([`load-tests.md`](docs/testing/load-tests.md); offen: Messung auf dem Raspberry Pi)
+- [x] Re-Sync großer Workspaces seitenweise mit Fortschritt ([#97](https://github.com/mszkb/notion-alternative/issues/97))
+- [x] Lokaler Suchindex in IndexedDB gespeichert ([#98](https://github.com/mszkb/notion-alternative/issues/98))
 
 ## Phase 8 – Collaboration
 
