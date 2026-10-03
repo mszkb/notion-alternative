@@ -21,7 +21,7 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 
 ## Phase 0 – Discovery
 
-- [ ] Zielgruppe schärfen ([`docs/product/vision.md`](docs/product/vision.md))
+- [x] Zielgruppe schärfen ([`docs/product/vision.md`](docs/product/vision.md))
 - [x] Datenmodell festlegen ([`docs/architecture/sync.md`](docs/architecture/sync.md))
 - [x] Exportformat festlegen – [ADR 0004](docs/adr/0004-export-format.md)
 - [x] Lizenz bestätigen (MIT, siehe `LICENSE`)
@@ -115,8 +115,11 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [ ] Kommentare
 - [ ] Berechtigungen
 - [ ] Echtzeitfunktionen (ggf. CRDT / operation-based Sync)
+- [ ] Spaces von beliebig vielen Servern in einer Oberfläche (ADR ausstehend, [`vision.md`](docs/product/vision.md#spaces-von-beliebig-vielen-servern))
 
 ## Phase 9 – Paid services
+
+Verkauft werden nur Hosted Spaces; die Punkte unten sind ihre Bausteine ([`vision.md`](docs/product/vision.md#geschäftsmodell-hosted-spaces)).
 
 - [ ] Hosted Sync
 - [ ] Hosted Push Relay

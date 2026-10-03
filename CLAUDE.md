@@ -23,7 +23,7 @@ Entschieden (`Accepted`):
 - **Lokale Datenschicht** ([ADR 0009](docs/adr/0009-local-data-layer.md)): eine Dexie-DB pro Benutzer, Operationen in derselben Transaktion, Entität `document_tag`, Feldnamen camelCase, MiniSearch für die lokale Suche, Offline-Start mit zwischengespeichertem Benutzer.
 - **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. HTTPS für Smartphones wird in Phase 4 entschieden, kein dritter Container.
 
-Noch offen in Phase 0: Zielgruppe schärfen.
+Positionierung (`docs/product/vision.md`): super einfaches, minimalistisches self-hosted Werkzeug mit **Einfachheitsbudget** (max. 2 Container, eine SQLite-Datei, Setup < 5 Minuten). Vision: Spaces von beliebig vielen Servern in einer Oberfläche (noch ohne ADR). Verkauft werden nur Hosted Spaces.
 
 ## Wo steht was
 

@@ -1,5 +1,7 @@
 # Paid services – Konzeptentwurf (Phase 9)
 
+> **Geschäftsmodell (entschieden, siehe [`vision.md`](vision.md#geschäftsmodell-hosted-spaces)):** Verkauft werden nur Hosted Spaces. Backups, Support, Push-Zustellung usw. sind Goodies eines Hosted Space, keine einzeln verkauften Produkte.
+>
 > **Status: Entwurf.** Das Dokument sammelt Vorschläge und offene Fragen zu den Issues [#82](https://github.com/mszkb/notion-alternative/issues/82)–[#86](https://github.com/mszkb/notion-alternative/issues/86). Entschieden ist noch nichts. Geschäftsmodell, Preise und Betrieb legt der Maintainer fest; technische Entscheidungen bekommen eigene ADRs.
 
 ## Leitplanken
@@ -67,7 +69,7 @@ SSO/SCIM und Audit-Logs bleiben Nicht-Ziele. Sie werden neu bewertet, wenn Phase
 
 ## Offene Fragen an den Maintainer
 
-1. Soll es Paid services überhaupt geben, und wer betreibt sie?
+1. ~~Soll es Paid services überhaupt geben?~~ Ja, als Hosted Spaces ([`vision.md`](vision.md#geschäftsmodell-hosted-spaces)). Offen: wer betreibt sie?
 2. Soll Hosting eine eigene Instanz pro Kunde sein (Vorschlag) oder mandantenfähig?
 3. Wird Ende-zu-Ende-Verschlüsselung für Hosted Sync verlangt? Davon hängt ab, ob serverseitige Suche und Verlauf dort entfallen.
 4. Welche Reihenfolge? Vorschlag: Managed Backups → Hosting → Push Relay (nur bei Bedarf) → Governance nach Phase 8.
