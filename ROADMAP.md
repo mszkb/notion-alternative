@@ -43,7 +43,9 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 - [x] Datenbank (SQLite) & Migrationen
 - [x] Observability: strukturierte Logs, Healthchecks
 - [x] Observability: Metriken
-- [ ] Login-Rate-Limiting, Passwort ändern
+- [x] Login-Rate-Limiting, Passwort ändern
+
+Idee für später: Passwort-Reset durch den Admin per CLI im Backend-Container (kein Mailversand im MVP).
 
 ## Phase 2 – Local editor
 

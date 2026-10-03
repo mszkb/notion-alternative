@@ -20,6 +20,12 @@ export const loginInputSchema = z.object({
 })
 export type LoginInput = z.infer<typeof loginInputSchema>
 
+export const changePasswordInputSchema = z.object({
+  currentPassword: z.string().min(1).max(PASSWORD_MAX_LENGTH),
+  newPassword: passwordSchema,
+})
+export type ChangePasswordInput = z.infer<typeof changePasswordInputSchema>
+
 export const userSchema = z.object({
   id: z.uuid(),
   email: z.string(),

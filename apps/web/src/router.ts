@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import WorkspaceLayout from './layouts/WorkspaceLayout.vue'
 import { lastWorkspaceId, openLocalStore, refreshWorkspaces, workspaces } from './local/context'
 import { connection, loadCurrentUser } from './session'
+import AccountView from './views/AccountView.vue'
 import HomeView from './views/HomeView.vue'
 import LoginView from './views/LoginView.vue'
 import PageView from './views/PageView.vue'
@@ -15,6 +16,7 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { requiresAuth: true } },
     { path: '/login', name: 'login', component: LoginView },
+    { path: '/account', name: 'account', component: AccountView, meta: { requiresAuth: true } },
     {
       path: '/w/:workspaceId',
       component: WorkspaceLayout,

@@ -1,13 +1,24 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import { loginInputSchema, registerInputSchema } from '@notion-alt/shared'
+import {
+  changePasswordInputSchema,
+  loginInputSchema,
+  registerInputSchema,
+} from '@notion-alt/shared'
 import { HttpError } from '../errors'
 import { parseInput } from '../validation'
 import { insertWorkspace } from '../workspaces/repository'
 import { hashPassword, verifyPassword } from './password'
 import { currentUser, requireAuth } from './plugin'
 import { AttemptLimiter } from './rate-limit'
-import { SESSION_COOKIE, createSession, deleteSession } from './sessions'
-import { countUsers, findUserByEmail, insertUser, toUser } from './users'
+import { SESSION_COOKIE, createSession, deleteOtherSessions, deleteSession } from './sessions'
+import {
+  countUsers,
+  findUserByEmail,
+  findUserById,
+  insertUser,
+  toUser,
+  updatePasswordHash,
+} from './users'
 
 const DEFAULT_WORKSPACE_NAME = 'Personal'
 
@@ -97,6 +108,32 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const token = request.cookies[SESSION_COOKIE]
     if (token) await deleteSession(db, token)
     reply.clearCookie(SESSION_COOKIE, { path: '/api' })
+    return reply.code(204).send()
+  })
+
+  app.post('/auth/password', { preHandler: requireAuth }, async (request, reply) => {
+    const input = parseInput(changePasswordInputSchema, request.body)
+    const user = currentUser(request)
+    // Guessing the current password through a stolen session counts like failed logins.
+    enforceLimit(reply, [
+      [loginFailuresByIp, request.ip],
+      [loginFailuresByEmail, user.email],
+    ])
+    const row = await findUserById(db, user.id)
+    if (!row || !(await verifyPassword(input.currentPassword, row.password_hash))) {
+      loginFailuresByIp.record(request.ip)
+      loginFailuresByEmail.record(user.email)
+      throw new HttpError(400, 'invalid_current_password', 'Current password is incorrect')
+    }
+    const passwordHash = await hashPassword(input.newPassword)
+    const token = request.cookies[SESSION_COOKIE]!
+    await db.transaction().execute(async (trx) => {
+      await updatePasswordHash(trx, user.id, passwordHash)
+      // Other devices must sign in again; their local data and queues stay intact (local-first).
+      await deleteOtherSessions(trx, user.id, token)
+    })
+    loginFailuresByEmail.reset(user.email)
+    request.log.info({ userId: user.id }, 'password changed')
     return reply.code(204).send()
   })
 

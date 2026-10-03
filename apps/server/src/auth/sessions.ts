@@ -41,3 +41,12 @@ export async function deleteSession(db: Db, token: string): Promise<void> {
 export async function deleteExpiredSessions(db: Db): Promise<void> {
   await db.deleteFrom('sessions').where('expires_at', '<=', new Date().toISOString()).execute()
 }
+
+/** Ends every session of the user except the one identified by `keepToken`. */
+export async function deleteOtherSessions(db: Db, userId: string, keepToken: string) {
+  await db
+    .deleteFrom('sessions')
+    .where('user_id', '=', userId)
+    .where('id', '!=', hashToken(keepToken))
+    .execute()
+}

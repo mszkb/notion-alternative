@@ -278,7 +278,10 @@ watch(
         <p class="muted" data-testid="pending">
           {{ pending }} lokale Änderung{{ pending === 1 ? '' : 'en' }} noch nicht synchronisiert
         </p>
-        <p class="muted">{{ currentUser?.email }}</p>
+        <p class="muted">
+          {{ currentUser?.email }} ·
+          <RouterLink :to="{ name: 'account' }">Konto</RouterLink>
+        </p>
       </footer>
     </aside>
 

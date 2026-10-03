@@ -41,7 +41,10 @@ async function logout() {
   <main class="card">
     <header class="row">
       <h1>Workspaces</h1>
-      <button type="button" class="link" @click="logout">Abmelden</button>
+      <span class="row">
+        <RouterLink :to="{ name: 'account' }">Konto</RouterLink>
+        <button type="button" class="link" @click="logout">Abmelden</button>
+      </span>
     </header>
     <p class="muted">Angemeldet als {{ currentUser?.email }}</p>
     <ul class="list">

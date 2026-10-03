@@ -1,4 +1,5 @@
 import type {
+  ChangePasswordInput,
   CreateWorkspaceInput,
   LoginInput,
   RegisterInput,
@@ -45,6 +46,7 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
     register: (input: RegisterInput) => request<{ user: User }>('POST', '/auth/register', input),
     login: (input: LoginInput) => request<{ user: User }>('POST', '/auth/login', input),
     logout: () => request<void>('POST', '/auth/logout'),
+    changePassword: (input: ChangePasswordInput) => request<void>('POST', '/auth/password', input),
     me: () => request<{ user: User }>('GET', '/auth/me'),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>

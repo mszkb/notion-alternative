@@ -31,6 +31,8 @@ export default defineConfig({
         DATABASE_PATH: databasePath,
         LOG_LEVEL: 'warn',
         ALLOW_REGISTRATION: 'true',
+        // Every test registers from the same address; keep the per-IP limit out of the way.
+        REGISTER_MAX_ATTEMPTS_PER_IP: '100000',
       },
       reuseExistingServer: false,
     },
