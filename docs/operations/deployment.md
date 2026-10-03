@@ -95,6 +95,15 @@ Das Backend begrenzt fehlgeschlagene Logins und Registrierungsversuche im Arbeit
 
 Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`frontend`) anhängt; das Backend vertraut genau einem Proxy-Hop. Ein weiterer Reverse Proxy davor (z. B. für TLS) erscheint deshalb als Client-IP; dann teilen sich alle Nutzer das IP-Limit. In diesem Fall `LOGIN_MAX_FAILURES_PER_IP` erhöhen. Bei rootless Docker sieht nginx je nach Port-Treiber ebenfalls nicht die echte Adresse.
 
+## Zugriff von Smartphones (HTTPS)
+
+Für Installation, Offline-Neustart und Web Push auf Smartphones braucht die App HTTPS mit einem vertrauenswürdigen Zertifikat. Vorschlag ([ADR 0011](../adr/0011-https-for-mobile-devices.md), noch `Proposed`):
+
+- **Tailscale (empfohlen, nicht öffentlich):** Tailscale auf Host und Geräten, dann auf dem Host `tailscale serve --bg --https=443 http://127.0.0.1:8080`. Die App ist im Tailnet unter `https://<host>.<tailnet>.ts.net` erreichbar; `BIND_ADDRESS=127.0.0.1` bleibt.
+- **Eigener Reverse Proxy mit Let's Encrypt** (öffentlich, eigene Domain): Proxy auf `127.0.0.1:8080` zeigen lassen.
+
+In beiden Fällen `COOKIE_SECURE=true` setzen. Für Web Push muss der Server ausgehend die Push-Dienste erreichen (`PUSH_ALLOWED_HOSTS`).
+
 ## App offline (Service Worker)
 
 Der Production-Build enthält einen Service Worker (`/sw.js`), der die App-Dateien zwischenspeichert, damit die App auch ohne Netz neu geladen werden kann. Er braucht einen sicheren Kontext: `https://` oder `http://localhost` (z. B. über den SSH-Tunnel). Über eine reine HTTP-LAN-Adresse läuft die App ohne Service Worker weiter, nur das Neuladen offline geht dann nicht ([ADR 0010](../adr/0010-reference-deployment-and-https.md)).
