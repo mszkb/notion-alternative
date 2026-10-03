@@ -1,5 +1,5 @@
 # Build context: repository root (see docker-compose.yml).
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 RUN corepack enable
 WORKDIR /repo
 COPY . .
@@ -7,7 +7,7 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @notion-alt/server build
 RUN pnpm --filter @notion-alt/server deploy --prod --legacy /out
 
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 ENV NODE_ENV=production \
   HOST=0.0.0.0 \
   PORT=3000 \
