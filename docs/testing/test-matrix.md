@@ -28,6 +28,7 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | T-MD-03 | A und B ändern denselben Block offline | Sichtbarer Konflikt, beide Stände erhalten | AC-03 | ☑ ⁷ |
 | T-MD-04 | Gleiche Operation doppelt gesendet | Nur einmal angewendet (Idempotenz) | AC-02 | ☑ ³ |
 | T-MD-05 | Gerät lange offline, Log kompaktiert | Vollständiger Re-Sync | AC-02 | ☑ ⁵ |
+| T-MD-06 | Drei Geräte, zufällige Offline-Änderungen, verlorene Antworten | Alle konvergieren zum Serverstand, keine Änderung geht still verloren | AC-02, AC-03 | ☑ ¹¹ |
 
 ⁴ Pull (`GET /api/sync/pull`): zwei lokale Datenbanken gegen ein Änderungslog in `apps/web/src/sync/pull.test.ts` (inkl. Teilbaum, Tags, Backlinks, Abbruch mitten im Paging), zwei Browser-Kontexte in `apps/web/e2e/multi-device.spec.ts`.
 
@@ -73,3 +74,5 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 ⁹ Dexie-Version 1 → 2 mit Inhalten und Queue-Eintrag in `apps/web/src/local/conflicts.test.ts`; die erhaltenen Operationen werden danach normal gepusht.
 
 ¹⁰ Server: `apps/server/test/push.test.ts` (Versand an andere Geräte, entschlüsselter Payload ohne Inhalte, Bündelung, `410`, Allowlist), `push-crypto.test.ts` (RFC-8291-Testvektor, VAPID). Client: `apps/web/e2e/pwa-push.spec.ts` – Push-Event per Chromium-CDP an den Service Worker löst den Sync aus; Aktivieren nur per Klick (Browser-Subscription in Headless-Chromium gestubbt). Zustellung über einen echten Push-Dienst manuell prüfen.
+
+¹¹ Eigenschaftstest gegen den echten Server in `apps/web/src/sync/convergence.integration.test.ts`: drei `LocalStore`-Geräte, 60 zufällige Schritte (Bearbeiten, Anlegen, Löschen, Verschieben, Sync) mit verlorenen Push-Antworten und abgebrochenen Pulls, feste Seeds. Danach: leere Queues, identische Blöcke auf allen Geräten und dem Server, jede Bearbeitung in einem Block oder Konfliktobjekt auffindbar.
