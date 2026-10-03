@@ -32,22 +32,23 @@ Die Zielgröße aus dem Issue ist `PAGES=10000`, also 10 000 Seiten und 500 000 
 
 | Szenario | Ergebnis |
 | --- | --- |
-| Seed: 510 000 Operationen in 1 020 Pushes à 500 | **658 Ops/s** über den ganzen Lauf; Push à 500: p50 753 ms, p95 842 ms, max 1,0 s; RSS ≤ 300 MB; Datenbank 661 MB |
-| 10 Geräte gleichzeitig, je 20 × (Push von 50 Block-Updates + Delta-Pull) | 10 000 × `applied`, **keine Fehler, kein `SQLITE_BUSY`**; Push p50 405 ms, p95 822 ms, max 2,3 s; Pull p50 329 ms, p95 703 ms |
-| Vollständiger Pull (neues Gerät, 520 000 Changes, 1 000 pro Seite) | 4,1 s; 264 MB übertragen; Seite p50 6 ms, max 28 ms |
-| Snapshot (Re-Sync) | 5,6 s; **168 MB in einer Antwort; RSS-Spitze 1,08 GB** |
-| Änderungslog für den JSON-Export | 3,7 s für 520 000 Changes |
-| Serversuche (FTS5, 50 Anfragen) | p50 65 ms, p95 80 ms, max 92 ms |
+| Seed: 510 000 Operationen in 1 020 Pushes à 500 | **1 118 Ops/s** über den ganzen Lauf; Push à 500: p50 442 ms, p95 503 ms, max 659 ms; RSS ≤ 290 MB; Datenbank 660 MB |
+| 10 Geräte gleichzeitig, je 20 × (Push von 50 Block-Updates + Delta-Pull) | 10 000 × `applied`, **keine Fehler, kein `SQLITE_BUSY`**; Push p50 212 ms, p95 411 ms, max 1,3 s; Pull p50 175 ms, p95 364 ms |
+| Vollständiger Pull (neues Gerät, 520 000 Changes, 1 000 pro Seite) | 4,2 s; 264 MB übertragen; Seite p50 6 ms, max 23 ms |
+| Snapshot (Re-Sync) | 4,1 s; **168 MB in einer Antwort; RSS-Spitze 1,07 GB** |
+| Änderungslog für den JSON-Export | 4,1 s für 520 000 Changes |
+| Serversuche (FTS5, 50 Anfragen) | p50 64 ms, p95 71 ms, max 84 ms |
+| Lange Seiten: 20 Seiten à 500 Blöcke | 1 199 Ops/s, Push à 500 p50 409 ms (vor #99: 325 Ops/s, p50 1,5 s) |
 
-**SQLite:** Der WAL-Modus und `busy_timeout = 5000` sind gesetzt (`apps/server/src/db/database.ts`). Parallele Pushes serialisieren sich an der Schreibsperre. Die Wartezeit erscheint als längere Antwortzeit (max 2,3 s bei 10 Geräten), nicht als Fehler.
+**SQLite:** Der WAL-Modus und `busy_timeout = 5000` sind gesetzt (`apps/server/src/db/database.ts`). Parallele Pushes serialisieren sich an der Schreibsperre. Die Wartezeit erscheint als längere Antwortzeit (max 1,3 s bei 10 Geräten), nicht als Fehler.
 
 ### Client, Chromium
 
 | Seiten / Blöcke | Snapshot schreiben | Seitenliste | Suchindex aufbauen | Suche p50 / max | JS-Heap nach Index |
 | --- | --- | --- | --- | --- | --- |
 | 200 / 10 000 | 2,4 s | 9 ms | 0,5 s | 0 / 4 ms | 31 MB |
-| 1 000 / 50 000 | 27 s | 28 ms | 2,5 s | – | 106 MB |
-| 10 000 / 500 000 | **5,5 min** | 307 ms | **25 s** | 11 / 23 ms | 318 MB (davon 184 MB Snapshot-Daten) |
+| 1 000 / 50 000 | 26 s | 17 ms | 1,1 s (vor #98: 2,5 s) | 1 ms | 106 MB |
+| 10 000 / 500 000 | **5,5 min** | 303 ms | **10,8 s** (vor #98: 25 s) | 15 / 23 ms | 318 MB vor #98; danach ohne GC gemessen 722 MB, weil alle Blöcke zum Indexieren auf einmal gelesen werden |
 
 Das Schreiben des Snapshots wird von IndexedDB bestimmt. `bulkPut` der Blöcke schafft rund 2 000 Zeilen/s; der Rest von `replaceWithSnapshot` (Lesen, Link-Index) braucht zusammen unter 2 s.
 
@@ -57,6 +58,10 @@ Das Schreiben des Snapshots wird von IndexedDB bestimmt. `bulkPut` der Blöcke s
   - Die FTS5-Spalte `document_id` ist `unindexed`. `reindexDocument` hat die Zeile einer Seite deshalb per Full-Scan über den ganzen Index gesucht, und das bei jeder angewendeten Operation.
   - Vorher: Durchsatz fallend auf etwa 150 Ops/s schon bei 200 000 Operationen. Ein Seed mit 500 000 Blöcken hätte Stunden gedauert.
   - Behoben mit Migration `0009_search_rowids`: Die Zeile wird jetzt über eine Rowid-Tabelle angesprochen. Ergebnis: konstant 658 Ops/s.
+- **Neuaufbau des Suchtexts pro Block-Operation (Server, [#99](https://github.com/mszkb/notion-alternative/issues/99)):**
+  - Jede Block-Operation hat den Suchtext der ganzen Seite neu aufgebaut. Ein Push mit vielen Blöcken einer Seite kostete daher quadratisch.
+  - Jetzt markiert die Operation die Seite nur (`search_dirty`, Migration `0010`). Neu indexiert wird einmal pro Seite am Ende des Pushs, vor jeder Suche und beim Start.
+  - Ergebnis: 1 118 statt 658 Ops/s im großen Lauf; bei Seiten mit 500 Blöcken 1 199 statt 325 Ops/s.
 - **Link-Index beim Re-Sync (Client):**
   - Pro Block lief ein eigener Schreibzugriff, obwohl der Index vorher geleert wurde. Jetzt ist es ein `bulkPut`.
   - Bei 50 000 Blöcken: 27 s statt 34 s.
@@ -69,9 +74,10 @@ Das Schreiben des Snapshots wird von IndexedDB bestimmt. `bulkPut` der Blöcke s
   - Vorschlag: Snapshot seitenweise liefern und in Abschnitten schreiben.
 - **Re-Sync großer Workspaces im Browser** ([#97](https://github.com/mszkb/notion-alternative/issues/97)): Bei 500 000 Blöcken dauert das Schreiben in IndexedDB mehrere Minuten, in einer einzigen Transaktion und ohne Fortschrittsanzeige. Vorschlag: in Abschnitten schreiben, Fortschritt anzeigen. Die Atomarität bleibt über den Cursor erhalten, der erst am Ende gesetzt wird.
 - **Aufbau des lokalen Suchindex** ([#98](https://github.com/mszkb/notion-alternative/issues/98)):
-  - `WorkspaceSearch.start()` liest jede Seite einzeln, mit drei Abfragen pro Seite. Bei 10 000 Seiten dauert das 25 s; Suchen findet bis dahin nur einen Teil.
-  - Vorschlag: Blöcke und Tags einmal gesammelt lesen oder den Index in IndexedDB zwischenspeichern (MiniSearch `toJSON`).
-- **Neuaufbau des Suchtexts pro Block-Operation (Server)** ([#99](https://github.com/mszkb/notion-alternative/issues/99)): Jede Block-Operation baut den Suchtext der ganzen Seite neu auf. Ein Push mit vielen Blöcken einer langen Seite kostet daher quadratisch. Vorschlag: einmal pro Seite und Push-Request neu indexieren.
+  - Früher las `WorkspaceSearch.start()` jede Seite einzeln. Jetzt liest es einmal pro Tabelle (`documentsWithContent`, Blöcke per `getAll`). Bei 10 000 Seiten sinkt die Zeit damit von 25 s auf 10,8 s; davon entfallen 5 s auf das Lesen und rund 6 s auf MiniSearch.
+  - Ziel < 5 s noch nicht erreicht. Bis zum Ende des Aufbaus findet die Suche nur einen Teil.
+  - Alle Blöcke liegen beim Aufbau kurzzeitig gleichzeitig im Speicher.
+  - Vorschlag: den Index in IndexedDB zwischenspeichern (MiniSearch `toJSON`/`loadJSON`) und in Abschnitten aufbauen.
 
 Zielwerte für den Referenz-Host (VPS oder Raspberry Pi 4) bis zu 10 000 Seiten:
 
