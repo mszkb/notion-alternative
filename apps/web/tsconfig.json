@@ -5,6 +5,12 @@
     "types": ["vite/client"],
     "jsx": "preserve"
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts", "service-worker.plugin.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "vite.config.ts",
+    "vitest.loadtest.config.ts",
+    "service-worker.plugin.ts"
+  ],
   "exclude": ["src/sw/**"]
 }

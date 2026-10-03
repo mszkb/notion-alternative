@@ -15,13 +15,22 @@ export function blocksText(blocks: { type: string; content: string }[]): string 
  * Called in the same transaction that applies an operation.
  */
 export async function reindexDocument(db: Db, documentId: string): Promise<void> {
-  await sql`delete from search_index where document_id = ${documentId}`.execute(db)
+  // Addressed by rowid: a lookup by the unindexed document_id would scan the whole index (#77).
+  const entry = await sql<{ id: number }>`
+    select id from search_documents where document_id = ${documentId}`.execute(db)
+  const rowid = entry.rows[0]?.id
+  if (rowid !== undefined) await sql`delete from search_index where rowid = ${rowid}`.execute(db)
   const document = await db
     .selectFrom('documents')
     .select(['id', 'workspace_id', 'title', 'deleted_at'])
     .where('id', '=', documentId)
     .executeTakeFirst()
-  if (!document || document.deleted_at) return
+  if (!document || document.deleted_at) {
+    if (rowid !== undefined) {
+      await sql`delete from search_documents where id = ${rowid}`.execute(db)
+    }
+    return
+  }
   const blocks = await db
     .selectFrom('blocks')
     .select(['type', 'content'])
@@ -29,8 +38,14 @@ export async function reindexDocument(db: Db, documentId: string): Promise<void>
     .where('deleted_at', 'is', null)
     .orderBy('sort_key')
     .execute()
-  await sql`insert into search_index (document_id, workspace_id, title, body)
-    values (${document.id}, ${document.workspace_id}, ${document.title}, ${blocksText(blocks)})`.execute(
+  const id =
+    rowid ??
+    (
+      await sql<{ id: number }>`
+        insert into search_documents (document_id) values (${documentId}) returning id`.execute(db)
+    ).rows[0]!.id
+  await sql`insert into search_index (rowid, document_id, workspace_id, title, body)
+    values (${id}, ${document.id}, ${document.workspace_id}, ${document.title}, ${blocksText(blocks)})`.execute(
     db,
   )
 }

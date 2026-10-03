@@ -107,7 +107,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Security Review
 - [x] Backup/Restore automatisiert getestet
 - [ ] Backup-/Restore-Dokumentation ([`backup.md`](docs/operations/backup.md) vorhanden; offen: einmal auf frischem Host durchspielen)
-- [ ] Lasttests
+- [x] Lasttests ([`load-tests.md`](docs/testing/load-tests.md); offen: Messung auf dem Raspberry Pi)
 
 ## Phase 8 – Collaboration
 

@@ -36,7 +36,7 @@ import {
   validateOperationPayload,
   type Workspace,
 } from '@notion-alt/shared'
-import type { AttachmentContent, LocalDb, QueuedOperation } from './db'
+import type { AttachmentContent, LinkEntry, LocalDb, QueuedOperation } from './db'
 
 export class LocalStoreError extends Error {
   override name = 'LocalStoreError'
@@ -83,6 +83,13 @@ const CONTENT_TABLES = [
   'attachments',
   'attachmentContents',
 ]
+
+/** Backlink index entry of a block, or null when it links to no page. */
+function linkEntry(block: Block, document: Document): LinkEntry | null {
+  const targets = block.type === 'code' ? [] : extractPageLinks(block.content)
+  if (targets.length === 0) return null
+  return { blockId: block.id, documentId: document.id, workspaceId: document.workspaceId, targets }
+}
 
 /**
  * The only write path for local content (ADR 0009). Every mutation writes the content change and
@@ -484,17 +491,9 @@ export class LocalStore {
   }
 
   private async updateLinks(block: Block, document: Document) {
-    const targets = block.type === 'code' ? [] : extractPageLinks(block.content)
-    if (targets.length === 0) {
-      await this.db.links.delete(block.id)
-    } else {
-      await this.db.links.put({
-        blockId: block.id,
-        documentId: document.id,
-        workspaceId: document.workspaceId,
-        targets,
-      })
-    }
+    const entry = linkEntry(block, document)
+    if (entry) await this.db.links.put(entry)
+    else await this.db.links.delete(block.id)
   }
 
   async createBlock(documentId: string, input: NewBlock, position: Position = {}): Promise<Block> {
@@ -1186,12 +1185,16 @@ export class LocalStore {
           d,
         ]),
       )
+      // One bulk write: per-block writes made a re-sync of a large workspace take minutes (#77).
+      const links: LinkEntry[] = []
       for (const block of await this.db.blocks
         .where('documentId')
         .anyOf([...documents.keys()])
         .toArray()) {
-        if (!block.deletedAt) await this.updateLinks(block, documents.get(block.documentId)!)
+        const entry = block.deletedAt ? null : linkEntry(block, documents.get(block.documentId)!)
+        if (entry) links.push(entry)
       }
+      await this.db.links.bulkPut(links)
       for (const id of new Set([...documentIds, ...documents.keys()])) {
         this.mark(ctx, workspaceId, id)
       }

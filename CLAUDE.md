@@ -83,6 +83,7 @@ Node 22 und pnpm (`corepack enable`).
 | `pnpm lint` / `pnpm format:check` | ESLint / Prettier (`pnpm format` korrigiert) |
 | `pnpm typecheck` | `tsc` bzw. `vue-tsc` in allen Paketen |
 | `pnpm test` | Vitest in allen Paketen |
+| `node scripts/loadtest/server-load.mjs`, `pnpm --filter @notion-alt/web loadtest:browser` | Lasttests Server/Client (`PAGES=10000` = Zielgröße), siehe `docs/testing/load-tests.md` |
 | `pnpm --filter @notion-alt/web test:e2e` | Playwright (startet Server + Vite selbst); lokal ohne Browser-Download: `PW_CHROMIUM_PATH=/pfad/zu/chromium` |
 | `pnpm build` | Server-Bundle und SPA bauen |
 | `docker compose up -d --build` | Produktiv-Stack auf `:8080` |
