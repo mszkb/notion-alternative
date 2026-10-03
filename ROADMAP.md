@@ -106,7 +106,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Offline-Tests
 - [x] Security Review
 - [x] Backup/Restore automatisiert getestet
-- [ ] Backup-/Restore-Dokumentation
+- [ ] Backup-/Restore-Dokumentation ([`backup.md`](docs/operations/backup.md) vorhanden; offen: einmal auf frischem Host durchspielen)
 - [ ] Lasttests
 
 ## Phase 8 – Collaboration

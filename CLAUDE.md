@@ -101,4 +101,4 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
 - Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.
 - Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`findWorkspaceForUser`).
-- Betrieb, Konfiguration, Backup: `docs/operations/deployment.md`.
+- Betrieb, Konfiguration: `docs/operations/deployment.md`; Backup, Restore, Upgrade: `docs/operations/backup.md`. Ändern sich die Backup-Befehle, beides anpassen: Doku und `scripts/backup-restore-test.sh`.

@@ -20,6 +20,7 @@ Abgeleitet aus der ursprünglichen Roadmap-Spezifikation („Roadmap: Self-hoste
 ## Betrieb
 
 - [Deployment & Betrieb](operations/deployment.md)
+- [Backup, Restore, Upgrade](operations/backup.md)
 
 ## Prozess
 

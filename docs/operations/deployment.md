@@ -64,7 +64,7 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 - Mindestens 2 GB RAM **und aktiver Swap**: Beim Build waren bis zu 1,4 GiB belegt, mit über 300 MiB Swap.
 - **`docker stats` zeigt keinen Speicher** und `mem_limit` greift nicht, wenn der Kernel mit `cgroup_disable=memory` startet (bei vielen Pi-Images Standard). Abhilfe: `cgroup_enable=memory` an `/boot/firmware/cmdline.txt` anhängen und neu starten.
 - **Rootless Docker** funktioniert; das Backend sieht je nach Port-Treiber nicht die echte Client-IP.
-- **SD-Karte:** SQLite schreibt regelmäßig; für Dauerbetrieb SSD per USB und Backup (unten).
+- **SD-Karte:** SQLite schreibt regelmäßig; für Dauerbetrieb SSD per USB und [Backup](backup.md).
 - **`better-sqlite3`** bringt `linux-arm64`-Binaries im npm-Paket mit, ein Compiler ist nicht nötig. Scheitert der Build mit `node-gyp`, wurde vermutlich das Basis-Image auf Alpine/musl oder eine Version ohne Prebuild umgestellt.
 
 ## Konfiguration (`.env`)
@@ -97,7 +97,7 @@ Das Backend begrenzt fehlgeschlagene Logins und Registrierungsversuche im Arbeit
 | `LOGIN_MAX_FAILURES_PER_IP` | `20` | Fehlversuche je Client-IP (gegen Credential Stuffing) |
 | `REGISTER_MAX_ATTEMPTS_PER_IP` | `10` | Registrierungsversuche je Client-IP |
 
-Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`frontend`) anhängt; das Backend vertraut genau einem Proxy-Hop. Ein weiterer Reverse Proxy davor (z. B. für TLS) erscheint deshalb als Client-IP; dann teilen sich alle Nutzer das IP-Limit. In diesem Fall `LOGIN_MAX_FAILURES_PER_IP` erhöhen. Bei rootless Docker sieht nginx je nach Port-Treiber ebenfalls nicht die echte Adresse.
+Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`frontend`) anhängt; das Backend vertraut genau einem Proxy-Hop. Ein weiterer Reverse Proxy davor (z. B. für TLS) erscheint deshalb als Client-IP; dann teilen sich alle Nutzer das IP-Limit. Abhilfe: [Echte Client-IP hinter einem TLS-Proxy](#echte-client-ip-hinter-einem-tls-proxy) oder `LOGIN_MAX_FAILURES_PER_IP` erhöhen. Bei rootless Docker sieht nginx je nach Port-Treiber ebenfalls nicht die echte Adresse.
 
 ## Zugriff von Smartphones (HTTPS)
 
@@ -117,11 +117,13 @@ set_real_ip_from 172.16.0.0/12;
 real_ip_header X-Forwarded-For;
 ```
 
-Das Backend vertraut `X-Forwarded-For` nur von einem Proxy aus einem privaten Netz (dem nginx-Container), ein direkt verbundener Client kann seine Adresse also nicht vorgeben.
+`real_ip_header X-Forwarded-For` übernimmt den **letzten** Eintrag des Headers, also die Adresse, die der TLS-Proxy angehängt hat (ohne `real_ip_recursive on`, das ist Absicht). nginx gibt sie per `$proxy_add_x_forwarded_for` ans Backend weiter. Das Backend vertraut `X-Forwarded-For` nur von genau einem Proxy-Hop aus einem privaten Netz (dem nginx-Container); ein Client, der das Backend direkt erreicht, kann seine Adresse also nicht vorgeben.
+
+Wichtig: `set_real_ip_from` vertraut **jeder** Verbindung aus dem angegebenen Netz. Veröffentlicht Docker den Port, kommen alle Verbindungen vom Host über das Docker-Gateway, auch solche, die nicht über den TLS-Proxy laufen. Deshalb nur zusammen mit `BIND_ADDRESS=127.0.0.1` verwenden (dann kann nur der Host selbst den Header setzen), nie mit `0.0.0.0`. Prüfen: nach dem Neustart von `frontend` mit einem falschen Passwort anmelden; das Backend-Log (`docker compose logs backend`) zeigt bei der Anfrage die Adresse des Geräts, nicht die des Gateways.
 
 ### Was in Logs landet
 
-Das Backend loggt Anfragen ohne Query-String (Suchbegriffe sind Inhalte). nginx protokolliert im Access-Log die vollständige URL; wer das nicht möchte, setzt in `apps/web/nginx.conf` für `location /api/` `access_log off;` oder ein eigenes `log_format` ohne `$request_uri`.
+Das Backend loggt Anfragen ohne Query-String (Suchbegriffe sind Inhalte). nginx protokolliert im Access-Log (`docker compose logs frontend`) dagegen die vollständige URL, also auch Suchbegriffe der serverseitigen Suche; wer das nicht möchte, setzt in `apps/web/nginx.conf` für `location /api/` `access_log off;` oder ein eigenes `log_format` ohne `$request_uri`.
 
 ## App offline (Service Worker)
 
@@ -162,7 +164,7 @@ docker compose exec backend node dist/index.js migrate-attachments-to-s3
 
 Danach liefert das Backend aus dem Bucket. Die alten Dateien unter `/data/attachments` erst löschen, wenn ein Backup des Buckets existiert.
 
-**Backup:** Mit Volume enthält das Volume-Backup (unten) alles. Mit S3 gehören **zwei** Teile zusammen: das Volume (SQLite mit Metadaten) und der Bucket (z. B. Versionierung oder `rclone sync`). Beide möglichst zeitnah sichern; fehlende Objekte zeigt die App als „nicht verfügbar“ an, Metadaten ohne Objekt schaden nicht.
+**Backup:** Mit Volume enthält das [Backup](backup.md) alles. Mit S3 gehören **zwei** Teile zusammen: das Backup (SQLite mit Metadaten) und der Bucket (z. B. Versionierung oder `rclone sync`). Beide möglichst zeitnah sichern; fehlende Objekte zeigt die App als „nicht verfügbar“ an, Metadaten ohne Objekt schaden nicht.
 
 ## Metriken
 
@@ -182,24 +184,15 @@ Einen Prometheus-Server betreibt das Projekt bewusst nicht (genau zwei Container
 
 ## Migrationen
 
-Datenbank-Migrationen laufen beim Start des Backends automatisch.
+Datenbank-Migrationen laufen beim Start des Backends automatisch und nur vorwärts; vor jedem Update ein Backup ziehen ([Upgrade](backup.md#upgrade)).
 
-## Backup (vorläufig)
+## Backup und Restore
 
-> **Was das Server-Backup enthält:** Konten, Geräte, Workspaces und alle synchronisierten Seiten, Blöcke und Tags samt Änderungslog, außerdem die Dateianhänge (`/data/attachments`) und die VAPID-Schlüssel für Web Push und die Push-Subscriptions (Tabellen `settings`, `push_subscriptions`; ohne sie müssen alle Geräte Benachrichtigungen neu aktivieren). Änderungen, die ein Gerät noch nicht synchronisiert hat (Seitenleiste: „lokale Änderungen noch nicht synchronisiert“), liegen nur in dessen Browser (IndexedDB). Abmelden behält die lokalen Daten; beim Abmelden kann man sie für gemeinsam genutzte Geräte ausdrücklich löschen lassen (bei ungesyncten Änderungen nur nach zusätzlicher Bestätigung). Das Löschen der Website-Daten im Browser entfernt sie ebenfalls.
-
-Bis zum automatisierten Backup (Phase 7): Backend stoppen, Volume sichern, wieder starten. Im Verzeichnis mit der `docker-compose.yml` ausführen:
+Backup im laufenden Betrieb, Restore, Automatisierung (cron/systemd), Off-site-Kopie, Prüfung und Upgrade: [`backup.md`](backup.md). Kurzfassung:
 
 ```sh
-set -eu
-# Resolve the volume actually mounted at /data by the backend container.
-container=$(docker compose ps -aq backend)
-[ -n "$container" ] || { echo "backend container not found" >&2; exit 1; }
-volume=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "$container")
-[ -n "$volume" ] && docker volume inspect "$volume" >/dev/null || { echo "data volume not found" >&2; exit 1; }
-
-docker compose stop backend
-docker run --rm -v "$volume":/data:ro -v "$PWD":/backup alpine \
-  tar czf "/backup/backup-$(date +%F).tar.gz" -C /data .
-docker compose start backend
+docker compose exec -T backend node dist/index.js backup       # -> /data/backups/backup-<Zeit>
+docker compose cp backend:/data/backups/backup-<Zeit> ~/notion-alt-backups/
 ```
+
+Mit `ATTACHMENT_STORAGE=s3` den Bucket zusätzlich sichern; `.env` liegt auf dem Host und gehört nicht zum Backup.
