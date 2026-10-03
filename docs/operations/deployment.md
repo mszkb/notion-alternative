@@ -64,7 +64,7 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 - Mindestens 2 GB RAM **und aktiver Swap**: Beim Build waren bis zu 1,4 GiB belegt, mit über 300 MiB Swap.
 - **`docker stats` zeigt keinen Speicher** und `mem_limit` greift nicht, wenn der Kernel mit `cgroup_disable=memory` startet (bei vielen Pi-Images Standard). Abhilfe: `cgroup_enable=memory` an `/boot/firmware/cmdline.txt` anhängen und neu starten.
 - **Rootless Docker** funktioniert; das Backend sieht je nach Port-Treiber nicht die echte Client-IP.
-- **SD-Karte:** SQLite schreibt regelmäßig; für Dauerbetrieb SSD per USB und Backup (unten).
+- **SD-Karte:** SQLite schreibt regelmäßig; für Dauerbetrieb SSD per USB und [Backup](backup.md).
 - **`better-sqlite3`** bringt `linux-arm64`-Binaries im npm-Paket mit, ein Compiler ist nicht nötig. Scheitert der Build mit `node-gyp`, wurde vermutlich das Basis-Image auf Alpine/musl oder eine Version ohne Prebuild umgestellt.
 
 ## Konfiguration (`.env`)
@@ -164,7 +164,7 @@ docker compose exec backend node dist/index.js migrate-attachments-to-s3
 
 Danach liefert das Backend aus dem Bucket. Die alten Dateien unter `/data/attachments` erst löschen, wenn ein Backup des Buckets existiert.
 
-**Backup:** Mit Volume enthält das Volume-Backup (unten) alles. Mit S3 gehören **zwei** Teile zusammen: das Volume (SQLite mit Metadaten) und der Bucket (z. B. Versionierung oder `rclone sync`). Beide möglichst zeitnah sichern; fehlende Objekte zeigt die App als „nicht verfügbar“ an, Metadaten ohne Objekt schaden nicht.
+**Backup:** Mit Volume enthält das [Backup](backup.md) alles. Mit S3 gehören **zwei** Teile zusammen: das Backup (SQLite mit Metadaten) und der Bucket (z. B. Versionierung oder `rclone sync`). Beide möglichst zeitnah sichern; fehlende Objekte zeigt die App als „nicht verfügbar“ an, Metadaten ohne Objekt schaden nicht.
 
 ## Metriken
 
@@ -184,24 +184,15 @@ Einen Prometheus-Server betreibt das Projekt bewusst nicht (genau zwei Container
 
 ## Migrationen
 
-Datenbank-Migrationen laufen beim Start des Backends automatisch.
+Datenbank-Migrationen laufen beim Start des Backends automatisch und nur vorwärts; vor jedem Update ein Backup ziehen ([Upgrade](backup.md#upgrade)).
 
-## Backup (vorläufig)
+## Backup und Restore
 
-> **Was das Server-Backup enthält:** Konten, Geräte, Workspaces und alle synchronisierten Seiten, Blöcke und Tags samt Änderungslog, außerdem die Dateianhänge (`/data/attachments`) und die VAPID-Schlüssel für Web Push und die Push-Subscriptions (Tabellen `settings`, `push_subscriptions`; ohne sie müssen alle Geräte Benachrichtigungen neu aktivieren). Änderungen, die ein Gerät noch nicht synchronisiert hat (Seitenleiste: „lokale Änderungen noch nicht synchronisiert“), liegen nur in dessen Browser (IndexedDB). Abmelden behält die lokalen Daten; beim Abmelden kann man sie für gemeinsam genutzte Geräte ausdrücklich löschen lassen (bei ungesyncten Änderungen nur nach zusätzlicher Bestätigung). Das Löschen der Website-Daten im Browser entfernt sie ebenfalls.
-
-Bis zum automatisierten Backup (Phase 7): Backend stoppen, Volume sichern, wieder starten. Im Verzeichnis mit der `docker-compose.yml` ausführen:
+Backup im laufenden Betrieb, Restore, Automatisierung (cron/systemd), Off-site-Kopie, Prüfung und Upgrade: [`backup.md`](backup.md). Kurzfassung:
 
 ```sh
-set -eu
-# Resolve the volume actually mounted at /data by the backend container.
-container=$(docker compose ps -aq backend)
-[ -n "$container" ] || { echo "backend container not found" >&2; exit 1; }
-volume=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "$container")
-[ -n "$volume" ] && docker volume inspect "$volume" >/dev/null || { echo "data volume not found" >&2; exit 1; }
-
-docker compose stop backend
-docker run --rm -v "$volume":/data:ro -v "$PWD":/backup alpine \
-  tar czf "/backup/backup-$(date +%F).tar.gz" -C /data .
-docker compose start backend
+docker compose exec -T backend node dist/index.js backup       # -> /data/backups/backup-<Zeit>
+docker compose cp backend:/data/backups/backup-<Zeit> ~/notion-alt-backups/
 ```
+
+Mit `ATTACHMENT_STORAGE=s3` den Bucket zusätzlich sichern; `.env` liegt auf dem Host und gehört nicht zum Backup.
