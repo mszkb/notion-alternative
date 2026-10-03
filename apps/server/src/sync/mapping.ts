@@ -3,6 +3,7 @@ import type {
   BlockAttrs,
   BlockType,
   Change,
+  Conflict,
   Document,
   DocumentTag,
   OperationEntity,
@@ -12,6 +13,7 @@ import type {
 import type {
   BlocksTable,
   ChangesTable,
+  ConflictsTable,
   DocumentsTable,
   DocumentTagsTable,
   TagsTable,
@@ -79,5 +81,24 @@ export function toChange(row: ChangesTable): Change {
     revision: row.revision,
     payload: JSON.parse(row.payload) as Record<string, unknown>,
     appliedAt: row.applied_at,
+  }
+}
+
+export function toConflict(row: ConflictsTable): Conflict {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    entity: row.entity as Conflict['entity'],
+    entityId: row.entity_id,
+    documentId: row.document_id,
+    reason: row.reason as Conflict['reason'],
+    baseRevision: row.base_revision,
+    local: JSON.parse(row.local) as Conflict['local'],
+    remote: row.remote === null ? null : (JSON.parse(row.remote) as Record<string, unknown>),
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at,
+    resolution: row.resolution as Conflict['resolution'],
+    revision: row.revision,
+    deletedAt: row.deleted_at,
   }
 }

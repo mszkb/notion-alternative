@@ -1,4 +1,12 @@
-import type { Block, Document, DocumentTag, Operation, Tag, Workspace } from '@notion-alt/shared'
+import type {
+  Block,
+  Conflict,
+  Document,
+  DocumentTag,
+  Operation,
+  Tag,
+  Workspace,
+} from '@notion-alt/shared'
 import { Dexie, type EntityTable } from 'dexie'
 
 export interface MetaEntry {
@@ -8,7 +16,7 @@ export interface MetaEntry {
 
 /** Why a queued operation was not accepted by the server yet; it stays queued (no data loss). */
 export interface QueuedOperationIssue {
-  status: 'conflict' | 'rejected'
+  status: 'rejected'
   code: string
   message: string
   at: string
@@ -17,7 +25,7 @@ export interface QueuedOperationIssue {
 /** Queued operation; `seq` orders the queue (ADR 0002: push in order of creation). */
 export interface QueuedOperation extends Operation {
   seq?: number
-  /** Set by the last push if the server answered `conflict` or `rejected`. Not indexed. */
+  /** Set by the last push if the server rejected it. Not indexed. */
   issue?: QueuedOperationIssue
 }
 
@@ -39,6 +47,7 @@ export class LocalDb extends Dexie {
   documentTags!: EntityTable<DocumentTag, 'id'>
   operations!: EntityTable<QueuedOperation, 'seq'>
   links!: EntityTable<LinkEntry, 'blockId'>
+  conflicts!: EntityTable<Conflict, 'id'>
 
   constructor(name: string) {
     super(name)
@@ -52,6 +61,10 @@ export class LocalDb extends Dexie {
       documentTags: 'id, documentId, tagId, workspaceId',
       operations: '++seq, &opId, entityId, workspaceId',
       links: 'blockId, documentId, workspaceId, *targets',
+    })
+    // Phase 3: conflict objects replicated from the server (ADR 0003). New table, no data to move.
+    this.version(2).stores({
+      conflicts: 'id, workspaceId, documentId, entityId',
     })
   }
 }

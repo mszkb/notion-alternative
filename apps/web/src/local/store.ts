@@ -5,6 +5,10 @@ import {
   type BlockType,
   blockSchema,
   type Change,
+  type Conflict,
+  type ConflictCreatePayload,
+  type ConflictResolution,
+  type ConflictUpdatePayload,
   compareBySortKey,
   type Document,
   type DocumentCreatePayload,
@@ -63,7 +67,15 @@ interface WriteContext {
   touched: Map<string, Set<string>>
 }
 
-const CONTENT_TABLES = ['documents', 'blocks', 'tags', 'documentTags', 'operations', 'links']
+const CONTENT_TABLES = [
+  'documents',
+  'blocks',
+  'tags',
+  'documentTags',
+  'operations',
+  'links',
+  'conflicts',
+]
 
 /**
  * The only write path for local content (ADR 0009). Every mutation writes the content change and
@@ -120,6 +132,7 @@ export class LocalStore {
       block: this.db.blocks,
       tag: this.db.tags,
       document_tag: this.db.documentTags,
+      conflict: this.db.conflicts,
     } as const
   }
 
@@ -634,7 +647,15 @@ export class LocalStore {
       for (const result of results) {
         const op = await this.db.operations.where('opId').equals(result.opId).first()
         if (!op?.seq) continue
-        if (result.status === 'applied' || result.status === 'duplicate') {
+        if (result.status === 'conflict') {
+          // The server keeps this change in a conflict object (both versions); it arrives with
+          // the next pull, so the operation leaves the queue (ADR 0003).
+          await this.db.operations.delete(op.seq)
+        } else if (
+          result.status === 'applied' ||
+          result.status === 'duplicate' ||
+          result.status === 'merged'
+        ) {
           await this.db.operations.delete(op.seq)
           const table = tables[op.entity]
           const entity = await table.get(op.entityId)
@@ -642,18 +663,13 @@ export class LocalStore {
             await table.update(op.entityId, { revision: result.revision })
           }
         } else {
-          let issue = { code: 'conflict', message: 'Changed on another device' }
-          if (result.status === 'rejected') issue = { code: result.code, message: result.message }
-          if (result.status === 'conflict') {
-            const what = {
-              changed: 'Changed on another device',
-              deleted: 'Deleted on another device',
-              parent_deleted: 'Its page was deleted on another device',
-            }[result.reason]
-            issue = { code: result.reason, message: `${what} (revision ${result.currentRevision})` }
-          }
           await this.db.operations.update(op.seq, {
-            issue: { status: result.status, ...issue, at: this.now() },
+            issue: {
+              status: 'rejected',
+              code: result.code,
+              message: result.message,
+              at: this.now(),
+            },
           })
         }
       }
@@ -687,6 +703,210 @@ export class LocalStore {
     this.notify(ctx)
   }
 
+  private async applyRemoteConflict(ctx: WriteContext, workspaceId: string, change: Change) {
+    if (change.kind === 'create') {
+      const p = change.payload as ConflictCreatePayload
+      const conflict: Conflict = {
+        id: change.entityId,
+        workspaceId,
+        ...p,
+        revision: change.revision,
+        deletedAt: null,
+      }
+      await this.db.conflicts.put(conflict)
+      if (p.local.deviceId === this.deviceId) await this.adoptRemote(conflict)
+      if (conflict.documentId) this.mark(ctx, workspaceId, conflict.documentId)
+    } else if (change.kind === 'update') {
+      const p = change.payload as ConflictUpdatePayload
+      const conflict = await this.db.conflicts.get(change.entityId)
+      await this.db.conflicts.update(change.entityId, {
+        resolution: p.resolution,
+        resolvedAt: change.appliedAt,
+        revision: change.revision,
+      })
+      if (conflict?.documentId) this.mark(ctx, workspaceId, conflict.documentId)
+    }
+  }
+
+  /**
+   * On the device whose change became a conflict: show the server state again (its own version
+   * lives on in the conflict until the user decides). Newer local edits of the entity stay.
+   */
+  private async adoptRemote(conflict: Conflict) {
+    if ((await this.db.operations.where('entityId').equals(conflict.entityId).count()) > 0) return
+    if (conflict.remote) {
+      await this.entityTables[conflict.entity].put(conflict.remote as never)
+      if (conflict.entity === 'block') {
+        const block = conflict.remote as unknown as Block
+        const document = await this.db.documents.get(block.documentId)
+        if (block.deletedAt) await this.db.links.delete(block.id)
+        else if (document) await this.updateLinks(block, document)
+      }
+    }
+    // The page was deleted elsewhere; its tombstone was held back while this device had edits.
+    if (conflict.reason === 'parent_deleted' && conflict.documentId) {
+      const document = await this.db.documents.get(conflict.documentId)
+      if (document && !document.deletedAt) {
+        await this.db.documents.update(conflict.documentId, { deletedAt: conflict.createdAt })
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- conflicts
+
+  /** Open conflicts of a workspace, newest first. */
+  async openConflicts(workspaceId: string): Promise<Conflict[]> {
+    const all = await this.db.conflicts.where('workspaceId').equals(workspaceId).toArray()
+    return all
+      .filter((conflict) => !conflict.resolvedAt)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }
+
+  /**
+   * Resolves a conflict (ADR 0003), offline too: the chosen side becomes ordinary operations,
+   * plus a `conflict` update operation that marks it resolved on every device. Changes on a page
+   * that was deleted elsewhere come back as a copy (tombstones stay final). Returns the id of a
+   * restored page, if one was created.
+   */
+  async resolveConflict(
+    id: string,
+    resolution: ConflictResolution,
+    manualContent?: string,
+  ): Promise<string | null> {
+    return this.write(async (ctx) => {
+      const conflict = await this.db.conflicts.get(id)
+      if (!conflict || conflict.resolvedAt) {
+        throw new LocalStoreError(`Conflict ${id} not found or already resolved`)
+      }
+      let restored: string | null = null
+      if (resolution !== 'remote') {
+        restored = await this.applyLocalSide(
+          ctx,
+          conflict,
+          resolution === 'manual' ? manualContent : undefined,
+        )
+      }
+      await this.db.conflicts.update(id, { resolution, resolvedAt: this.now() })
+      await this.enqueue(conflict.workspaceId, 'conflict', id, 'update', conflict.revision, {
+        resolution,
+      })
+      if (conflict.documentId) this.mark(ctx, conflict.workspaceId, conflict.documentId)
+      return restored
+    })
+  }
+
+  private async applyLocalSide(
+    ctx: WriteContext,
+    conflict: Conflict,
+    manualContent: string | undefined,
+  ): Promise<string | null> {
+    const { kind, payload } = conflict.local
+    if (conflict.reason !== 'changed') return this.restoreAsCopy(ctx, conflict, manualContent)
+    if (conflict.entity === 'block') {
+      const block = await this.db.blocks.get(conflict.entityId)
+      if (!block || block.deletedAt) return this.restoreAsCopy(ctx, conflict, manualContent)
+      if (manualContent !== undefined)
+        await this.patchBlock(ctx, block.id, { content: manualContent })
+      else if (kind === 'delete') await this.removeBlock(ctx, block.id)
+      else if (kind === 'move') {
+        const { document } = await this.requireBlock(block.id)
+        await this.db.blocks.update(block.id, { sortKey: payload.sortKey as string })
+        await this.enqueue(document.workspaceId, 'block', block.id, 'move', block.revision, {
+          sortKey: payload.sortKey,
+        })
+        await this.touch(ctx, document)
+      } else await this.patchBlock(ctx, block.id, payload as BlockPatch)
+    } else if (conflict.entity === 'document') {
+      const document = await this.db.documents.get(conflict.entityId)
+      if (!document || document.deletedAt) return this.restoreAsCopy(ctx, conflict, manualContent)
+      if (kind === 'delete') {
+        await this.db.documents.update(document.id, { deletedAt: this.now() })
+        await this.enqueue(
+          document.workspaceId,
+          'document',
+          document.id,
+          'delete',
+          document.revision,
+          {},
+        )
+      } else {
+        const fields =
+          manualContent !== undefined ? { title: manualContent } : (payload as Partial<Document>)
+        await this.db.documents.update(document.id, fields)
+        await this.enqueue(
+          document.workspaceId,
+          'document',
+          document.id,
+          kind === 'move' ? 'move' : 'update',
+          document.revision,
+          fields,
+        )
+      }
+      this.mark(ctx, document.workspaceId, document.id)
+    }
+    // Tags and assignments: keeping the server state is the only sensible outcome.
+    return null
+  }
+
+  /**
+   * Brings back a page that was deleted elsewhere, with this device's change applied, as a new
+   * page next to where it was (new ids: tombstones are final).
+   */
+  private async restoreAsCopy(
+    ctx: WriteContext,
+    conflict: Conflict,
+    manualContent: string | undefined,
+  ): Promise<string | null> {
+    if (!conflict.documentId) return null
+    const source = await this.db.documents.get(conflict.documentId)
+    if (!source) return null
+    const parent = source.parentId ? await this.db.documents.get(source.parentId) : undefined
+    const local = conflict.local.payload as Record<string, unknown>
+    const title =
+      conflict.entity === 'document' && typeof local.title === 'string' ? local.title : source.title
+    const copy = documentSchema.parse({
+      id: newId(),
+      workspaceId: source.workspaceId,
+      parentId: parent && !parent.deletedAt ? parent.id : null,
+      title: `${title} (wiederhergestellt)`.slice(0, 500),
+      sortKey: LocalStore.sortKeyAt(
+        (await this.listDocuments(source.workspaceId)).filter(
+          (d) => d.parentId === (parent && !parent.deletedAt ? parent.id : null),
+        ),
+        {},
+      ),
+      favorite: false,
+      createdAt: this.now(),
+      updatedAt: this.now(),
+      revision: null,
+      deletedAt: null,
+    } satisfies Document)
+    await this.db.documents.add(copy)
+    await this.enqueue(copy.workspaceId, 'document', copy.id, 'create', null, {
+      parentId: copy.parentId,
+      title: copy.title,
+      sortKey: copy.sortKey,
+      favorite: copy.favorite,
+      createdAt: copy.createdAt,
+    })
+    const blocks = (await this.db.blocks.where('documentId').equals(source.id).toArray())
+      .filter((block) => !block.deletedAt)
+      .sort(compareBySortKey)
+    for (const block of blocks) {
+      let fields: NewBlock = { type: block.type, content: block.content, attrs: block.attrs }
+      if (conflict.entity === 'block' && block.id === conflict.entityId) {
+        fields =
+          manualContent !== undefined
+            ? { ...fields, content: manualContent }
+            : { ...fields, ...(local as NewBlock) }
+      }
+      await this.insertBlock(ctx, copy, fields, {})
+    }
+    if (blocks.length === 0) await this.insertBlock(ctx, copy, {}, {})
+    this.mark(ctx, copy.workspaceId, copy.id)
+    return copy.id
+  }
+
   /**
    * Full re-sync: replaces the workspace's local state with the server snapshot and stores its
    * cursor, in one transaction. Entities with queued operations keep their local state, so
@@ -718,6 +938,10 @@ export class LocalStore {
       await this.db.blocks.bulkPut(keep(snapshot.blocks))
       await this.db.tags.bulkPut(keep(snapshot.tags))
       await this.db.documentTags.bulkPut(keep(snapshot.documentTags))
+      await this.db.conflicts.bulkDelete(
+        drop(await this.db.conflicts.where('workspaceId').equals(workspaceId).toArray()),
+      )
+      await this.db.conflicts.bulkPut(keep(snapshot.conflicts))
 
       // Derived link index: rebuild for the whole workspace.
       await this.db.links.where('workspaceId').equals(workspaceId).delete()
@@ -742,6 +966,10 @@ export class LocalStore {
   }
 
   private async applyRemoteChange(ctx: WriteContext, workspaceId: string, change: Change) {
+    if (change.entity === 'conflict') {
+      await this.applyRemoteConflict(ctx, workspaceId, change)
+      return
+    }
     const table = this.entityTables[change.entity]
     const local = await table.get(change.entityId)
     const queued = await this.db.operations.where('opId').equals(change.opId).first()

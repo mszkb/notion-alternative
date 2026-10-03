@@ -52,8 +52,13 @@ export async function pushQueue(
     const { results } = await send({ operations: batch })
     await store.acknowledge(results)
     for (const result of results) {
-      if (result.status === 'applied' || result.status === 'duplicate') outcome.confirmed++
-      else if (result.status === 'conflict') outcome.conflicts++
+      if (
+        result.status === 'applied' ||
+        result.status === 'duplicate' ||
+        result.status === 'merged'
+      ) {
+        outcome.confirmed++
+      } else if (result.status === 'conflict') outcome.conflicts++
       else {
         outcome.rejected++
         if (result.code === 'device_not_active') outcome.deviceRevoked = true

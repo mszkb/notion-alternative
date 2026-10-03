@@ -48,7 +48,7 @@ const recent = computed(() =>
 const tags = useLiveQuery(() => store.listTags(workspaceId.value), [], workspaceId)
 const pending = useLiveQuery(() => store.pendingOperationCount(), 0)
 const withIssues = useLiveQuery(() => store.operationsWithIssues(), [])
-const conflicts = computed(() => withIssues.value.filter((op) => op.issue?.status === 'conflict'))
+const conflicts = useLiveQuery(() => store.openConflicts(workspaceId.value), [], workspaceId)
 const rejected = computed(() => withIssues.value.filter((op) => op.issue?.status === 'rejected'))
 
 watch(workspaceId, (id) => rememberWorkspace(id), { immediate: true })

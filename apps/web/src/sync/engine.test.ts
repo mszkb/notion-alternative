@@ -60,7 +60,14 @@ function transport() {
       }
     },
     pull: async ({ cursor }) => ({ changes: [], cursor, hasMore: false }),
-    snapshot: async () => ({ documents: [], blocks: [], tags: [], documentTags: [], cursor: 0 }),
+    snapshot: async () => ({
+      documents: [],
+      blocks: [],
+      tags: [],
+      documentTags: [],
+      conflicts: [],
+      cursor: 0,
+    }),
   }
   return t
 }

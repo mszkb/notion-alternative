@@ -1,7 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import {
   type BlockCreatePayload,
   type BlockMovePayload,
   type BlockUpdatePayload,
+  type ConflictCreatePayload,
+  type ConflictReason,
+  type ConflictUpdatePayload,
   type DocumentCreatePayload,
   type DocumentMovePayload,
   type DocumentTagCreatePayload,
@@ -14,6 +18,7 @@ import type { Db } from '../db/database'
 import { findActiveDevice } from '../devices/repository'
 import { reindexDocument } from '../search/index'
 import { findWorkspaceForUser } from '../workspaces/repository'
+import { toBlock, toDocument, toDocumentTag, toTag } from './mapping'
 
 export type RejectCode =
   | 'workspace_not_found'
@@ -24,18 +29,17 @@ export type RejectCode =
   | 'already_exists'
   | 'deleted'
 
-/** `changed`/`deleted`: the entity itself; `parent_deleted`: the document it belongs to. */
-export type ConflictReason = 'changed' | 'deleted' | 'parent_deleted'
-
 export type ApplyResult =
   | { status: 'applied'; revision: number; seq: number }
+  /** Applied; another device changed other fields of the entity meanwhile (ADR 0003 merge). */
+  | { status: 'merged'; revision: number; seq: number }
   /** Already applied earlier (same `opId`): the original result, nothing written. */
   | { status: 'duplicate'; revision: number; seq: number }
   /**
-   * Another device changed the entity after `baseRevision`: nothing is written. Never
-   * overwritten silently (principle 6); block merge and conflict objects (ADR 0003) build on this.
+   * Another device changed the same field, or deleted the entity or its page: the change is not
+   * applied but kept in a conflict object with both versions (ADR 0003, principle 6).
    */
-  | { status: 'conflict'; currentRevision: number; reason: ConflictReason }
+  | { status: 'conflict'; currentRevision: number; reason: ConflictReason; conflictId: string }
   | { status: 'rejected'; code: RejectCode; message: string }
 
 class Stop extends Error {
@@ -54,8 +58,28 @@ interface Versioned {
   deleted_at: string | null
 }
 
+/** Raised before anything is written; turned into a conflict object, not a rollback. */
+class ConflictFound extends Error {
+  constructor(
+    readonly currentRevision: number,
+    readonly reason: ConflictReason,
+  ) {
+    super('conflict')
+  }
+}
+
 function conflict(currentRevision: number, reason: ConflictReason): never {
-  throw new Stop({ status: 'conflict', currentRevision, reason })
+  throw new ConflictFound(currentRevision, reason)
+}
+
+interface ApplyContext {
+  /** Set when the operation was merged with another device's change to other fields. */
+  merged: boolean
+}
+
+/** Fields an operation changes; `*` for create/delete (they touch everything). */
+function touchedFields(kind: string, payload: Record<string, unknown>): string[] {
+  return kind === 'update' || kind === 'move' ? Object.keys(payload) : ['*']
 }
 
 /** Change-log entry that deleted the entity, if any. */
@@ -73,22 +97,25 @@ async function deletion(db: Db, op: Operation) {
 }
 
 /**
- * Whether another device changed the entity after `baseRevision`. Changes of the operation's own
- * device do not count: its queued operations build on each other (e.g. create, then update with
- * the same, still unsynced base) and were made with those changes in view.
+ * Fields other devices changed on the entity after `baseRevision` (empty: none). Changes of the
+ * operation's own device do not count: its queued operations build on each other (e.g. create,
+ * then update with the same, still unsynced base) and were made with those changes in view.
  */
-async function changedByOthers(db: Db, op: Operation, baseRevision: number): Promise<boolean> {
-  const other = await db
+async function fieldsChangedByOthers(
+  db: Db,
+  op: Operation,
+  baseRevision: number,
+): Promise<Set<string>> {
+  const rows = await db
     .selectFrom('changes')
-    .select('seq')
+    .select(['kind', 'payload'])
     .where('workspace_id', '=', op.workspaceId)
     .where('entity', '=', op.entity)
     .where('entity_id', '=', op.entityId)
     .where('revision', '>', baseRevision)
     .where('device_id', '!=', op.deviceId)
-    .limit(1)
-    .executeTakeFirst()
-  return !!other
+    .execute()
+  return new Set(rows.flatMap((row) => touchedFields(row.kind, JSON.parse(row.payload))))
 }
 
 /**
@@ -99,6 +126,7 @@ async function nextRevision(
   db: Db,
   op: Operation,
   existing: Versioned | undefined,
+  ctx: ApplyContext,
 ): Promise<number> {
   if (existing && existing.workspace_id !== op.workspaceId) reject('not_found', 'Entity not found')
   if (op.kind === 'create') {
@@ -119,8 +147,17 @@ async function nextRevision(
   }
   const base = op.baseRevision ?? 0
   if (base > existing.revision) reject('invalid_payload', 'Base revision is ahead of the server')
-  if (base < existing.revision && (await changedByOthers(db, op, base))) {
-    conflict(existing.revision, 'changed')
+  if (base < existing.revision) {
+    const theirs = await fieldsChangedByOthers(db, op, base)
+    if (theirs.size > 0) {
+      // Merge rule (ADR 0003): disjoint fields of the same entity merge, e.g. a move and a text
+      // edit of one block, or title and favourite of one page. The same field, or a create or
+      // delete on either side, is a conflict.
+      const mine = touchedFields(op.kind, op.payload)
+      const overlap = theirs.has('*') || mine.some((field) => field === '*' || theirs.has(field))
+      if (overlap) conflict(existing.revision, 'changed')
+      ctx.merged = true
+    }
   }
   return existing.revision + 1
 }
@@ -145,13 +182,18 @@ async function assertNoCycle(db: Db, workspaceId: string, id: string, parentId: 
   }
 }
 
-async function applyDocument(db: Db, op: Operation, now: string): Promise<number> {
+async function applyDocument(
+  db: Db,
+  op: Operation,
+  now: string,
+  ctx: ApplyContext,
+): Promise<number> {
   const existing = await db
     .selectFrom('documents')
     .selectAll()
     .where('id', '=', op.entityId)
     .executeTakeFirst()
-  const revision = await nextRevision(db, op, existing)
+  const revision = await nextRevision(db, op, existing, ctx)
   switch (op.kind) {
     case 'create': {
       const p = op.payload as DocumentCreatePayload
@@ -217,7 +259,7 @@ async function assertDocumentAlive(db: Db, op: Operation, documentId: string) {
   if (document.deleted_at) conflict(document.revision, 'parent_deleted')
 }
 
-async function applyBlock(db: Db, op: Operation, now: string): Promise<number> {
+async function applyBlock(db: Db, op: Operation, now: string, ctx: ApplyContext): Promise<number> {
   const existing = await db
     .selectFrom('blocks')
     .selectAll()
@@ -226,7 +268,7 @@ async function applyBlock(db: Db, op: Operation, now: string): Promise<number> {
   if (existing && existing.workspace_id === op.workspaceId) {
     await assertDocumentAlive(db, op, existing.document_id)
   }
-  const revision = await nextRevision(db, op, existing)
+  const revision = await nextRevision(db, op, existing, ctx)
   switch (op.kind) {
     case 'create': {
       const p = op.payload as BlockCreatePayload
@@ -280,13 +322,13 @@ async function applyBlock(db: Db, op: Operation, now: string): Promise<number> {
   }
 }
 
-async function applyTag(db: Db, op: Operation, now: string): Promise<number> {
+async function applyTag(db: Db, op: Operation, now: string, ctx: ApplyContext): Promise<number> {
   const existing = await db
     .selectFrom('tags')
     .selectAll()
     .where('id', '=', op.entityId)
     .executeTakeFirst()
-  const revision = await nextRevision(db, op, existing)
+  const revision = await nextRevision(db, op, existing, ctx)
   if (op.kind === 'create') {
     const p = op.payload as TagCreatePayload
     await db
@@ -316,13 +358,18 @@ async function applyTag(db: Db, op: Operation, now: string): Promise<number> {
   return revision
 }
 
-async function applyDocumentTag(db: Db, op: Operation, now: string): Promise<number> {
+async function applyDocumentTag(
+  db: Db,
+  op: Operation,
+  now: string,
+  ctx: ApplyContext,
+): Promise<number> {
   const existing = await db
     .selectFrom('document_tags')
     .selectAll()
     .where('id', '=', op.entityId)
     .executeTakeFirst()
-  const revision = await nextRevision(db, op, existing)
+  const revision = await nextRevision(db, op, existing, ctx)
   if (op.kind === 'create') {
     const p = op.payload as DocumentTagCreatePayload
     await assertDocumentAlive(db, op, p.documentId)
@@ -354,11 +401,154 @@ async function applyDocumentTag(db: Db, op: Operation, now: string): Promise<num
   return revision
 }
 
+/** Resolving a conflict (the only conflict operation clients send). */
+async function applyConflict(db: Db, op: Operation, now: string): Promise<number> {
+  const existing = await db
+    .selectFrom('conflicts')
+    .selectAll()
+    .where('id', '=', op.entityId)
+    .where('workspace_id', '=', op.workspaceId)
+    .executeTakeFirst()
+  if (!existing) reject('not_found', 'Conflict not found')
+  if (existing.resolved_at) {
+    // Another device resolved it first: same outcome for this one (no conflict on a conflict).
+    const resolved = await db
+      .selectFrom('changes')
+      .select('seq')
+      .where('entity', '=', 'conflict')
+      .where('entity_id', '=', op.entityId)
+      .where('kind', '=', 'update')
+      .orderBy('seq', 'desc')
+      .executeTakeFirstOrThrow()
+    throw new Stop({ status: 'duplicate', revision: existing.revision, seq: resolved.seq })
+  }
+  const { resolution } = op.payload as ConflictUpdatePayload
+  const revision = existing.revision + 1
+  await db
+    .updateTable('conflicts')
+    .set({ resolved_at: now, resolution, revision })
+    .where('id', '=', op.entityId)
+    .execute()
+  return revision
+}
+
 const appliers = {
   document: applyDocument,
   block: applyBlock,
   tag: applyTag,
   document_tag: applyDocumentTag,
+  conflict: applyConflict,
+}
+
+/** Current server state of the entity, as the "remote" side of a conflict. */
+async function remoteState(db: Db, op: Operation): Promise<Record<string, unknown> | null> {
+  const id = op.entityId
+  switch (op.entity) {
+    case 'document': {
+      const row = await db
+        .selectFrom('documents')
+        .selectAll()
+        .where('id', '=', id)
+        .executeTakeFirst()
+      return row ? toDocument(row) : null
+    }
+    case 'block': {
+      const row = await db.selectFrom('blocks').selectAll().where('id', '=', id).executeTakeFirst()
+      return row ? toBlock(row) : null
+    }
+    case 'tag': {
+      const row = await db.selectFrom('tags').selectAll().where('id', '=', id).executeTakeFirst()
+      return row ? toTag(row) : null
+    }
+    case 'document_tag': {
+      const row = await db
+        .selectFrom('document_tags')
+        .selectAll()
+        .where('id', '=', id)
+        .executeTakeFirst()
+      return row ? toDocumentTag(row) : null
+    }
+    default:
+      return null
+  }
+}
+
+/** Page a conflicting operation belongs to (for display). */
+async function conflictDocument(db: Db, op: Operation): Promise<string | null> {
+  if (op.entity === 'document') return op.entityId
+  if (typeof op.payload.documentId === 'string') return op.payload.documentId
+  const table =
+    op.entity === 'block' ? 'blocks' : op.entity === 'document_tag' ? 'document_tags' : null
+  if (!table) return null
+  const row = await db
+    .selectFrom(table)
+    .select('document_id')
+    .where('id', '=', op.entityId)
+    .executeTakeFirst()
+  return row?.document_id ?? null
+}
+
+/** Stores both versions as a conflict object and logs it like any other entity change. */
+async function recordConflict(
+  db: Db,
+  op: Operation,
+  found: ConflictFound,
+  now: string,
+): Promise<ApplyResult> {
+  const id = randomUUID()
+  const payload: ConflictCreatePayload = {
+    entity: op.entity as ConflictCreatePayload['entity'],
+    entityId: op.entityId,
+    documentId: await conflictDocument(db, op),
+    reason: found.reason,
+    baseRevision: op.baseRevision,
+    local: { kind: op.kind, payload: op.payload, deviceId: op.deviceId, opId: op.opId },
+    remote: await remoteState(db, op),
+    createdAt: now,
+    resolvedAt: null,
+    resolution: null,
+  }
+  await db
+    .insertInto('conflicts')
+    .values({
+      id,
+      workspace_id: op.workspaceId,
+      op_id: op.opId,
+      entity: payload.entity,
+      entity_id: op.entityId,
+      document_id: payload.documentId,
+      reason: payload.reason,
+      base_revision: payload.baseRevision,
+      local: JSON.stringify(payload.local),
+      remote: payload.remote === null ? null : JSON.stringify(payload.remote),
+      created_at: now,
+      resolved_at: null,
+      resolution: null,
+      revision: 1,
+      deleted_at: null,
+    })
+    .execute()
+  await db
+    .insertInto('changes')
+    .values({
+      workspace_id: op.workspaceId,
+      seq: await nextSeq(db, op.workspaceId),
+      op_id: randomUUID(),
+      device_id: op.deviceId,
+      entity: 'conflict',
+      entity_id: id,
+      kind: 'create',
+      revision: 1,
+      payload: JSON.stringify(payload),
+      applied_at: now,
+    })
+    .execute()
+  return {
+    status: 'conflict',
+    currentRevision: found.currentRevision,
+    reason: found.reason,
+    conflictId: id,
+  }
 }
 
 /** Page whose search entry the operation changes (documents and their blocks). */
@@ -419,10 +609,38 @@ export async function applyOperation(
         if (!same) reject('op_id_reused', 'Operation id was used for another change')
         return { status: 'duplicate', revision: previous.revision, seq: previous.seq }
       }
+      // Resending an operation that became a conflict returns that conflict again.
+      const known = await trx
+        .selectFrom('conflicts')
+        .select(['id', 'reason', 'entity_id', 'workspace_id'])
+        .where('op_id', '=', op.opId)
+        .executeTakeFirst()
+      if (known) {
+        if (known.workspace_id !== op.workspaceId || known.entity_id !== op.entityId) {
+          reject('op_id_reused', 'Operation id was used for another change')
+        }
+        const remote = await remoteState(trx, op)
+        return {
+          status: 'conflict',
+          currentRevision: Number(remote?.revision ?? 1),
+          reason: known.reason as ConflictReason,
+          conflictId: known.id,
+        }
+      }
+      if (op.entity === 'conflict' && op.kind !== 'update') {
+        reject('invalid_payload', 'Conflicts are created by the server and can only be resolved')
+      }
       const invalid = validateOperationPayload(op.entity, op.kind, op.payload)
       if (invalid) reject('invalid_payload', invalid)
 
-      const revision = await appliers[op.entity](trx, op, now)
+      const ctx: ApplyContext = { merged: false }
+      let revision: number
+      try {
+        revision = await appliers[op.entity](trx, op, now, ctx)
+      } catch (error) {
+        if (error instanceof ConflictFound) return recordConflict(trx, op, error, now)
+        throw error
+      }
       const indexed = await indexedDocument(trx, op)
       if (indexed) await reindexDocument(trx, indexed)
       const seq = await nextSeq(trx, op.workspaceId)
@@ -441,7 +659,7 @@ export async function applyOperation(
           applied_at: now,
         })
         .execute()
-      return { status: 'applied', revision, seq }
+      return { status: ctx.merged ? 'merged' : 'applied', revision, seq }
     })
   } catch (error) {
     if (error instanceof Stop) return error.result

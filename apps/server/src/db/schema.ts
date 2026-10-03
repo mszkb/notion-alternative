@@ -82,6 +82,23 @@ export interface DocumentTagsTable extends SyncColumns {
   tag_id: string
 }
 
+/** Conflict object (ADR 0003); `local`/`remote` are JSON. */
+export interface ConflictsTable extends SyncColumns {
+  id: string
+  workspace_id: string
+  op_id: string
+  entity: string
+  entity_id: string
+  document_id: string | null
+  reason: string
+  base_revision: number | null
+  local: string
+  remote: string | null
+  created_at: string
+  resolved_at: string | null
+  resolution: string | null
+}
+
 /** Change log entry; `seq` is gap-free and monotonic per workspace (the sync cursor). */
 export interface ChangesTable {
   workspace_id: string
@@ -107,4 +124,5 @@ export interface Database {
   tags: TagsTable
   document_tags: DocumentTagsTable
   changes: ChangesTable
+  conflicts: ConflictsTable
 }

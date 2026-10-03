@@ -144,11 +144,12 @@ describe('applyOperation', () => {
     await apply(createDoc(doc))
     // The phone saw revision 1 and changed the title.
     await apply(op('document', 'update', doc, { title: 'A' }, 1, { deviceId: phone }))
-    // This device also edited on top of revision 1: conflict, nothing written.
-    expect(await apply(op('document', 'update', doc, { title: 'B' }, 1))).toEqual({
+    // This device also edited the title on top of revision 1: conflict, title not written.
+    expect(await apply(op('document', 'update', doc, { title: 'B' }, 1))).toMatchObject({
       status: 'conflict',
       currentRevision: 2,
       reason: 'changed',
+      conflictId: expect.any(String),
     })
     const stored = await db
       .selectFrom('documents')
@@ -156,7 +157,8 @@ describe('applyOperation', () => {
       .where('id', '=', doc)
       .executeTakeFirstOrThrow()
     expect(stored).toEqual({ title: 'A', revision: 2 })
-    expect(await changes()).toHaveLength(2)
+    // The conflict object is logged like any other entity.
+    expect((await changes()).map((c) => c.entity)).toEqual(['document', 'document', 'conflict'])
     expect(await apply(op('document', 'update', doc, { title: 'C' }, 7))).toMatchObject({
       code: 'invalid_payload',
     })
@@ -181,12 +183,12 @@ describe('applyOperation', () => {
     await apply(op('document', 'delete', doc, {}, 1, { deviceId: phone }))
 
     // This device edited offline: block in the deleted page, the page itself, a new block.
-    expect(await apply(op('block', 'update', block, { content: 'offline' }, 1))).toEqual({
+    expect(await apply(op('block', 'update', block, { content: 'offline' }, 1))).toMatchObject({
       status: 'conflict',
       currentRevision: 2,
       reason: 'parent_deleted',
     })
-    expect(await apply(op('document', 'update', doc, { title: 'x' }, 1))).toEqual({
+    expect(await apply(op('document', 'update', doc, { title: 'x' }, 1))).toMatchObject({
       status: 'conflict',
       currentRevision: 2,
       reason: 'deleted',

@@ -14,6 +14,7 @@ describe('migrations', () => {
     expect(names.sort()).toEqual([
       'blocks',
       'changes',
+      'conflicts',
       'devices',
       'document_tags',
       'documents',

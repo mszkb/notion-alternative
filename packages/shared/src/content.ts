@@ -78,7 +78,18 @@ export const documentTagSchema = z.object({
 })
 export type DocumentTag = z.infer<typeof documentTagSchema>
 
-export const operationEntitySchema = z.enum(['document', 'block', 'tag', 'document_tag'])
+/** Content entities clients change directly. */
+export const contentEntitySchema = z.enum(['document', 'block', 'tag', 'document_tag'])
+export type ContentEntity = z.infer<typeof contentEntitySchema>
+
+/** `conflict` is created by the server; clients only resolve it (ADR 0003). */
+export const operationEntitySchema = z.enum([
+  'document',
+  'block',
+  'tag',
+  'document_tag',
+  'conflict',
+])
 export type OperationEntity = z.infer<typeof operationEntitySchema>
 
 export const operationKindSchema = z.enum(['create', 'update', 'move', 'delete'])
@@ -100,3 +111,39 @@ export const operationSchema = z.object({
   createdAt: z.string(),
 })
 export type Operation = z.infer<typeof operationSchema>
+
+export const conflictReasonSchema = z.enum(['changed', 'deleted', 'parent_deleted'])
+export type ConflictReason = z.infer<typeof conflictReasonSchema>
+
+export const conflictResolutionSchema = z.enum(['local', 'remote', 'manual'])
+export type ConflictResolution = z.infer<typeof conflictResolutionSchema>
+
+/**
+ * A change the server could not apply because another device changed (or deleted) the same
+ * entity or field first (ADR 0003). Both versions are kept until a user decides.
+ */
+export const conflictSchema = z.object({
+  id: z.uuid(),
+  workspaceId: z.uuid(),
+  entity: contentEntitySchema,
+  entityId: z.uuid(),
+  /** Page the conflict belongs to, for display. */
+  documentId: z.uuid().nullable(),
+  reason: conflictReasonSchema,
+  /** Revision the rejected change was based on. */
+  baseRevision: z.number().int().nonnegative().nullable(),
+  /** The change that was not applied ("this device" for its author). */
+  local: z.object({
+    kind: z.enum(['create', 'update', 'move', 'delete']),
+    payload: z.record(z.string(), z.unknown()),
+    deviceId: z.uuid(),
+    opId: z.uuid(),
+  }),
+  /** Server state of the entity when the conflict arose (null if it did not exist). */
+  remote: z.record(z.string(), z.unknown()).nullable(),
+  createdAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  resolution: conflictResolutionSchema.nullable(),
+  ...syncFields,
+})
+export type Conflict = z.infer<typeof conflictSchema>

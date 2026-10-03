@@ -81,13 +81,19 @@ describe('pushQueue', () => {
     expect(server.seen.size).toBe(2)
   })
 
-  it('keeps conflicts and rejections queued and marked', async () => {
+  it('keeps rejections queued and marked; conflicts live on in the server conflict', async () => {
     const doc = await store.createDocument({ workspaceId: WS, title: 'A' })
     await store.renameDocument(doc.id, 'B')
     const [create, , rename] = await store.pendingOperations()
     const server = fakeServer((op) =>
       op.opId === rename!.opId
-        ? { opId: op.opId, status: 'conflict', currentRevision: 5, reason: 'changed' }
+        ? {
+            opId: op.opId,
+            status: 'conflict',
+            currentRevision: 5,
+            reason: 'changed',
+            conflictId: newId(),
+          }
         : op.opId === create!.opId
           ? undefined
           : { opId: op.opId, status: 'rejected', code: 'invalid_payload', message: 'nope' },
@@ -98,8 +104,8 @@ describe('pushQueue', () => {
       rejected: 1,
     })
     const issues = await store.operationsWithIssues()
-    expect(issues.map((op) => op.issue!.status).sort()).toEqual(['conflict', 'rejected'])
-    expect(await store.pendingOperationCount()).toBe(2)
+    expect(issues.map((op) => op.issue!.status)).toEqual(['rejected'])
+    expect(await store.pendingOperationCount()).toBe(1)
   })
 
   it('splits batches by count and size', async () => {
