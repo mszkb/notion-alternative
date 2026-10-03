@@ -8,6 +8,7 @@ import { useLiveQuery } from '../composables/live-query'
 import { expanded } from '../composables/tree-state'
 import { displayTitle, workspaceKey } from '../composables/workspace'
 import { deviceStatus } from '../device'
+import { dismissIosHint, installApp, installPrompt, showIosHint } from '../install'
 import {
   persistence,
   refreshWorkspaces,
@@ -354,6 +355,16 @@ watch(
         <p v-if="deviceStatus === 'revoked'" class="error" data-testid="device-revoked">
           Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten, werden aber
           nicht mehr synchronisiert.
+        </p>
+        <p v-if="installPrompt" class="status">
+          <button type="button" class="link" @click="installApp">App installieren</button>
+          – startet wie eine eigene App, auch offline.
+        </p>
+        <p v-if="showIosHint" class="hint muted" data-testid="ios-install-hint">
+          Als App installieren: in Safari <strong>Teilen</strong> →
+          <strong>„Zum Home-Bildschirm“</strong>. Erst dann bleiben die lokalen Daten dauerhaft
+          gespeichert, und Benachrichtigungen sind möglich.
+          <button type="button" class="link" @click="dismissIosHint">Ausblenden</button>
         </p>
         <p class="muted" data-testid="pending">
           {{ pending }} lokale Änderung{{ pending === 1 ? '' : 'en' }} noch nicht synchronisiert

@@ -35,6 +35,7 @@ Noch offen in Phase 0: Zielgruppe schärfen.
 | `docs/adr/` | Architecture Decision Records (Vorlage: `0000-template.md`) |
 | `docs/process/` | Definition of Done, Aufgabenzerlegung für den Roadmap-Agenten |
 | `docs/testing/` | Testmatrix (offline/online, Mehrgeräte, Konflikte, Backups, Migrationen) |
+| `docs/user/` | Anleitungen für Nutzer (z. B. App installieren) |
 
 Bei Fragen zu Scope oder Architektur zuerst dort nachlesen, nicht raten.
 

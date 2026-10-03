@@ -56,7 +56,7 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 
 | ID | Szenario | Erwartung | AC | Auto |
 | --- | --- | --- | --- | --- |
-| T-PWA-01 | Installation auf iOS | PWA installierbar | AC-06 | ☐ |
+| T-PWA-01 | Installation auf iOS | PWA installierbar | AC-06 | manuell ⁸ |
 | T-PWA-02 | Push-Zustimmung nach Nutzeraktion | Subscription registriert, Push empfangen | AC-06 | ☐ |
 | T-PWA-03 | Push empfangen | Delta-Sync wird ausgelöst; Payload ohne Inhalte | – | ☐ |
 
@@ -66,4 +66,8 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | --- | --- | --- | --- | --- |
 | T-BAK-01 | Backup erstellen und in leere Umgebung restoren | Daten & Anhänge vollständig | AC-09 | ☐ |
 | T-MIG-01 | Server-Migration auf bestehenden Daten | Kein Datenverlust, App funktionsfähig | – | ☐ |
-| T-MIG-02 | Lokales Schema-Upgrade mit ungesyncter Queue | Queue bleibt erhalten und wird gesynct | – | ☐ |
+| T-MIG-02 | Lokales Schema-Upgrade mit ungesyncter Queue | Queue bleibt erhalten und wird gesynct | – | ☑ ⁹ |
+
+⁸ Manuelle Prüfliste in [`docs/user/installation.md`](../user/installation.md#prüfliste-t-pwa-01-manuell). Automatisiert: Installierbarkeit in Chromium (`apps/web/e2e/pwa-offline.spec.ts`), Installations-Button und iOS-Hinweis (`apps/web/e2e/install.spec.ts`).
+
+⁹ Dexie-Version 1 → 2 mit Inhalten und Queue-Eintrag in `apps/web/src/local/conflicts.test.ts`; die erhaltenen Operationen werden danach normal gepusht.

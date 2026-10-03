@@ -79,7 +79,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 
 - [x] Web App Manifest (Icons inkl. maskable/Apple, iOS-Meta-Tags)
 - [x] Service Worker (eigener, ohne Bibliothek; Update-Hinweis, Push-Handler)
-- [ ] Installationsflow (inkl. iOS-Hinweise)
+- [x] Installationsflow (inkl. iOS-Hinweise, [Anleitung](docs/user/installation.md); iOS-Test manuell)
 - [ ] Cache-Strategie
 - [ ] Web Push (VAPID, Subscription nach Nutzeraktion)
 - [ ] HTTPS für Smartphones/weitere Geräte entscheiden (Optionen in [ADR 0010](docs/adr/0010-reference-deployment-and-https.md))
