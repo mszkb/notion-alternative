@@ -80,6 +80,19 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 
 Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`): siehe `apps/server/src/config.ts`.
 
+### Login-Rate-Limiting
+
+Das Backend begrenzt fehlgeschlagene Logins und Registrierungsversuche im Arbeitsspeicher (Zähler gehen bei einem Neustart verloren). Ist ein Limit erreicht, antwortet es mit `429` und `Retry-After`, unabhängig davon, ob das Konto existiert oder das Passwort stimmt. Ein erfolgreicher Login setzt den Zähler der E-Mail-Adresse zurück.
+
+| Variable | Standard | Bedeutung |
+| --- | --- | --- |
+| `AUTH_RATE_LIMIT_WINDOW_MINUTES` | `15` | Zeitfenster aller Zähler |
+| `LOGIN_MAX_FAILURES_PER_EMAIL` | `5` | Fehlversuche je E-Mail-Adresse (gegen Brute Force auf ein Konto) |
+| `LOGIN_MAX_FAILURES_PER_IP` | `20` | Fehlversuche je Client-IP (gegen Credential Stuffing) |
+| `REGISTER_MAX_ATTEMPTS_PER_IP` | `10` | Registrierungsversuche je Client-IP |
+
+Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`frontend`) anhängt; das Backend vertraut genau einem Proxy-Hop. Ein weiterer Reverse Proxy davor (z. B. für TLS) erscheint deshalb als Client-IP; dann teilen sich alle Nutzer das IP-Limit. In diesem Fall `LOGIN_MAX_FAILURES_PER_IP` erhöhen. Bei rootless Docker sieht nginx je nach Port-Treiber ebenfalls nicht die echte Adresse.
+
 ## Healthchecks
 
 - `GET /healthz` – nginx läuft

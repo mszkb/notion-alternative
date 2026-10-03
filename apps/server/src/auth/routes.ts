@@ -5,6 +5,7 @@ import { parseInput } from '../validation'
 import { insertWorkspace } from '../workspaces/repository'
 import { hashPassword, verifyPassword } from './password'
 import { currentUser, requireAuth } from './plugin'
+import { AttemptLimiter } from './rate-limit'
 import { SESSION_COOKIE, createSession, deleteSession } from './sessions'
 import { countUsers, findUserByEmail, insertUser, toUser } from './users'
 
@@ -15,6 +16,23 @@ const DUMMY_PASSWORD_HASH = hashPassword('dummy-password-for-timing')
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   const { db, config } = app
+
+  const limits = config.authRateLimit
+  const windowMs = limits.windowMinutes * 60_000
+  const loginFailuresByIp = new AttemptLimiter(limits.loginMaxFailuresPerIp, windowMs)
+  const loginFailuresByEmail = new AttemptLimiter(limits.loginMaxFailuresPerEmail, windowMs)
+  const registerAttemptsByIp = new AttemptLimiter(limits.registerMaxAttemptsPerIp, windowMs)
+
+  /** Rejects with 429 if any of the keys is blocked; same answer whether the account exists. */
+  function enforceLimit(reply: FastifyReply, checks: [AttemptLimiter, string][]): void {
+    const retryAfter = Math.max(...checks.map(([limiter, key]) => limiter.retryAfter(key)))
+    if (retryAfter > 0) {
+      reply.header('retry-after', String(retryAfter))
+      throw new HttpError(429, 'too_many_attempts', 'Too many attempts, try again later', {
+        retryAfter,
+      })
+    }
+  }
 
   async function startSession(reply: FastifyReply, userId: string): Promise<void> {
     const { token, expiresAt } = await createSession(db, userId, config.sessionTtlDays)
@@ -32,6 +50,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   }))
 
   app.post('/auth/register', async (request, reply) => {
+    enforceLimit(reply, [[registerAttemptsByIp, request.ip]])
+    registerAttemptsByIp.record(request.ip)
     const input = parseInput(registerInputSchema, request.body)
     const passwordHash = await hashPassword(input.password)
 
@@ -54,14 +74,21 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/auth/login', async (request, reply) => {
     const input = parseInput(loginInputSchema, request.body)
+    enforceLimit(reply, [
+      [loginFailuresByIp, request.ip],
+      [loginFailuresByEmail, input.email],
+    ])
     const user = await findUserByEmail(db, input.email)
     const valid = await verifyPassword(
       input.password,
       user?.password_hash ?? (await DUMMY_PASSWORD_HASH),
     )
     if (!user || !valid) {
+      loginFailuresByIp.record(request.ip)
+      loginFailuresByEmail.record(input.email)
       throw new HttpError(401, 'invalid_credentials', 'Invalid email or password')
     }
+    loginFailuresByEmail.reset(input.email)
     await startSession(reply, user.id)
     return { user: toUser(user) }
   })

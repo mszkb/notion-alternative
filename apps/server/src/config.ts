@@ -16,6 +16,10 @@ const envSchema = z.object({
   COOKIE_SECURE: booleanFromEnv.default(false),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   METRICS_ENABLED: booleanFromEnv.default(false),
+  AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+  LOGIN_MAX_FAILURES_PER_IP: z.coerce.number().int().min(1).default(20),
+  LOGIN_MAX_FAILURES_PER_EMAIL: z.coerce.number().int().min(1).default(5),
+  REGISTER_MAX_ATTEMPTS_PER_IP: z.coerce.number().int().min(1).default(10),
 })
 
 export interface Config {
@@ -27,6 +31,12 @@ export interface Config {
   cookieSecure: boolean
   sessionTtlDays: number
   metricsEnabled: boolean
+  authRateLimit: {
+    windowMinutes: number
+    loginMaxFailuresPerIp: number
+    loginMaxFailuresPerEmail: number
+    registerMaxAttemptsPerIp: number
+  }
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -40,5 +50,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure: parsed.COOKIE_SECURE,
     sessionTtlDays: parsed.SESSION_TTL_DAYS,
     metricsEnabled: parsed.METRICS_ENABLED,
+    authRateLimit: {
+      windowMinutes: parsed.AUTH_RATE_LIMIT_WINDOW_MINUTES,
+      loginMaxFailuresPerIp: parsed.LOGIN_MAX_FAILURES_PER_IP,
+      loginMaxFailuresPerEmail: parsed.LOGIN_MAX_FAILURES_PER_EMAIL,
+      registerMaxAttemptsPerIp: parsed.REGISTER_MAX_ATTEMPTS_PER_IP,
+    },
   }
 }
