@@ -14,7 +14,12 @@ export type AttachmentState = 'loading' | 'ready' | 'missing' | 'deleted'
  * Object URL for an attachment's content: from this device if present, otherwise downloaded
  * (and kept for offline use). Retries when the connection comes back.
  */
-export function useAttachmentUrl(store: LocalStore, attachmentId: WatchSource<string | undefined>) {
+export function useAttachmentUrl(
+  store: LocalStore,
+  attachmentId: WatchSource<string | undefined>,
+  /** Changes when the metadata changed (pulled, deleted): load again. */
+  reload?: WatchSource<unknown>,
+) {
   const url = ref<string | null>(null)
   const state = ref<AttachmentState>('loading')
   let current: string | null = null
@@ -59,7 +64,8 @@ export function useAttachmentUrl(store: LocalStore, attachmentId: WatchSource<st
     state.value = 'ready'
   }
 
-  watch([attachmentId, connection], ([id]) => void load(id), { immediate: true })
+  const sources = reload ? [attachmentId, connection, reload] : [attachmentId, connection]
+  watch(sources, ([id]) => void load(id as string | undefined), { immediate: true })
   onScopeDispose(release)
   return { url, state }
 }

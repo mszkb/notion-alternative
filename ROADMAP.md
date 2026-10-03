@@ -86,7 +86,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 
 ## Phase 5 – Files and history
 
-- [ ] Dateianhänge
+- [x] Dateianhänge (Bild/Datei, offline anlegbar, [ADR 0012](docs/adr/0012-attachments.md))
 - [ ] S3-kompatiblen Object Storage anbinden (optional, ersetzt Datei-Volume)
 - [ ] Speicher- und Größenlimits
 - [ ] Versionen / Revisionsverlauf

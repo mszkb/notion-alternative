@@ -31,7 +31,8 @@ Alle IDs sind UUIDs und werden vom Client erzeugt (offline-fähig). Synchronisie
 | `Change` | `seq` (monoton pro Workspace = Cursor), `op_id`, `device_id`, `entity`, `entity_id`, `kind`, `revision`, `payload`, `applied_at` |
 | `Conflict` | `id`, `workspace_id`, `op_id`, `entity`, `entity_id`, `document_id`, `reason`, `base_revision`, `local` (nicht angewendete Operation des Geräts), `remote` (Stand des Servers), `created_at`, `resolved_at`, `resolution`, `revision` – Regeln und Auflösung in [ADR 0003](../adr/0003-conflict-resolution.md) |
 | `SyncCursor` | lokal auf dem Gerät: `workspace_id`, `cursor` (letzte gesehene `seq`) |
-| `Attachment`, `Revision` | werden in Phase 5 konkretisiert |
+| `Attachment` | `id`, `workspace_id`, `document_id`, `name`, `mime_type`, `size`, `sha256`, `created_at`, `revision`, `deleted_at` (+ Server: `stored_at`) – Inhalt separat, siehe [ADR 0012](../adr/0012-attachments.md) |
+| `Revision` | wird in Phase 5 konkretisiert |
 
 - `sort_key`: fraktionaler Index (String), damit Einfügen und Verschieben auf mehreren Geräten ohne Umnummerierung funktioniert.
 - Backlinks werden aus Seitenlinks in `Block.content` abgeleitet, nicht separat synchronisiert.

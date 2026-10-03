@@ -77,3 +77,7 @@ Listen sind keine Container, sondern aufeinanderfolgende `list_item`-Blöcke mit
 - Parser und Serializer (Markdown-Inline ↔ DOM) brauchen Round-Trip-Tests.
 - Echtzeit-Kollaboration innerhalb eines Blocks (Phase 8) erfordert dann einen CRDT-Text pro Block; die stabile Block-Struktur bleibt nutzbar.
 - Weitere Blocktypen (Bilder, Aufgaben, Tabellen) erweitern `type`/`attrs`; jede Erweiterung braucht eine neue Export-`schema_version`.
+
+## Nachtrag: Bild- und Dateiblöcke (Phase 5)
+
+Blocktypen `image` und `file` zeigen einen Anhang (`attrs.attachmentId`, [ADR 0012](0012-attachments.md)); sie haben kein Textfeld. Pfeiltasten überspringen sie, Rücktaste/Entf daneben wählt sie als Block aus (zweiter Tastendruck löscht), Typwechsel ist für sie ausgeblendet. Einfügen über das Blockmenü, „+ Bild/Datei“ oder Einfügen/Ziehen von Dateien.

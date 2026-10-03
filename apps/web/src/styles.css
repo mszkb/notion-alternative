@@ -646,6 +646,11 @@ kbd {
   text-decoration: line-through;
 }
 
+.add-row {
+  display: flex;
+  gap: 0.25rem;
+}
+
 .add-block {
   margin-top: 0.5rem;
   padding: 0.3rem 0.5rem;

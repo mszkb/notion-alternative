@@ -13,7 +13,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch 
 import { useRouter } from 'vue-router'
 import { useLiveQuery } from '../composables/live-query'
 import { displayTitle, useWorkspace } from '../composables/workspace'
-import type { BlockState } from '../local/store'
+import { type BlockState, sha256Hex } from '../local/store'
 import {
   getCaretOffset,
   isCaretAtEnd,
@@ -23,6 +23,7 @@ import {
   textLength,
 } from './caret'
 import { registerPendingEdits } from '../pending-edits'
+import AttachmentBlock from './AttachmentBlock.vue'
 import { EditHistory } from './history'
 import { renderInline, serializeDom } from './inline-dom'
 import PagePicker, { type PickerChoice } from './PagePicker.vue'
@@ -575,6 +576,18 @@ function neighbour(id: string, delta: -1 | 1): Block | undefined {
   return index === -1 ? undefined : list[index + delta]
 }
 
+/** Image and file blocks have no text field (ADR 0012). */
+function isAtom(block: Block | undefined): boolean {
+  return block?.type === 'image' || block?.type === 'file'
+}
+
+/** Nearest block with a text field in the given direction (skips images and files). */
+function editableNeighbour(id: string, delta: -1 | 1): Block | undefined {
+  let next = neighbour(id, delta)
+  while (next && isAtom(next)) next = neighbour(next.id, delta)
+  return next
+}
+
 /** Current (possibly unsaved) content of a block. */
 function currentContent(block: Block): string {
   const el = elements.get(block.id)
@@ -648,6 +661,11 @@ async function backspaceAtStart(block: Block, el: HTMLElement) {
     return
   }
   const previous = neighbour(block.id, -1)
+  if (isAtom(previous)) {
+    // Backspace next to an image or file selects it; a second Backspace deletes it.
+    selectBlocks(previous!.id, previous!.id)
+    return
+  }
   const previousEl = previous && elements.get(previous.id)
   if (!previous || !previousEl) return
   const before = readContent(previous, previousEl)
@@ -667,6 +685,10 @@ async function backspaceAtStart(block: Block, el: HTMLElement) {
 
 async function mergeNext(block: Block, el: HTMLElement) {
   const next = neighbour(block.id, 1)
+  if (isAtom(next)) {
+    selectBlocks(next!.id, next!.id)
+    return
+  }
   if (!next || block.type === 'code') return
   checkpoint()
   const own = readContent(block, el)
@@ -909,7 +931,7 @@ function onKeydown(block: Block, event: KeyboardEvent) {
     case 'ArrowUp':
     case 'ArrowDown': {
       const up = event.key === 'ArrowUp'
-      const target = neighbour(block.id, up ? -1 : 1)
+      const target = editableNeighbour(block.id, up ? -1 : 1)
       if (target && isCaretOnEdgeLine(el, up ? 'first' : 'last')) {
         event.preventDefault()
         focusBlock(target.id, up ? 'end' : 0)
@@ -940,13 +962,13 @@ function onCodeKeydown(block: Block, el: HTMLTextAreaElement, event: KeyboardEve
     checkpoint()
     void setType(block, 'paragraph', {}, 0)
   } else if (event.key === 'ArrowUp' && atStart) {
-    const previous = neighbour(block.id, -1)
+    const previous = editableNeighbour(block.id, -1)
     if (previous) {
       event.preventDefault()
       focusBlock(previous.id, 'end')
     }
   } else if (event.key === 'ArrowDown' && atEnd) {
-    const next = neighbour(block.id, 1)
+    const next = editableNeighbour(block.id, 1)
     if (next) {
       event.preventDefault()
       focusBlock(next.id, 0)
@@ -964,6 +986,12 @@ function onBlur(block: Block) {
 function onPaste(event: ClipboardEvent) {
   // Only plain text enters the editor; foreign HTML never reaches the DOM.
   event.preventDefault()
+  const files = [...(event.clipboardData?.files ?? [])]
+  const host = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-block-id]')
+  if (files.length) {
+    void addFiles(files, host?.dataset.blockId ?? null)
+    return
+  }
   const text = event.clipboardData?.getData('text/plain') ?? ''
   if (text) checkpoint()
   if (text) document.execCommand('insertText', false, text.replace(/\r\n?/g, '\n'))
@@ -972,6 +1000,12 @@ function onPaste(event: ClipboardEvent) {
 function onDrop(event: DragEvent) {
   // Like paste: dropped HTML never reaches the DOM, only its plain text.
   event.preventDefault()
+  const files = [...(event.dataTransfer?.files ?? [])]
+  if (files.length) {
+    const host = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-block-id]')
+    void addFiles(files, host?.dataset.blockId ?? null)
+    return
+  }
   const text = event.dataTransfer?.getData('text/plain') ?? ''
   if (!text) return
   checkpoint()
@@ -1106,6 +1140,53 @@ async function insertLink(
   await flush(block.id)
 }
 
+// ------------------------------------------------------------------ attachments (ADR 0012)
+
+/** Per-file limit on the client; the server enforces its own (ATTACHMENT_MAX_MB). */
+const ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
+const fileInput = ref<HTMLInputElement | null>(null)
+let insertAfterId: string | null = null
+
+function chooseFiles(afterId: string | null) {
+  insertAfterId = afterId
+  fileInput.value?.click()
+}
+
+function onFilesChosen(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = [...(input.files ?? [])]
+  input.value = ''
+  void addFiles(files, insertAfterId)
+}
+
+/** Adds files as image/file blocks after `afterId` (or at the end); works offline. */
+async function addFiles(files: File[], afterId: string | null) {
+  const tooBig = files.filter((file) => file.size > ATTACHMENT_MAX_BYTES)
+  if (tooBig.length) {
+    error.value = `Zu groß (max. ${ATTACHMENT_MAX_BYTES / 1024 / 1024} MB): ${tooBig.map((f) => f.name).join(', ')}`
+  }
+  checkpoint()
+  let after = afterId ?? blocks.value?.at(-1)?.id ?? null
+  for (const file of files.filter((f) => f.size <= ATTACHMENT_MAX_BYTES)) {
+    const data = await file.arrayBuffer()
+    const added = await track(
+      after ?? props.documentId,
+      store.addAttachment(
+        props.documentId,
+        { name: file.name, type: file.type, data, sha256: await sha256Hex(data) },
+        { afterId: after },
+      ),
+    )
+    if (added) after = added.block.id
+  }
+}
+
+async function deleteAttachmentBlock(block: Block) {
+  checkpoint()
+  if (block.attrs.attachmentId) await store.deleteAttachment(block.attrs.attachmentId)
+  await remove(block)
+}
+
 // ------------------------------------------------------------------ block menu
 
 const menuFor = ref<string | null>(null)
@@ -1223,8 +1304,9 @@ function blockLabel(block: Block): string {
       <span v-if="block.type === 'list_item'" class="list-marker" aria-hidden="true">{{
         block.attrs.list === 'ordered' ? `${listNumbers.get(block.id)}.` : '•'
       }}</span>
+      <AttachmentBlock v-if="isAtom(block)" :block="block" />
       <textarea
-        v-if="block.type === 'code'"
+        v-else-if="block.type === 'code'"
         :ref="(el) => setElement(block, el)"
         class="block-input code-input"
         spellcheck="false"
@@ -1258,7 +1340,7 @@ function blockLabel(block: Block): string {
       ></div>
 
       <ul v-if="menuFor === block.id" class="block-menu" role="menu">
-        <li v-for="option in TYPE_OPTIONS" :key="option.label">
+        <li v-for="option in isAtom(block) ? [] : TYPE_OPTIONS" :key="option.label">
           <button
             type="button"
             role="menuitem"
@@ -1267,7 +1349,16 @@ function blockLabel(block: Block): string {
             {{ option.label }}
           </button>
         </li>
-        <li class="separator" role="separator"></li>
+        <li v-if="!isAtom(block)" class="separator" role="separator"></li>
+        <li>
+          <button
+            type="button"
+            role="menuitem"
+            @click="menuAction(async () => chooseFiles(block.id))"
+          >
+            Bild/Datei einfügen …
+          </button>
+        </li>
         <li>
           <button type="button" role="menuitem" @click="menuAction(() => move(block, -1))">
             Nach oben
@@ -1288,10 +1379,31 @@ function blockLabel(block: Block): string {
             Block löschen
           </button>
         </li>
+        <li v-if="isAtom(block) && block.attrs.attachmentId">
+          <button
+            type="button"
+            role="menuitem"
+            class="danger"
+            @click="menuAction(() => deleteAttachmentBlock(block))"
+          >
+            Anhang löschen
+          </button>
+        </li>
       </ul>
     </div>
 
-    <button type="button" class="add-block" @click="appendParagraph">+ Block hinzufügen</button>
+    <div class="add-row">
+      <button type="button" class="add-block" @click="appendParagraph">+ Block hinzufügen</button>
+      <button type="button" class="add-block" @click="chooseFiles(null)">+ Bild/Datei</button>
+    </div>
+    <input
+      ref="fileInput"
+      type="file"
+      multiple
+      hidden
+      data-testid="attachment-input"
+      @change="onFilesChosen"
+    />
 
     <PagePicker
       v-if="picker"
