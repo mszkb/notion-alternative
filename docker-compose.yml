@@ -9,6 +9,7 @@ services:
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       METRICS_ENABLED: ${METRICS_ENABLED:-false}
+      PUSH_SUBJECT: ${PUSH_SUBJECT:-mailto:admin@localhost}
     volumes:
       - data:/data
 

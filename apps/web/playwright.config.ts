@@ -42,6 +42,8 @@ export default defineConfig({
         ALLOW_REGISTRATION: 'true',
         // Every test registers from the same address; keep the per-IP limit out of the way.
         REGISTER_MAX_ATTEMPTS_PER_IP: '100000',
+        // Fake push service used by the PWA tests.
+        PUSH_ALLOWED_HOSTS: 'push.test',
       },
       reuseExistingServer: false,
     },

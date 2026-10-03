@@ -92,6 +92,10 @@ sw.addEventListener('push', (event) => {
     (async () => {
       const windows = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true })
       for (const client of windows) client.postMessage({ type: 'sync-hint' })
+      // A dot on the app icon until the app has synced (cleared by the app).
+      await (sw.navigator as WorkerNavigator & { setAppBadge?: () => Promise<void> })
+        .setAppBadge?.()
+        .catch(() => undefined)
       // Visible apps sync silently; otherwise a generic notice (browsers require one).
       if (!windows.some((client) => client.visibilityState === 'visible')) {
         await sw.registration.showNotification('Neue Änderungen', {

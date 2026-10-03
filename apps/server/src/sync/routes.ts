@@ -42,6 +42,16 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     for (const deviceId of new Set(operations.map((op) => op.deviceId))) {
       await touchDevice(db, user.id, deviceId, now)
     }
+    // Tell the owner's other devices that changes are waiting (a hint only, ADR 0005).
+    const changed = new Map<string, string>()
+    operations.forEach((op, i) => {
+      if (['applied', 'merged', 'conflict'].includes(results[i]!.status)) {
+        changed.set(op.workspaceId, op.deviceId)
+      }
+    })
+    for (const [workspaceId, deviceId] of changed) {
+      await app.pushNotifier.notify(workspaceId, deviceId)
+    }
     return { results }
   })
 

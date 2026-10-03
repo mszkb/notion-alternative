@@ -1,13 +1,16 @@
-import { buildApp } from '../src/app'
+import { type AppOptions, buildApp } from '../src/app'
 import { loadConfig, type Config } from '../src/config'
 import { createDatabase } from '../src/db/database'
 import { migrateToLatest } from '../src/db/migrate'
 
-export async function createTestApp(overrides: Partial<Config> = {}) {
+export async function createTestApp(
+  overrides: Partial<Config> = {},
+  options: Pick<AppOptions, 'push'> = {},
+) {
   const config = { ...loadConfig({}), databasePath: ':memory:', ...overrides }
   const db = createDatabase(config.databasePath)
   await migrateToLatest(db)
-  const app = await buildApp({ db, config })
+  const app = await buildApp({ db, config, ...options })
   return { app, db, config }
 }
 

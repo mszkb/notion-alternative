@@ -77,6 +77,8 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 | `COOKIE_SECURE` | `false` | Session-Cookie nur über HTTPS senden |
 | `LOG_LEVEL` | `info` | `fatal` … `trace`, `silent` |
 | `METRICS_ENABLED` | `false` | Prometheus-Metriken unter `/api/metrics` im Backend bereitstellen |
+| `PUSH_SUBJECT` | `mailto:admin@localhost` | Kontakt für Web Push (VAPID); eine echte Adresse eintragen, manche Push-Dienste lehnen Platzhalter ab |
+| `PUSH_ALLOWED_HOSTS` | Google, Mozilla, Apple, Microsoft | Push-Dienste, an die der Server senden darf (kommagetrennt, `*.` für Subdomains) |
 
 Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`): siehe `apps/server/src/config.ts`.
 
@@ -127,7 +129,7 @@ Datenbank-Migrationen laufen beim Start des Backends automatisch.
 
 ## Backup (vorläufig)
 
-> **Was das Server-Backup enthält:** Konten, Geräte, Workspaces und alle synchronisierten Seiten, Blöcke und Tags samt Änderungslog. Änderungen, die ein Gerät noch nicht synchronisiert hat (Seitenleiste: „lokale Änderungen noch nicht synchronisiert“), liegen nur in dessen Browser (IndexedDB). Abmelden behält die lokalen Daten; beim Abmelden kann man sie für gemeinsam genutzte Geräte ausdrücklich löschen lassen (bei ungesyncten Änderungen nur nach zusätzlicher Bestätigung). Das Löschen der Website-Daten im Browser entfernt sie ebenfalls.
+> **Was das Server-Backup enthält:** Konten, Geräte, Workspaces und alle synchronisierten Seiten, Blöcke und Tags samt Änderungslog, außerdem die VAPID-Schlüssel für Web Push und die Push-Subscriptions (Tabellen `settings`, `push_subscriptions`; ohne sie müssen alle Geräte Benachrichtigungen neu aktivieren). Änderungen, die ein Gerät noch nicht synchronisiert hat (Seitenleiste: „lokale Änderungen noch nicht synchronisiert“), liegen nur in dessen Browser (IndexedDB). Abmelden behält die lokalen Daten; beim Abmelden kann man sie für gemeinsam genutzte Geräte ausdrücklich löschen lassen (bei ungesyncten Änderungen nur nach zusätzlicher Bestätigung). Das Löschen der Website-Daten im Browser entfernt sie ebenfalls.
 
 Bis zum automatisierten Backup (Phase 7): Backend stoppen, Volume sichern, wieder starten. Im Verzeichnis mit der `docker-compose.yml` ausführen:
 

@@ -114,6 +114,22 @@ export interface ChangesTable {
   applied_at: string
 }
 
+export interface SettingsTable {
+  key: string
+  value: string
+}
+
+export interface PushSubscriptionsTable {
+  endpoint: string
+  user_id: string
+  device_id: string
+  p256dh: string
+  auth: string
+  created_at: string
+  last_success_at: string | null
+  failures: number
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -125,4 +141,6 @@ export interface Database {
   document_tags: DocumentTagsTable
   changes: ChangesTable
   conflicts: ConflictsTable
+  settings: SettingsTable
+  push_subscriptions: PushSubscriptionsTable
 }

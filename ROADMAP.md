@@ -81,7 +81,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Service Worker (eigener, ohne Bibliothek; Update-Hinweis, Push-Handler)
 - [x] Installationsflow (inkl. iOS-Hinweise, [Anleitung](docs/user/installation.md); iOS-Test manuell)
 - [x] Cache-Strategie ([`caching.md`](docs/architecture/caching.md))
-- [ ] Web Push (VAPID, Subscription nach Nutzeraktion)
+- [x] Web Push (VAPID, Subscription nach Nutzeraktion; ohne Bibliothek, Payload ohne Inhalte)
 - [ ] HTTPS für Smartphones/weitere Geräte entscheiden (Optionen in [ADR 0010](docs/adr/0010-reference-deployment-and-https.md))
 
 ## Phase 5 – Files and history

@@ -4,6 +4,7 @@ import type {
   Device,
   LoginInput,
   LogoutInput,
+  PushSubscriptionInput,
   RegisterDeviceInput,
   RegisterInput,
   ServerSearchHit,
@@ -84,6 +85,11 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
         'GET',
         `/search?${new URLSearchParams({ workspaceId, q })}`,
       ),
+    pushPublicKey: () => request<{ publicKey: string }>('GET', '/push/public-key'),
+    pushSubscribe: (input: PushSubscriptionInput) =>
+      request<void>('POST', '/push/subscriptions', input),
+    pushUnsubscribe: (endpoint: string) =>
+      request<void>('DELETE', '/push/subscriptions', { endpoint }),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<{ workspace: Workspace }>('POST', '/workspaces', input),

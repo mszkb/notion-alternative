@@ -6,6 +6,12 @@ import { deviceStatus } from '../device'
 import { persistence, refreshWorkspaces, requireStore } from '../local/context'
 import { formatBytes, type StorageUsage, storageUsage } from '../local/persistence'
 import { connection, currentUser } from '../session'
+import {
+  disableNotifications,
+  enableNotifications,
+  notificationState,
+  refreshNotificationState,
+} from '../push-notifications'
 import { resetAppCache } from '../pwa'
 import { requestSync, syncState } from '../sync/engine'
 
@@ -42,6 +48,25 @@ async function loadDevices() {
 }
 
 onMounted(loadDevices)
+
+// ------------------------------------------------------------------ notifications
+
+const notificationError = ref<string | null>(null)
+const notificationBusy = ref(false)
+onMounted(() => void refreshNotificationState())
+
+async function toggleNotifications(enable: boolean) {
+  notificationError.value = null
+  notificationBusy.value = true
+  try {
+    await (enable ? enableNotifications() : disableNotifications())
+  } catch (e) {
+    console.error(e)
+    notificationError.value = 'Benachrichtigungen konnten nicht geändert werden.'
+  } finally {
+    notificationBusy.value = false
+  }
+}
 
 // ------------------------------------------------------------------ storage
 
@@ -239,6 +264,41 @@ async function changePassword() {
     <p v-if="!resyncing && syncState.lastError" class="error">
       Synchronisierung fehlgeschlagen: {{ syncState.lastError }}
     </p>
+
+    <h2>Benachrichtigungen</h2>
+    <p class="muted">
+      Ein Hinweis, wenn auf einem anderen Gerät etwas geändert wurde – ohne Inhalte. Die
+      Synchronisierung läuft auch ohne Benachrichtigungen.
+    </p>
+    <p data-testid="notification-state">
+      {{
+        {
+          unsupported: 'In diesem Browser bzw. über diese Adresse nicht verfügbar.',
+          'needs-install':
+            'Auf iPhone und iPad nur in der installierten App (Teilen → „Zum Home-Bildschirm“).',
+          denied: 'Im Browser blockiert; in den Website-Einstellungen wieder erlauben.',
+          off: 'Aus.',
+          on: 'An für dieses Gerät.',
+        }[notificationState]
+      }}
+    </p>
+    <button
+      v-if="notificationState === 'off'"
+      type="button"
+      :disabled="connection !== 'online' || notificationBusy"
+      @click="toggleNotifications(true)"
+    >
+      Benachrichtigungen aktivieren
+    </button>
+    <button
+      v-if="notificationState === 'on'"
+      type="button"
+      :disabled="notificationBusy"
+      @click="toggleNotifications(false)"
+    >
+      Benachrichtigungen deaktivieren
+    </button>
+    <p v-if="notificationError" class="error" role="alert">{{ notificationError }}</p>
 
     <h2>Speicher auf diesem Gerät</h2>
     <p v-if="usage" data-testid="storage-usage">

@@ -44,6 +44,11 @@ export async function registerServiceWorker(): Promise<void> {
   setInterval(checkForUpdate, 60 * 60_000)
 }
 
+/** The active registration (null in development or without service worker support). */
+export function serviceWorkerRegistration(): ServiceWorkerRegistration | null {
+  return registration
+}
+
 /** Activates the waiting version after all pending edits are saved, then reloads. */
 export async function applyUpdate(): Promise<void> {
   await flushPendingEdits()

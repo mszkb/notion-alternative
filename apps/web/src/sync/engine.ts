@@ -78,6 +78,10 @@ export function requestSync(
       })
       failures = 0
       syncState.value = { running: false, lastSyncAt: new Date().toISOString(), lastError: null }
+      // The push badge ("changes waiting") is settled now.
+      void (globalThis.navigator as Navigator & { clearAppBadge?: () => Promise<void> })
+        ?.clearAppBadge?.()
+        .catch(() => undefined)
     } catch (error) {
       failures += 1
       syncState.value = {

@@ -7,6 +7,8 @@ import { deviceRoutes } from './devices/routes'
 import { HttpError } from './errors'
 import { healthRoutes } from './health/routes'
 import { metricsRoutes, setupMetrics } from './metrics/plugin'
+import { pushRoutes } from './push/routes'
+import { PushNotifier, type PushNotifierOptions } from './push/service'
 import { searchRoutes } from './search/routes'
 import type { Registry } from './metrics/registry'
 import { syncRoutes } from './sync/routes'
@@ -17,6 +19,7 @@ declare module 'fastify' {
     db: Db
     config: Config
     metrics: Registry
+    pushNotifier: PushNotifier
   }
 }
 
@@ -24,9 +27,11 @@ export interface AppOptions {
   db: Db
   config: Config
   logger?: FastifyServerOptions['logger']
+  /** Web Push sending (tests inject a fake push service). */
+  push?: PushNotifierOptions
 }
 
-export async function buildApp({ db, config, logger = false }: AppOptions) {
+export async function buildApp({ db, config, logger = false, push }: AppOptions) {
   const app = Fastify({
     logger,
     bodyLimit: 1024 * 1024,
@@ -36,6 +41,7 @@ export async function buildApp({ db, config, logger = false }: AppOptions) {
 
   app.decorate('db', db)
   app.decorate('config', config)
+  app.decorate('pushNotifier', new PushNotifier(db, config.push, push))
   app.decorateRequest('user', null)
   app.decorateRequest('deviceId', null)
   await app.register(cookie)
@@ -70,11 +76,13 @@ export async function buildApp({ db, config, logger = false }: AppOptions) {
       await api.register(deviceRoutes)
       await api.register(syncRoutes)
       await api.register(searchRoutes)
+      await api.register(pushRoutes)
     },
     { prefix: '/api' },
   )
 
   app.addHook('onClose', async () => {
+    app.pushNotifier.close()
     await db.destroy()
   })
 

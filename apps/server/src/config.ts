@@ -20,6 +20,14 @@ const envSchema = z.object({
   LOGIN_MAX_FAILURES_PER_IP: z.coerce.number().int().min(1).default(20),
   LOGIN_MAX_FAILURES_PER_EMAIL: z.coerce.number().int().min(1).default(5),
   REGISTER_MAX_ATTEMPTS_PER_IP: z.coerce.number().int().min(1).default(10),
+  // VAPID contact (RFC 8292); some push services reject placeholder addresses.
+  PUSH_SUBJECT: z.string().default('mailto:admin@localhost'),
+  // Push services the server may send to (subscription endpoints come from clients: no SSRF).
+  PUSH_ALLOWED_HOSTS: z
+    .string()
+    .default(
+      'fcm.googleapis.com,updates.push.services.mozilla.com,*.push.apple.com,*.notify.windows.com',
+    ),
 })
 
 export interface Config {
@@ -31,6 +39,11 @@ export interface Config {
   cookieSecure: boolean
   sessionTtlDays: number
   metricsEnabled: boolean
+  push: {
+    subject: string
+    /** Host names; `*.` allows subdomains. */
+    allowedHosts: string[]
+  }
   authRateLimit: {
     windowMinutes: number
     loginMaxFailuresPerIp: number
@@ -50,6 +63,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure: parsed.COOKIE_SECURE,
     sessionTtlDays: parsed.SESSION_TTL_DAYS,
     metricsEnabled: parsed.METRICS_ENABLED,
+    push: {
+      subject: parsed.PUSH_SUBJECT,
+      allowedHosts: parsed.PUSH_ALLOWED_HOSTS.split(',')
+        .map((host) => host.trim().toLowerCase())
+        .filter(Boolean),
+    },
     authRateLimit: {
       windowMinutes: parsed.AUTH_RATE_LIMIT_WINDOW_MINUTES,
       loginMaxFailuresPerIp: parsed.LOGIN_MAX_FAILURES_PER_IP,
