@@ -9,6 +9,7 @@ import HomeView from './views/HomeView.vue'
 import LoginView from './views/LoginView.vue'
 import PageView from './views/PageView.vue'
 import TagView from './views/TagView.vue'
+import TrashView from './views/TrashView.vue'
 import WorkspaceHome from './views/WorkspaceHome.vue'
 
 // Views are bundled eagerly: lazy chunks could not be fetched after losing the network.
@@ -29,6 +30,7 @@ export const router = createRouter({
         { path: 'p/:documentId/history', name: 'history', component: HistoryView },
         { path: 'tags/:tagId', name: 'tag', component: TagView },
         { path: 'conflicts', name: 'conflicts', component: ConflictsView },
+        { path: 'trash', name: 'trash', component: TrashView },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

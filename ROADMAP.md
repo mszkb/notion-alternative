@@ -90,7 +90,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] S3-kompatiblen Object Storage anbinden (optional, ersetzt Datei-Volume; Migration per Befehl)
 - [x] Speicher- und Größenlimits (pro Datei und pro Workspace, Anzeige auf der Kontoseite)
 - [x] Versionen / Revisionsverlauf (aus dem Änderungslog, Diff zur aktuellen Version, [ADR 0013](docs/adr/0013-version-history.md))
-- [ ] Wiederherstellung früherer Versionen
+- [x] Wiederherstellung früherer Versionen (ganze Version oder einzelne Blöcke, Papierkorb)
 
 ## Phase 6 – Export/import
 

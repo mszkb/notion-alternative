@@ -388,8 +388,8 @@ watch(
           </button>
         </p>
         <p class="muted">
-          {{ currentUser?.email }} ·
-          <RouterLink :to="{ name: 'account' }">Konto</RouterLink>
+          {{ currentUser?.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
+          <RouterLink :to="{ name: 'trash', params: { workspaceId } }">Papierkorb</RouterLink>
         </p>
       </footer>
     </aside>

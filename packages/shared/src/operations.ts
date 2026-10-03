@@ -75,12 +75,36 @@ const conflictCreate = conflictSchema
 const conflictUpdate = z.object({ resolution: conflictResolutionSchema }).strict()
 
 export const operationPayloadSchemas = {
-  document: { create: documentCreate, update: documentUpdate, move: documentMove, delete: empty },
-  block: { create: blockCreate, update: blockUpdate, move: blockMove, delete: empty },
-  tag: { create: tagCreate, update: tagCreate, move: null, delete: empty },
-  document_tag: { create: documentTagCreate, update: null, move: null, delete: empty },
-  attachment: { create: attachmentCreate, update: null, move: null, delete: empty },
-  conflict: { create: conflictCreate, update: conflictUpdate, move: null, delete: null },
+  document: {
+    create: documentCreate,
+    update: documentUpdate,
+    move: documentMove,
+    delete: empty,
+    restore: empty,
+  },
+  block: {
+    create: blockCreate,
+    update: blockUpdate,
+    move: blockMove,
+    delete: empty,
+    restore: null,
+  },
+  tag: { create: tagCreate, update: tagCreate, move: null, delete: empty, restore: null },
+  document_tag: {
+    create: documentTagCreate,
+    update: null,
+    move: null,
+    delete: empty,
+    restore: null,
+  },
+  attachment: { create: attachmentCreate, update: null, move: null, delete: empty, restore: null },
+  conflict: {
+    create: conflictCreate,
+    update: conflictUpdate,
+    move: null,
+    delete: null,
+    restore: null,
+  },
 } as const satisfies Record<OperationEntity, Record<OperationKind, z.ZodType | null>>
 
 export type DocumentCreatePayload = z.infer<typeof documentCreate>
@@ -118,7 +142,7 @@ export const changeSchema = z.object({
   deviceId: z.uuid(),
   entity: operationEntitySchema,
   entityId: z.uuid(),
-  kind: z.enum(['create', 'update', 'move', 'delete']),
+  kind: z.enum(['create', 'update', 'move', 'delete', 'restore']),
   /** Revision of the entity after this change. */
   revision: z.number().int().positive(),
   payload: z.record(z.string(), z.unknown()),

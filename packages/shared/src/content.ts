@@ -110,7 +110,8 @@ export const operationEntitySchema = z.enum([
 ])
 export type OperationEntity = z.infer<typeof operationEntitySchema>
 
-export const operationKindSchema = z.enum(['create', 'update', 'move', 'delete'])
+/** `restore` lifts a page's tombstone (trash, #66); only pages can be restored. */
+export const operationKindSchema = z.enum(['create', 'update', 'move', 'delete', 'restore'])
 export type OperationKind = z.infer<typeof operationKindSchema>
 
 /** One local change, transferred idempotently by `opId` (ADR 0002). */
@@ -152,7 +153,7 @@ export const conflictSchema = z.object({
   baseRevision: z.number().int().nonnegative().nullable(),
   /** The change that was not applied ("this device" for its author). */
   local: z.object({
-    kind: z.enum(['create', 'update', 'move', 'delete']),
+    kind: z.enum(['create', 'update', 'move', 'delete', 'restore']),
     payload: z.record(z.string(), z.unknown()),
     deviceId: z.uuid(),
     opId: z.uuid(),

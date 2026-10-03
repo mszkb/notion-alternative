@@ -92,6 +92,7 @@ export async function versionState(
       if (change.kind === 'create') return { id: change.entity_id, ...payload, deletedAt: null }
       if (!current) return null
       if (change.kind === 'delete') return { ...current, deletedAt: change.applied_at }
+      if (change.kind === 'restore') return { ...current, deletedAt: null }
       return { ...current, ...payload }
     }
     if (change.entity === 'document') document = fold(document)

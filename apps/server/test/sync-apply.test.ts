@@ -336,3 +336,46 @@ describe('applyOperation', () => {
     expect((await listChangesSince(db, userId, workspaceId, 0, 1))!.map((c) => c.seq)).toEqual([1])
   })
 })
+
+describe('restoring pages (#66)', () => {
+  it('lifts the tombstone with blocks intact, idempotently', async () => {
+    const doc = randomUUID()
+    const block = randomUUID()
+    await apply(createDoc(doc))
+    await apply(
+      op('block', 'create', block, {
+        documentId: doc,
+        type: 'paragraph',
+        content: 'Bleibt erhalten',
+        attrs: {},
+        sortKey: 'a0',
+      }),
+    )
+    await apply(op('document', 'delete', doc, {}, 1))
+    expect(await apply(op('document', 'restore', doc, {}, 2))).toMatchObject({
+      status: 'applied',
+      revision: 3,
+    })
+    const stored = await db
+      .selectFrom('documents')
+      .select(['deleted_at', 'revision'])
+      .where('id', '=', doc)
+      .executeTakeFirstOrThrow()
+    expect(stored).toEqual({ deleted_at: null, revision: 3 })
+    const blockRow = await db
+      .selectFrom('blocks')
+      .select('content')
+      .where('id', '=', block)
+      .executeTakeFirstOrThrow()
+    expect(blockRow.content).toBe('Bleibt erhalten')
+
+    expect(await apply(op('document', 'restore', doc, {}, 2))).toMatchObject({
+      status: 'duplicate',
+      revision: 3,
+    })
+    expect(await apply(op('block', 'restore', block, {}, 1))).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_payload',
+    })
+  })
+})

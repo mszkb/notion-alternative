@@ -161,6 +161,19 @@ async function nextRevision(
     return 1
   }
   if (!existing) reject('not_found', 'Entity not found')
+  if (op.kind === 'restore') {
+    if (existing.deleted_at) return existing.revision + 1
+    // Already restored (e.g. by another device): same outcome.
+    const last = await db
+      .selectFrom('changes')
+      .select('seq')
+      .where('workspace_id', '=', op.workspaceId)
+      .where('entity', '=', op.entity)
+      .where('entity_id', '=', op.entityId)
+      .orderBy('seq', 'desc')
+      .executeTakeFirstOrThrow()
+    throw new Stop({ status: 'duplicate', revision: existing.revision, seq: last.seq })
+  }
   if (existing.deleted_at) {
     const deleted = await deletion(db, op)
     // Deleting again has the same effect: answer like the original deletion.
@@ -272,6 +285,15 @@ async function applyDocument(
         .where('id', '=', op.entityId)
         .execute()
       return revision
+    case 'restore':
+      // Lifts the tombstone (trash, #66). Blocks, tags and links of a deleted page were never
+      // tombstoned (sync.md), so the page comes back complete under its old id.
+      await db
+        .updateTable('documents')
+        .set({ deleted_at: null, updated_at: now, revision })
+        .where('id', '=', op.entityId)
+        .execute()
+      return revision
   }
 }
 
@@ -345,6 +367,9 @@ async function applyBlock(db: Db, op: Operation, now: string, ctx: ApplyContext)
         .where('id', '=', op.entityId)
         .execute()
       return revision
+    case 'restore':
+      // Not allowed by the payload schemas; blocks come back with their page.
+      reject('invalid_payload', 'Blocks cannot be restored')
   }
 }
 

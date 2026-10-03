@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DocumentVersion, DocumentVersionState } from '@notion-alt/shared'
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import { useLiveQuery } from '../composables/live-query'
 import { displayTitle, useWorkspace } from '../composables/workspace'
@@ -10,6 +10,7 @@ import { connection } from '../session'
 
 const { store, workspaceId, documentsById } = useWorkspace()
 const route = useRoute()
+const router = useRouter()
 const documentId = String(route.params.documentId)
 const page = computed(() => documentsById.value.get(documentId))
 const current = useLiveQuery(() => store.listBlocks(documentId), [])
@@ -45,6 +46,42 @@ async function select(version: DocumentVersion) {
   } catch {
     error.value = 'Diese Version konnte nicht geladen werden.'
   }
+}
+
+/**
+ * Brings the page back to the selected version with new operations on top of the current
+ * state (ADR 0013): history is never rewound, other devices get it through the normal sync.
+ */
+async function restoreVersion() {
+  const version = selected.value
+  if (!version) return
+  await store.applyBlockState(
+    documentId,
+    version.blocks.map(({ id, type, content, attrs }) => ({ id, type, content, attrs })),
+  )
+  if (page.value && page.value.title !== version.document.title) {
+    await store.renameDocument(documentId, version.document.title)
+  }
+  await router.push({ name: 'page', params: { workspaceId: workspaceId.value, documentId } })
+}
+
+/** Takes a single block from the version: changed back, or re-inserted where it was. */
+async function takeBlock(id: string) {
+  const version = selected.value
+  const block = version?.blocks.find((b) => b.id === id)
+  if (!version || !block) return
+  const fields = { type: block.type, content: block.content, attrs: block.attrs }
+  if (current.value.some((b) => b.id === id)) {
+    await store.updateBlock(id, fields)
+    return
+  }
+  // Removed since: insert after the nearest preceding block that still exists.
+  const index = version.blocks.findIndex((b) => b.id === id)
+  const before = version.blocks
+    .slice(0, index)
+    .reverse()
+    .find((b) => current.value.some((c) => c.id === b.id))
+  await store.createBlock(documentId, fields, { afterId: before?.id ?? null })
 }
 
 const diff = computed(() =>
@@ -99,6 +136,9 @@ const titleChanged = computed(
               : `Unterschiede zum aktuellen Stand: ${changedCount} Block${changedCount === 1 ? '' : 'e'}${titleChanged ? ', Titel' : ''}.`
           }}
         </p>
+        <p v-if="changedCount > 0 || titleChanged">
+          <button type="button" @click="restoreVersion">Diese Version wiederherstellen</button>
+        </p>
         <ul class="diff">
           <li
             v-for="entry in diff"
@@ -113,6 +153,14 @@ const titleChanged = computed(
             <del v-else-if="entry.status === 'removed'">{{ entry.before }}</del>
             <ins v-else-if="entry.status === 'added'">{{ entry.after }}</ins>
             <span v-else>{{ entry.before }}</span>
+            <button
+              v-if="entry.status === 'changed' || entry.status === 'removed'"
+              type="button"
+              class="link take"
+              @click="takeBlock(entry.id)"
+            >
+              Block übernehmen
+            </button>
           </li>
         </ul>
       </section>

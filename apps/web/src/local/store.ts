@@ -219,6 +219,48 @@ export class LocalStore {
     return document && !document.deletedAt ? document : undefined
   }
 
+  /** Deleted pages to offer in the trash: those whose parent is not deleted too. */
+  async trashedDocuments(workspaceId: string): Promise<Document[]> {
+    const all = await this.db.documents.where('workspaceId').equals(workspaceId).toArray()
+    const byId = new Map(all.map((d) => [d.id, d]))
+    return all
+      .filter((d) => d.deletedAt && !(d.parentId && byId.get(d.parentId)?.deletedAt))
+      .sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''))
+  }
+
+  /**
+   * Restores a deleted page with its deleted subpages (trash, #66), offline too. Blocks, tags
+   * and links were kept with the tombstone, so everything comes back under the same ids.
+   */
+  async restoreDocument(id: string): Promise<string[]> {
+    return this.write(async (ctx) => {
+      const root = await this.db.documents.get(id)
+      if (!root?.deletedAt) return []
+      const all = await this.db.documents.where('workspaceId').equals(root.workspaceId).toArray()
+      const restored: Document[] = []
+      const visit = (document: Document) => {
+        restored.push(document)
+        for (const child of all) {
+          if (child.parentId === document.id && child.deletedAt) visit(child)
+        }
+      }
+      visit(root)
+      for (const document of restored) {
+        await this.db.documents.update(document.id, { deletedAt: null })
+        await this.enqueue(
+          document.workspaceId,
+          'document',
+          document.id,
+          'restore',
+          document.revision,
+          {},
+        )
+        this.mark(ctx, document.workspaceId, document.id)
+      }
+      return restored.map((document) => document.id)
+    })
+  }
+
   /** Title of a page, also of a deleted one (conflicts may refer to it). */
   async documentTitle(id: string): Promise<string | null> {
     return (await this.db.documents.get(id))?.title ?? null
@@ -1032,7 +1074,9 @@ export class LocalStore {
           const fields =
             change.kind === 'delete'
               ? { deletedAt: change.appliedAt }
-              : { ...(change.payload as Partial<Document>), updatedAt: change.appliedAt }
+              : change.kind === 'restore'
+                ? { deletedAt: null, updatedAt: change.appliedAt }
+                : { ...(change.payload as Partial<Document>), updatedAt: change.appliedAt }
           await this.db.documents.update(change.entityId, { ...fields, revision })
         }
         this.mark(ctx, workspaceId, change.entityId)
