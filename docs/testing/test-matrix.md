@@ -11,11 +11,13 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | T-OFF-03 | Offline bearbeiten, dann online | Änderung wird synchronisiert | AC-02 | ☑ ⁴ |
 | T-OFF-04 | Server down, Netz vorhanden | Lesen & Bearbeiten möglich, Queue wächst | AC-08 | ☑ ³ |
 | T-OFF-05 | Verbindung bricht während Sync ab | Kein Datenverlust, Wiederholung idempotent | AC-02 | ☑ ³ |
-| T-OFF-06 | Push deaktiviert | Sync bei Start/Fokus/Timer | AC-07 | ☐ |
+| T-OFF-06 | Push deaktiviert | Sync bei Start/Fokus/Timer | AC-07 | ☑ ⁶ |
 
 ¹ Playwright (`apps/web/e2e/offline.spec.ts`): Server nicht erreichbar (alle `/api`-Requests schlagen fehl) sowie Netzverlust in der geladenen App; T-OFF-02 zusätzlich auf Datenebene (`apps/web/src/local/store.test.ts`). Neuladen bei echtem Netz-Offline braucht gecachte App-Dateien und wird mit dem Service Worker (Phase 4) ergänzt.
 
 ³ Push (`POST /api/sync/push`): `apps/server/test/sync-push.test.ts` (Duplikate, verlorene Antwort), `apps/web/src/sync/push.test.ts` (Abbruch nach Server-Commit, Wiederholung), `apps/web/e2e/sync.spec.ts` (Server down, Queue wächst und wird danach gesendet).
+
+⁶ `apps/web/src/sync/triggers.test.ts` (Start, Fokus, `online`, Sichtbarkeit, Timer nur bei sichtbarer App, Entprellung), `apps/web/src/sync/engine.test.ts` (ein Lauf gleichzeitig, auch über Tabs per Web Locks), `apps/web/e2e/multi-device.spec.ts` (Timer mit vorgespulter Uhr, „Jetzt synchronisieren“).
 
 ## Mehrere Geräte & Konflikte
 

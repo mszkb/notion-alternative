@@ -94,3 +94,34 @@ test('T-DEL-02: editing a page another device deleted shows a conflict and keeps
   await expect(blockInput(other, 0)).toHaveText('Ursprung – offline ergänzt')
   await other.context().close()
 })
+
+test('T-OFF-06: without push, the timer and "Jetzt synchronisieren" bring changes in', async ({
+  page,
+  browser,
+}) => {
+  const email = await signIn(page)
+  const context = await browser.newContext()
+  const other = await context.newPage()
+  // Fake clock on device B only, so its 5-minute timer can be fast-forwarded.
+  await other.clock.install()
+  await other.request.post('/api/auth/login', { data: { email, password: PASSWORD } })
+  await other.goto('/')
+  await expect(other).toHaveURL(/\/w\/[0-9a-f-]+$/)
+  await expect(other.getByTestId('sync-status')).toContainText('Synchronisiert um', {
+    timeout: 10_000,
+  })
+
+  await newPage(page, 'Per Timer')
+  await waitForSaved(page)
+  await synced(page)
+
+  await other.clock.fastForward('05:01')
+  await expect(other.getByRole('tree')).toContainText('Per Timer', { timeout: 10_000 })
+
+  await newPage(page, 'Per Knopf')
+  await waitForSaved(page)
+  await synced(page)
+  await other.getByRole('button', { name: 'Jetzt synchronisieren' }).click()
+  await expect(other.getByRole('tree')).toContainText('Per Knopf', { timeout: 10_000 })
+  await context.close()
+})

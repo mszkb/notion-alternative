@@ -62,7 +62,19 @@ Umsetzung: `apps/server/src/sync/` (Migration `0003_sync`). Payload-Schemas je E
 
 ### Push
 
-`POST /api/sync/push` nimmt bis zu 500 Operationen in Erzeugungsreihenfolge und wendet jede einzeln an (je eine Transaktion); die Antwort enthält pro `opId` `applied`/`duplicate` (mit `revision`, `seq`), `conflict` (mit `currentRevision`) oder `rejected` (mit `code`). `merged` und Konflikt-IDs folgen mit dem Konflikt-Issue. Der Client (`apps/web/src/sync/`) sendet die Queue in Batches (max. 500 Operationen und ≈ 900 KB wegen des nginx-Limits von 1 MB), entfernt bestätigte Operationen und speichert die Server-Revision an der Entität – beides in einer Dexie-Transaktion. Konflikte und Ablehnungen bleiben mit Grund (`issue`) in der Queue und werden in der Seitenleiste angezeigt; nichts geht verloren. Bei Netz- oder Serverfehlern wiederholt der Client mit exponentiellem Backoff (1 s … 5 min). Ausgelöst wird der Push nach lokalen Änderungen (entprellt), beim Start, bei Fokus, bei `online` und minütlich.
+`POST /api/sync/push` nimmt bis zu 500 Operationen in Erzeugungsreihenfolge und wendet jede einzeln an (je eine Transaktion); die Antwort enthält pro `opId` `applied`/`duplicate` (mit `revision`, `seq`), `conflict` (mit `currentRevision`) oder `rejected` (mit `code`). `merged` und Konflikt-IDs folgen mit dem Konflikt-Issue. Der Client (`apps/web/src/sync/`) sendet die Queue in Batches (max. 500 Operationen und ≈ 900 KB wegen des nginx-Limits von 1 MB), entfernt bestätigte Operationen und speichert die Server-Revision an der Entität – beides in einer Dexie-Transaktion. Konflikte und Ablehnungen bleiben mit Grund (`issue`) in der Queue und werden in der Seitenleiste angezeigt; nichts geht verloren. Bei Netz- oder Serverfehlern wiederholt der Client mit exponentiellem Backoff (1 s … 5 min). Auslöser siehe „Sync-Trigger“.
+
+### Sync-Trigger
+
+Ein Sync-Lauf ist immer Push → Pull (bzw. Re-Sync) und läuft unabhängig von Web Push (Prinzip 4, T-OFF-06), ausgelöst durch (`apps/web/src/sync/triggers.ts`):
+
+- App-Start, Fensterfokus, Tab wird sichtbar (`visibilitychange`), `online`-Event
+- Timer: alle 5 Minuten, solange die App sichtbar ist; versteckte Tabs pollen nicht (Akku, Datenvolumen). Ist der Server nicht erreichbar, wird jede Minute neu geprüft.
+- Lokale Änderung: 1,5 s entprellt, nur Push/Pull ohne Session- und Workspace-Abgleich
+- Web-Push-Hinweis (Phase 4): `onSyncHint` startet nur einen normalen Lauf; Inhalte kommen nie über Push
+- „Jetzt synchronisieren“ in der Seitenleiste, „Neu synchronisieren“ (vollständig) auf der Kontoseite
+
+Läufe sind Single-Flight: Im Tab wartet eine Anfrage auf den laufenden Lauf und löst danach genau einen weiteren aus; über Tabs desselben Kontos serialisiert ein Web Lock (`notion-alt-sync:<deviceId>`) die Läufe. Fehler werden mit exponentiellem Backoff (1 s … 5 min) wiederholt. Die Seitenleiste zeigt Verbindung (verbunden / offline / Sitzung abgelaufen mit Link zum Anmelden), Sync-Status (synchronisiert um … / ausstehend / läuft / fehlgeschlagen), ausstehende Operationen sowie Konflikte und Ablehnungen.
 
 ### Pull
 

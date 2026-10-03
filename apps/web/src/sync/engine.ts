@@ -66,14 +66,16 @@ export function requestSync(
   syncState.value = { ...syncState.value, running: true }
   current = (async () => {
     try {
-      const outcome = await pushQueue(store, transport.push)
-      if (outcome.deviceRevoked) {
-        deviceStatus.value = 'revoked'
-      } else {
-        for (const workspace of await store.cachedWorkspaces()) {
-          await syncWorkspace(store, workspace.id, transport, options.full)
+      await exclusive(store, async () => {
+        const outcome = await pushQueue(store, transport.push)
+        if (outcome.deviceRevoked) {
+          deviceStatus.value = 'revoked'
+        } else {
+          for (const workspace of await store.cachedWorkspaces()) {
+            await syncWorkspace(store, workspace.id, transport, options.full)
+          }
         }
-      }
+      })
       failures = 0
       syncState.value = { running: false, lastSyncAt: new Date().toISOString(), lastError: null }
     } catch (error) {
@@ -98,6 +100,25 @@ export function requestSync(
     }
   })()
   return current
+}
+
+/**
+ * One sync run at a time across all tabs of this browser profile and account (Web Locks); a tab
+ * waits for the other tab's run and then sends what is still queued. Without Web Locks runs may
+ * overlap between tabs, which idempotent operations tolerate.
+ */
+async function exclusive(store: LocalStore, run: () => Promise<void>): Promise<void> {
+  const locks = globalThis.navigator?.locks
+  if (!locks) return run()
+  await locks.request(`notion-alt-sync:${store.deviceId}`, run)
+}
+
+/**
+ * Entry point for a Web Push hint (Phase 4, ADR 0005): only triggers a normal sync run; the
+ * payload carries no content and data integrity never depends on it (principle 4).
+ */
+export function onSyncHint(store: LocalStore): Promise<void> {
+  return requestSync(store)
 }
 
 /** Stops pending retries (sign-out, user switch). */

@@ -71,7 +71,7 @@ Offen bzw. später: „Lokale Daten löschen“ beim Abmelden (Phase 3, Gerätev
 - [x] Offline-Queue mit idempotenten Operationen (`POST /api/sync/push`)
 - [x] Tombstones für Löschungen (Replikation, Löschen vs. Bearbeiten als Konflikt)
 - [x] Vollständiger Re-Sync (`GET /api/sync/snapshot`, `410`, „Neu synchronisieren“)
-- [ ] Sync-Trigger: Start, Fokuswechsel, Push, periodisch
+- [x] Sync-Trigger: Start, Fokuswechsel, Push (Hook), periodisch
 - [ ] Konfliktanzeige (gemäß ADR 0003)
 - [ ] Serverseitige Volltextsuche (SQLite FTS5)
 

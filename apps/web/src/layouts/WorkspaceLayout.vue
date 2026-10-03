@@ -19,6 +19,7 @@ import {
 import type { SearchHit } from '../local/search'
 import { connection, currentUser, refreshSession } from '../session'
 import { requestSync, syncState } from '../sync/engine'
+import { DEFAULT_TRIGGERS, startSyncTriggers } from '../sync/triggers'
 
 const route = useRoute()
 const router = useRouter()
@@ -114,29 +115,34 @@ async function recheck() {
   }
 }
 
-// Push local changes shortly after they were made (debounced); the queue keeps them meanwhile.
-const SYNC_AFTER_CHANGE_MS = 1500
-let changeTimer: ReturnType<typeof setTimeout> | null = null
-const stopChangeListener = store.onChange(() => {
-  if (changeTimer) clearTimeout(changeTimer)
-  changeTimer = setTimeout(() => void requestSync(store), SYNC_AFTER_CHANGE_MS)
-})
+// Local changes are pushed shortly after they were made; the queue keeps them meanwhile.
+let triggers: ReturnType<typeof startSyncTriggers> | null = null
+const stopChangeListener = store.onChange(() => triggers?.changed())
 
-let interval: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
-  void recheck()
-  window.addEventListener('online', recheck)
+  triggers = startSyncTriggers(recheck, DEFAULT_TRIGGERS, () => requestSync(store))
   window.addEventListener('offline', markOffline)
-  window.addEventListener('focus', recheck)
-  interval = setInterval(recheck, 60_000)
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('online', recheck)
+  triggers?.stop()
   window.removeEventListener('offline', markOffline)
-  window.removeEventListener('focus', recheck)
-  if (interval) clearInterval(interval)
-  if (changeTimer) clearTimeout(changeTimer)
   stopChangeListener()
+})
+
+async function syncNow() {
+  await recheck()
+}
+
+const timeFormat = new Intl.DateTimeFormat('de-DE', { timeStyle: 'short' })
+
+/** One line telling whether local data is on the server. */
+const syncLabel = computed(() => {
+  if (connection.value !== 'online') return null
+  if (syncState.value.running) return 'Synchronisiert…'
+  if (syncState.value.lastError) return 'Synchronisierung fehlgeschlagen – neuer Versuch folgt'
+  if (pending.value > withIssues.value.length) return 'Änderungen ausstehend'
+  const at = syncState.value.lastSyncAt
+  return at ? `Synchronisiert um ${timeFormat.format(new Date(at))}` : 'Noch nicht synchronisiert'
 })
 
 function markOffline() {
@@ -309,8 +315,11 @@ watch(
           {{ rejected.length }} Änderung{{ rejected.length === 1 ? '' : 'en' }} vom Server abgelehnt
           ({{ rejected[0]?.issue?.message }}). Sie bleiben lokal erhalten.
         </p>
-        <p v-if="syncState.lastError && connection === 'online'" class="muted">
-          Synchronisierung fehlgeschlagen, neuer Versuch folgt.
+        <p v-if="syncLabel" class="muted sync-status" data-testid="sync-status">
+          {{ syncLabel }}
+          <button type="button" class="link" :disabled="syncState.running" @click="syncNow">
+            Jetzt synchronisieren
+          </button>
         </p>
         <p class="muted">
           {{ currentUser?.email }} ·
