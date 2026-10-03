@@ -4,14 +4,16 @@ import {
   type BlockAttrs,
   type BlockType,
   inlineToPlainText,
+  blocksToMarkdown,
   MAX_LIST_INDENT,
   newId,
   serializeInline,
 } from '@notion-alt/shared'
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLiveQuery } from '../composables/live-query'
 import { displayTitle, useWorkspace } from '../composables/workspace'
+import { type BlockState, sha256Hex } from '../local/store'
 import {
   getCaretOffset,
   isCaretAtEnd,
@@ -20,6 +22,11 @@ import {
   setCaretOffset,
   textLength,
 } from './caret'
+import { maxFileBytes } from '../limits'
+import { formatBytes } from '../local/persistence'
+import { registerPendingEdits } from '../pending-edits'
+import AttachmentBlock from './AttachmentBlock.vue'
+import { EditHistory } from './history'
 import { renderInline, serializeDom } from './inline-dom'
 import PagePicker, { type PickerChoice } from './PagePicker.vue'
 
@@ -87,12 +94,284 @@ function draftBlock(input: Pick<Block, 'type' | 'attrs' | 'content'>): Block {
 
 const blockById = computed(() => new Map((blocks.value ?? []).map((b) => [b.id, b])))
 
+/** Blocks with an open conflict get a marker (ADR 0003). */
+const conflicted = useLiveQuery(
+  async () =>
+    new Set(
+      (await store.openConflicts(workspaceId.value))
+        .filter((c) => c.entity === 'block' && c.documentId === props.documentId)
+        .map((c) => c.entityId),
+    ),
+  new Set<string>(),
+  () => props.documentId,
+)
+
+// ------------------------------------------------------------------ undo/redo across blocks
+
+const history = new EditHistory()
+/** A typing burst is running; the state before it is already recorded. Ends on save or a step. */
+let typing = false
+let restoring = false
+
+function snapshot(): BlockState[] {
+  return (blocks.value ?? []).map((b) => ({
+    id: b.id,
+    type: b.type,
+    content: currentContent(b),
+    attrs: b.attrs,
+  }))
+}
+
+/** Records the state before an undoable step. */
+function checkpoint() {
+  if (restoring) return
+  history.record(snapshot())
+  typing = false
+}
+
+/** Text input: one undo step per burst of typing (until the debounced save). */
+function noteTyping() {
+  if (!typing) checkpoint()
+  typing = true
+}
+
+function onBeforeInput(event: InputEvent) {
+  if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+    // Native undo stops at the block boundary and would bypass the shared history.
+    event.preventDefault()
+    void restore(event.inputType === 'historyUndo' ? 'undo' : 'redo')
+    return
+  }
+  noteTyping()
+}
+
+/** Id of the first block in `target` that differs from `current` (focus goes there). */
+function firstChange(current: BlockState[], target: BlockState[]): string | null {
+  for (let i = 0; i < Math.max(current.length, target.length); i++) {
+    const a = current[i]
+    const b = target[i]
+    if (!b) return target[target.length - 1]?.id ?? null
+    if (!a || JSON.stringify(a) !== JSON.stringify(b)) return b.id
+  }
+  return null
+}
+
+/** Undo/redo steps run one after another, so fast repeated shortcuts are not lost. */
+let restoreQueue: Promise<void> = Promise.resolve()
+
+function restore(direction: 'undo' | 'redo'): Promise<void> {
+  restoreQueue = restoreQueue.then(() => restoreStep(direction))
+  return restoreQueue
+}
+
+async function restoreStep(direction: 'undo' | 'redo') {
+  if (!blocks.value) return
+  const current = snapshot()
+  const target = direction === 'undo' ? history.undo(current) : history.redo(current)
+  if (!target) return
+  typing = false
+  restoring = true
+  for (const id of [...timers.keys()]) cancelTimer(id)
+  const changed = firstChange(current, target)
+  structuralWrites += 1
+  try {
+    const recreated = await track(props.documentId, store.applyBlockState(props.documentId, target))
+    if (recreated) history.rename(recreated)
+    blocks.value = await store.listBlocks(props.documentId)
+    await nextTick()
+    // Also re-render the focused block: its content is replaced, not edited.
+    for (const block of blocks.value) {
+      const el = elements.get(block.id)
+      if (el && rendered.get(block.id) !== block.content) renderBlock(block, el)
+    }
+    const focusId = changed ? (recreated?.get(changed) ?? changed) : null
+    if (focusId && elements.has(focusId)) focusBlock(focusId, 'end')
+  } finally {
+    structuralWrites -= 1
+    restoring = false
+  }
+}
+
+function isUndoKey(event: KeyboardEvent): 'undo' | 'redo' | null {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey) return null
+  const key = event.key.toLowerCase()
+  if (key === 'z') return event.shiftKey ? 'redo' : 'undo'
+  if (key === 'y' && !event.shiftKey) return 'redo'
+  return null
+}
+
+// ------------------------------------------------------------------ block selection
+
+const root = ref<HTMLElement | null>(null)
+/** Blocks selected as a whole (across block boundaries), from anchor to focus. */
+const blockSelection = ref<{ anchor: string; focus: string } | null>(null)
+let dragStart: string | null = null
+
+const selectedIds = computed(() => {
+  const sel = blockSelection.value
+  const list = blocks.value ?? []
+  if (!sel) return [] as string[]
+  const a = list.findIndex((b) => b.id === sel.anchor)
+  const f = list.findIndex((b) => b.id === sel.focus)
+  if (a === -1 || f === -1) return []
+  return list.slice(Math.min(a, f), Math.max(a, f) + 1).map((b) => b.id)
+})
+const selectedSet = computed(() => new Set(selectedIds.value))
+
+function selectBlocks(anchor: string, focus: string) {
+  flushAll()
+  typing = false
+  const active = document.activeElement
+  if (active instanceof HTMLElement && root.value?.contains(active)) active.blur()
+  document.getSelection()?.removeAllRanges()
+  blockSelection.value = { anchor, focus }
+  root.value?.focus({ preventScroll: true })
+}
+
+function clearSelection() {
+  blockSelection.value = null
+}
+
+/** Whether the text selection reaches the start/end of the block, so Shift+arrow leaves it. */
+function selectionTouches(el: HTMLElement, edge: 'first' | 'last'): boolean {
+  if (isTextarea(el))
+    return edge === 'first' ? el.selectionStart === 0 : el.selectionEnd === el.value.length
+  const selection = document.getSelection()
+  if (!selection?.rangeCount) return false
+  const range = selection.getRangeAt(0)
+  if (!el.contains(range.commonAncestorContainer)) return false
+  const probe = document.createRange()
+  probe.selectNodeContents(el)
+  if (edge === 'first') probe.setEnd(range.startContainer, range.startOffset)
+  else probe.setStart(range.endContainer, range.endOffset)
+  return probe.toString().length === 0
+}
+
+function selectedBlocks(): Block[] {
+  return (blocks.value ?? []).filter((b) => selectedSet.value.has(b.id))
+}
+
+function selectionMarkdown(): string {
+  return blocksToMarkdown(selectedBlocks().map((b) => ({ ...b, content: currentContent(b) })))
+}
+
+async function deleteSelected() {
+  const ids = selectedSet.value
+  const list = blocks.value ?? []
+  if (ids.size === 0) return
+  checkpoint()
+  const first = list.findIndex((b) => ids.has(b.id))
+  const before = list[first - 1]
+  const after = list.slice(first).find((b) => !ids.has(b.id))
+  const keep = snapshot().filter((b) => !ids.has(b.id))
+  for (const id of ids) cancelTimer(id)
+  clearSelection()
+  if (before) pendingFocus = { id: before.id, offset: 'end' }
+  else if (after) pendingFocus = { id: after.id, offset: 0 }
+  await structural(
+    before?.id ?? after?.id ?? props.documentId,
+    (current) => current.filter((b) => !ids.has(b.id)),
+    () => store.applyBlockState(props.documentId, keep),
+  )
+}
+
+function onRootKeydown(event: KeyboardEvent) {
+  const sel = blockSelection.value
+  if (!sel || event.target !== root.value) return
+  const list = blocks.value ?? []
+  const undo = isUndoKey(event)
+  if (undo) {
+    event.preventDefault()
+    clearSelection()
+    void restore(undo)
+    return
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+    event.preventDefault()
+    if (list.length) blockSelection.value = { anchor: list[0]!.id, focus: list.at(-1)!.id }
+    return
+  }
+  switch (event.key) {
+    case 'ArrowUp':
+    case 'ArrowDown': {
+      event.preventDefault()
+      const index = list.findIndex((b) => b.id === sel.focus)
+      const next = list[index + (event.key === 'ArrowUp' ? -1 : 1)]
+      if (event.shiftKey) {
+        if (next) blockSelection.value = { anchor: sel.anchor, focus: next.id }
+      } else {
+        const id = (next ?? list[index])?.id
+        if (id) blockSelection.value = { anchor: id, focus: id }
+      }
+      return
+    }
+    case 'Escape':
+      event.preventDefault()
+      clearSelection()
+      return
+    case 'Enter': {
+      event.preventDefault()
+      const id = sel.focus
+      clearSelection()
+      focusBlock(id, 'end')
+      return
+    }
+    case 'Backspace':
+    case 'Delete':
+      event.preventDefault()
+      void deleteSelected()
+  }
+}
+
+function onClipboard(event: ClipboardEvent) {
+  if (!blockSelection.value || document.activeElement !== root.value) return
+  event.preventDefault()
+  event.clipboardData?.setData('text/plain', selectionMarkdown())
+  if (event.type === 'cut') void deleteSelected()
+}
+
+function onRootMousedown(event: MouseEvent) {
+  const target = event.target as Element | null
+  if (blockSelection.value) clearSelection()
+  dragStart =
+    target?.closest?.('.block-input')?.closest<HTMLElement>('[data-block-id]')?.dataset.blockId ??
+    null
+}
+
+function onRootMousemove(event: MouseEvent) {
+  if (!dragStart || !(event.buttons & 1)) return
+  const over = (event.target as Element | null)?.closest?.<HTMLElement>('[data-block-id]')?.dataset
+    .blockId
+  // Dragging out of the start block switches from text to block selection.
+  if (over && (over !== dragStart || blockSelection.value)) {
+    event.preventDefault()
+    if (blockSelection.value?.focus !== over) selectBlocks(dragStart, over)
+  }
+}
+
+function endDrag() {
+  dragStart = null
+}
+
+watch(
+  () => props.documentId,
+  () => {
+    history.clear()
+    typing = false
+    clearSelection()
+  },
+)
+
 /** Editable element per block: contenteditable div, or textarea for code. */
 const elements = new Map<string, HTMLElement>()
 /** Content currently shown in each element, to tell own saves from external changes. */
 const rendered = new Map<string, string>()
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
 const inFlight = new Map<string, Promise<unknown>>()
+/** Blocks whose last save failed (e.g. storage full): their DOM is the only copy, retried. */
+const failed = new Set<string>()
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+const RETRY_DELAY_MS = 5000
 const saving = ref(0)
 const error = ref<string | null>(null)
 let pendingFocus: { id: string; offset: number | 'end' } | null = null
@@ -133,14 +412,16 @@ function autosize(el: HTMLTextAreaElement) {
   el.rows = Math.max(1, el.value.split('\n').length)
 }
 
-function isBusy(id: string): boolean {
+/** Unsaved or in-flight local edits (or an open picker): never replace this block's DOM. */
+function isBusy(id: string, allowFocused = false): boolean {
   const el = elements.get(id)
   return (
     timers.has(id) ||
     inFlight.has(id) ||
+    failed.has(id) ||
     picker.value?.blockId === id ||
     linking.value === id ||
-    (!!el && el === document.activeElement)
+    (!allowFocused && !!el && el === document.activeElement)
   )
 }
 
@@ -148,9 +429,18 @@ function isBusy(id: string): boolean {
 function syncDom(force = false) {
   for (const block of blocks.value ?? []) {
     const el = elements.get(block.id)
-    if (!el || isBusy(block.id)) continue
+    // A focused block without pending input also takes changes (e.g. pulled from another device).
+    if (!el || isBusy(block.id, true)) continue
     const linksPages = block.content.includes('](page:')
-    if ((force && linksPages) || rendered.get(block.id) !== block.content) renderBlock(block, el)
+    if (!((force && linksPages) || rendered.get(block.id) !== block.content)) continue
+    if (el === document.activeElement) {
+      const caret = caretOf(el)
+      renderBlock(block, el)
+      if (isTextarea(el)) el.setSelectionRange(caret, caret)
+      else setCaretOffset(el, Math.min(caret, textLength(el)))
+    } else {
+      renderBlock(block, el)
+    }
   }
   applyPendingFocus()
 }
@@ -206,16 +496,35 @@ function caretOf(el: HTMLElement): number {
 
 // ------------------------------------------------------------------ saving
 
+function isQuotaError(e: unknown): boolean {
+  const names = [(e as Error)?.name, (e as { inner?: Error })?.inner?.name]
+  return names.includes('QuotaExceededError')
+}
+
+function scheduleRetry() {
+  if (retryTimer) return
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    for (const id of failed) void flush(id)
+  }, RETRY_DELAY_MS)
+}
+
 function track<T>(id: string, promise: Promise<T>): Promise<T | undefined> {
   saving.value += 1
   const tracked = promise
     .then((value) => {
-      error.value = null
+      failed.delete(id)
+      if (failed.size === 0) error.value = null
       return value
     })
     .catch((e: unknown) => {
       console.error(e)
-      error.value = 'Änderung konnte nicht gespeichert werden.'
+      // Keep the text on screen and try again; never let older stored content replace it.
+      failed.add(id)
+      scheduleRetry()
+      error.value = isQuotaError(e)
+        ? 'Speicher voll: Änderung nicht gespeichert. Bitte Platz schaffen, es wird erneut versucht.'
+        : 'Änderung konnte nicht gespeichert werden, es wird erneut versucht.'
       return undefined
     })
     .finally(() => {
@@ -242,16 +551,31 @@ function scheduleSave(id: string) {
 
 async function flush(id: string) {
   cancelTimer(id)
+  typing = false
   const block = blockById.value.get(id)
   const el = elements.get(id)
-  if (!block || !el) return
+  if (!block || !el) {
+    failed.delete(id)
+    return
+  }
   const content = readContent(block, el)
   rendered.set(id, content)
   await track(id, store.updateBlock(id, { content }))
 }
 
 function flushAll() {
-  for (const id of [...timers.keys()]) void flush(id)
+  for (const id of new Set([...timers.keys(), ...failed])) void flush(id)
+}
+
+/** Before a reload (app update): write debounced edits and wait for all saves. */
+const stopPendingEdits = registerPendingEdits(async () => {
+  flushAll()
+  await Promise.all(inFlight.values())
+})
+
+/** Text that could not be stored exists only on screen: ask before the page goes away. */
+function onBeforeUnload(event: BeforeUnloadEvent) {
+  if (failed.size > 0) event.preventDefault()
 }
 
 function onVisibilityChange() {
@@ -261,14 +585,24 @@ function onVisibilityChange() {
 onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('pagehide', flushAll)
+  window.addEventListener('beforeunload', onBeforeUnload)
   document.addEventListener('mousedown', closeMenuOnOutsideClick)
+  document.addEventListener('mouseup', endDrag)
+  document.addEventListener('copy', onClipboard)
+  document.addEventListener('cut', onClipboard)
 })
 
 onBeforeUnmount(() => {
   flushAll()
+  if (retryTimer) clearTimeout(retryTimer)
+  stopPendingEdits()
   document.removeEventListener('visibilitychange', onVisibilityChange)
   window.removeEventListener('pagehide', flushAll)
+  window.removeEventListener('beforeunload', onBeforeUnload)
   document.removeEventListener('mousedown', closeMenuOnOutsideClick)
+  document.removeEventListener('mouseup', endDrag)
+  document.removeEventListener('copy', onClipboard)
+  document.removeEventListener('cut', onClipboard)
 })
 
 // ------------------------------------------------------------------ structure helpers
@@ -277,6 +611,18 @@ function neighbour(id: string, delta: -1 | 1): Block | undefined {
   const list = blocks.value ?? []
   const index = list.findIndex((b) => b.id === id)
   return index === -1 ? undefined : list[index + delta]
+}
+
+/** Image and file blocks have no text field (ADR 0012). */
+function isAtom(block: Block | undefined): boolean {
+  return block?.type === 'image' || block?.type === 'file'
+}
+
+/** Nearest block with a text field in the given direction (skips images and files). */
+function editableNeighbour(id: string, delta: -1 | 1): Block | undefined {
+  let next = neighbour(id, delta)
+  while (next && isAtom(next)) next = neighbour(next.id, delta)
+  return next
 }
 
 /** Current (possibly unsaved) content of a block. */
@@ -310,6 +656,7 @@ async function setType(block: Block, type: BlockType, attrs: BlockAttrs, offset?
 async function splitAtCaret(block: Block, el: HTMLElement) {
   const selection = document.getSelection()
   if (!selection?.rangeCount) return
+  checkpoint()
   const range = selection.getRangeAt(0)
   if (!el.contains(range.startContainer) && range.startContainer !== el) return
 
@@ -341,6 +688,7 @@ async function splitAtCaret(block: Block, el: HTMLElement) {
 }
 
 async function backspaceAtStart(block: Block, el: HTMLElement) {
+  checkpoint()
   if (block.type === 'list_item' && (block.attrs.indent ?? 0) > 0) {
     await setIndent(block, -1)
     return
@@ -350,6 +698,11 @@ async function backspaceAtStart(block: Block, el: HTMLElement) {
     return
   }
   const previous = neighbour(block.id, -1)
+  if (isAtom(previous)) {
+    // Backspace next to an image or file selects it; a second Backspace deletes it.
+    selectBlocks(previous!.id, previous!.id)
+    return
+  }
   const previousEl = previous && elements.get(previous.id)
   if (!previous || !previousEl) return
   const before = readContent(previous, previousEl)
@@ -369,7 +722,12 @@ async function backspaceAtStart(block: Block, el: HTMLElement) {
 
 async function mergeNext(block: Block, el: HTMLElement) {
   const next = neighbour(block.id, 1)
+  if (isAtom(next)) {
+    selectBlocks(next!.id, next!.id)
+    return
+  }
   if (!next || block.type === 'code') return
+  checkpoint()
   const own = readContent(block, el)
   const offset = textLength(el)
   const merged = own + convertContent(currentContent(next), next.type, block.type)
@@ -385,6 +743,7 @@ async function mergeNext(block: Block, el: HTMLElement) {
 }
 
 async function setIndent(block: Block, delta: number) {
+  checkpoint()
   const indent = Math.min(MAX_LIST_INDENT, Math.max(0, (block.attrs.indent ?? 0) + delta))
   if (indent === (block.attrs.indent ?? 0)) return
   await setType(block, 'list_item', { ...block.attrs, indent })
@@ -395,6 +754,7 @@ async function move(block: Block, direction: -1 | 1) {
   const index = list.findIndex((b) => b.id === block.id)
   const target = index + direction
   if (index === -1 || target < 0 || target >= list.length) return
+  checkpoint()
   const afterId = direction === -1 ? (list[target - 1]?.id ?? null) : list[target]!.id
   const el = elements.get(block.id)
   pendingFocus = { id: block.id, offset: el ? caretOf(el) : 0 }
@@ -410,6 +770,7 @@ async function move(block: Block, direction: -1 | 1) {
 }
 
 async function remove(block: Block) {
+  checkpoint()
   const previous = neighbour(block.id, -1) ?? neighbour(block.id, 1)
   cancelTimer(block.id)
   if (previous) pendingFocus = { id: previous.id, offset: 'end' }
@@ -431,6 +792,7 @@ async function appendParagraph() {
 }
 
 async function insertParagraphAfter(afterId: string | null) {
+  checkpoint()
   const created = draftBlock({ type: 'paragraph', attrs: {}, content: '' })
   pendingFocus = { id: created.id, offset: 0 }
   await structural(
@@ -470,6 +832,7 @@ function applyShortcut(block: Block, el: HTMLElement): boolean {
   for (const [pattern, type, attrs] of SHORTCUTS) {
     const match = pattern.exec(text)
     if (!match || getCaretOffset(el) !== match[0].length) continue
+    checkpoint()
     deleteLeadingText(el, match[0].length)
     void setType({ ...block, content: serializeDom(el) }, type, attrs, 0)
     return true
@@ -528,6 +891,25 @@ function onKeydown(block: Block, event: KeyboardEvent) {
   if (event.isComposing) return
   const mod = event.metaKey || event.ctrlKey
 
+  const undo = isUndoKey(event)
+  if (undo) {
+    event.preventDefault()
+    void restore(undo)
+    return
+  }
+  if (
+    event.shiftKey &&
+    !mod &&
+    !event.altKey &&
+    (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+  ) {
+    const up = event.key === 'ArrowUp'
+    if (selectionTouches(el, up ? 'first' : 'last')) {
+      event.preventDefault()
+      selectBlocks(block.id, neighbour(block.id, up ? -1 : 1)?.id ?? block.id)
+      return
+    }
+  }
   if (event.altKey && event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
     event.preventDefault()
     void move(block, event.key === 'ArrowUp' ? -1 : 1)
@@ -541,12 +923,14 @@ function onKeydown(block: Block, event: KeyboardEvent) {
     const key = event.key.toLowerCase()
     if (key === 'b' || key === 'i') {
       event.preventDefault()
+      checkpoint()
       document.execCommand(key === 'b' ? 'bold' : 'italic')
       scheduleSave(block.id)
       return
     }
     if (key === 'e') {
       event.preventDefault()
+      checkpoint()
       toggleInlineCode(el)
       scheduleSave(block.id)
       return
@@ -584,7 +968,7 @@ function onKeydown(block: Block, event: KeyboardEvent) {
     case 'ArrowUp':
     case 'ArrowDown': {
       const up = event.key === 'ArrowUp'
-      const target = neighbour(block.id, up ? -1 : 1)
+      const target = editableNeighbour(block.id, up ? -1 : 1)
       if (target && isCaretOnEdgeLine(el, up ? 'first' : 'last')) {
         event.preventDefault()
         focusBlock(target.id, up ? 'end' : 0)
@@ -592,7 +976,9 @@ function onKeydown(block: Block, event: KeyboardEvent) {
       return
     }
     case 'Escape':
-      el.blur()
+      // Like Notion: Escape selects the block as a whole (copy, delete, extend with Shift+arrow).
+      event.preventDefault()
+      selectBlocks(block.id, block.id)
   }
 }
 
@@ -606,24 +992,27 @@ function onCodeKeydown(block: Block, el: HTMLTextAreaElement, event: KeyboardEve
     void insertParagraphAfter(block.id)
   } else if (event.key === 'Tab' && !event.shiftKey) {
     event.preventDefault()
+    noteTyping()
     document.execCommand('insertText', false, '  ')
   } else if (event.key === 'Backspace' && atStart && el.value === '') {
     event.preventDefault()
+    checkpoint()
     void setType(block, 'paragraph', {}, 0)
   } else if (event.key === 'ArrowUp' && atStart) {
-    const previous = neighbour(block.id, -1)
+    const previous = editableNeighbour(block.id, -1)
     if (previous) {
       event.preventDefault()
       focusBlock(previous.id, 'end')
     }
   } else if (event.key === 'ArrowDown' && atEnd) {
-    const next = neighbour(block.id, 1)
+    const next = editableNeighbour(block.id, 1)
     if (next) {
       event.preventDefault()
       focusBlock(next.id, 0)
     }
   } else if (event.key === 'Escape') {
-    el.blur()
+    event.preventDefault()
+    selectBlocks(block.id, block.id)
   }
 }
 
@@ -634,15 +1023,29 @@ function onBlur(block: Block) {
 function onPaste(event: ClipboardEvent) {
   // Only plain text enters the editor; foreign HTML never reaches the DOM.
   event.preventDefault()
+  const files = [...(event.clipboardData?.files ?? [])]
+  const host = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-block-id]')
+  if (files.length) {
+    void addFiles(files, host?.dataset.blockId ?? null)
+    return
+  }
   const text = event.clipboardData?.getData('text/plain') ?? ''
+  if (text) checkpoint()
   if (text) document.execCommand('insertText', false, text.replace(/\r\n?/g, '\n'))
 }
 
 function onDrop(event: DragEvent) {
   // Like paste: dropped HTML never reaches the DOM, only its plain text.
   event.preventDefault()
+  const files = [...(event.dataTransfer?.files ?? [])]
+  if (files.length) {
+    const host = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-block-id]')
+    void addFiles(files, host?.dataset.blockId ?? null)
+    return
+  }
   const text = event.dataTransfer?.getData('text/plain') ?? ''
   if (!text) return
+  checkpoint()
   const el = event.currentTarget as HTMLElement
   const range = document.caretRangeFromPoint?.(event.clientX, event.clientY)
   if (range && el.contains(range.startContainer)) {
@@ -709,6 +1112,7 @@ async function choose(choice: PickerChoice) {
   const state = picker.value
   picker.value = null
   if (!state) return
+  checkpoint()
   linking.value = state.blockId
   try {
     await insertLink(state, choice)
@@ -773,6 +1177,53 @@ async function insertLink(
   await flush(block.id)
 }
 
+// ------------------------------------------------------------------ attachments (ADR 0012)
+
+const fileInput = ref<HTMLInputElement | null>(null)
+let insertAfterId: string | null = null
+
+function chooseFiles(afterId: string | null) {
+  insertAfterId = afterId
+  fileInput.value?.click()
+}
+
+function onFilesChosen(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = [...(input.files ?? [])]
+  input.value = ''
+  void addFiles(files, insertAfterId)
+}
+
+/** Adds files as image/file blocks after `afterId` (or at the end); works offline. */
+async function addFiles(files: File[], afterId: string | null) {
+  // Early check with the server's limit (#64); the server enforces it again.
+  const limit = maxFileBytes.value
+  const tooBig = files.filter((file) => file.size > limit)
+  if (tooBig.length) {
+    error.value = `Zu groß (höchstens ${formatBytes(limit)} pro Datei): ${tooBig.map((f) => f.name).join(', ')}`
+  }
+  checkpoint()
+  let after = afterId ?? blocks.value?.at(-1)?.id ?? null
+  for (const file of files.filter((f) => f.size <= limit)) {
+    const data = await file.arrayBuffer()
+    const added = await track(
+      after ?? props.documentId,
+      store.addAttachment(
+        props.documentId,
+        { name: file.name, type: file.type, data, sha256: await sha256Hex(data) },
+        { afterId: after },
+      ),
+    )
+    if (added) after = added.block.id
+  }
+}
+
+async function deleteAttachmentBlock(block: Block) {
+  checkpoint()
+  if (block.attrs.attachmentId) await store.deleteAttachment(block.attrs.attachmentId)
+  await remove(block)
+}
+
 // ------------------------------------------------------------------ block menu
 
 const menuFor = ref<string | null>(null)
@@ -796,6 +1247,7 @@ function closeMenuOnOutsideClick(event: MouseEvent) {
 
 async function menuAction(action: () => Promise<void>) {
   menuFor.value = null
+  checkpoint()
   await action()
 }
 
@@ -847,7 +1299,15 @@ function blockLabel(block: Block): string {
 </script>
 
 <template>
-  <div class="editor">
+  <div
+    ref="root"
+    class="editor"
+    :class="{ selecting: blockSelection }"
+    tabindex="-1"
+    @keydown="onRootKeydown"
+    @mousedown="onRootMousedown"
+    @mousemove="onRootMousemove"
+  >
     <p class="save-state muted" aria-live="polite">
       <span v-if="error" class="error" role="alert">{{ error }}</span>
       <span v-else-if="saving > 0">Speichert…</span>
@@ -858,9 +1318,16 @@ function blockLabel(block: Block): string {
       v-for="block in blocks ?? []"
       :key="block.id"
       class="block"
-      :class="blockClass(block)"
+      :class="[
+        blockClass(block),
+        { selected: selectedSet.has(block.id), 'has-conflict': conflicted.has(block.id) },
+      ]"
+      :title="
+        conflicted.has(block.id) ? 'Konflikt: siehe Konflikte in der Seitenleiste' : undefined
+      "
       :style="{ '--indent': block.attrs.indent ?? 0 }"
       :data-block-id="block.id"
+      :aria-selected="selectedSet.has(block.id) || undefined"
     >
       <button
         type="button"
@@ -874,13 +1341,15 @@ function blockLabel(block: Block): string {
       <span v-if="block.type === 'list_item'" class="list-marker" aria-hidden="true">{{
         block.attrs.list === 'ordered' ? `${listNumbers.get(block.id)}.` : '•'
       }}</span>
+      <AttachmentBlock v-if="isAtom(block)" :block="block" />
       <textarea
-        v-if="block.type === 'code'"
+        v-else-if="block.type === 'code'"
         :ref="(el) => setElement(block, el)"
         class="block-input code-input"
         spellcheck="false"
         rows="1"
         :aria-label="blockLabel(block)"
+        @beforeinput="onBeforeInput"
         @input="onInput(block, $event)"
         @keydown="onKeydown(block, $event)"
         @blur="onBlur(block)"
@@ -898,6 +1367,7 @@ function blockLabel(block: Block): string {
             ? 'Schreiben … (# Überschrift, - Liste, [[ Seitenlink)'
             : blockLabel(block)
         "
+        @beforeinput="onBeforeInput"
         @input="onInput(block, $event)"
         @keydown="onKeydown(block, $event)"
         @blur="onBlur(block)"
@@ -907,7 +1377,7 @@ function blockLabel(block: Block): string {
       ></div>
 
       <ul v-if="menuFor === block.id" class="block-menu" role="menu">
-        <li v-for="option in TYPE_OPTIONS" :key="option.label">
+        <li v-for="option in isAtom(block) ? [] : TYPE_OPTIONS" :key="option.label">
           <button
             type="button"
             role="menuitem"
@@ -916,7 +1386,16 @@ function blockLabel(block: Block): string {
             {{ option.label }}
           </button>
         </li>
-        <li class="separator" role="separator"></li>
+        <li v-if="!isAtom(block)" class="separator" role="separator"></li>
+        <li>
+          <button
+            type="button"
+            role="menuitem"
+            @click="menuAction(async () => chooseFiles(block.id))"
+          >
+            Bild/Datei einfügen …
+          </button>
+        </li>
         <li>
           <button type="button" role="menuitem" @click="menuAction(() => move(block, -1))">
             Nach oben
@@ -937,10 +1416,31 @@ function blockLabel(block: Block): string {
             Block löschen
           </button>
         </li>
+        <li v-if="isAtom(block) && block.attrs.attachmentId">
+          <button
+            type="button"
+            role="menuitem"
+            class="danger"
+            @click="menuAction(() => deleteAttachmentBlock(block))"
+          >
+            Anhang löschen
+          </button>
+        </li>
       </ul>
     </div>
 
-    <button type="button" class="add-block" @click="appendParagraph">+ Block hinzufügen</button>
+    <div class="add-row">
+      <button type="button" class="add-block" @click="appendParagraph">+ Block hinzufügen</button>
+      <button type="button" class="add-block" @click="chooseFiles(null)">+ Bild/Datei</button>
+    </div>
+    <input
+      ref="fileInput"
+      type="file"
+      multiple
+      hidden
+      data-testid="attachment-input"
+      @change="onFilesChosen"
+    />
 
     <PagePicker
       v-if="picker"

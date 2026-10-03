@@ -2,10 +2,15 @@ import { createRouter, createWebHistory } from 'vue-router'
 import WorkspaceLayout from './layouts/WorkspaceLayout.vue'
 import { lastWorkspaceId, openLocalStore, refreshWorkspaces, workspaces } from './local/context'
 import { connection, loadCurrentUser } from './session'
+import AccountView from './views/AccountView.vue'
+import ConflictsView from './views/ConflictsView.vue'
+import ExportView from './views/ExportView.vue'
+import HistoryView from './views/HistoryView.vue'
 import HomeView from './views/HomeView.vue'
 import LoginView from './views/LoginView.vue'
 import PageView from './views/PageView.vue'
 import TagView from './views/TagView.vue'
+import TrashView from './views/TrashView.vue'
 import WorkspaceHome from './views/WorkspaceHome.vue'
 
 // Views are bundled eagerly: lazy chunks could not be fetched after losing the network.
@@ -15,6 +20,7 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { requiresAuth: true } },
     { path: '/login', name: 'login', component: LoginView },
+    { path: '/account', name: 'account', component: AccountView, meta: { requiresAuth: true } },
     {
       path: '/w/:workspaceId',
       component: WorkspaceLayout,
@@ -22,7 +28,11 @@ export const router = createRouter({
       children: [
         { path: '', name: 'workspace', component: WorkspaceHome },
         { path: 'p/:documentId', name: 'page', component: PageView },
+        { path: 'p/:documentId/history', name: 'history', component: HistoryView },
         { path: 'tags/:tagId', name: 'tag', component: TagView },
+        { path: 'conflicts', name: 'conflicts', component: ConflictsView },
+        { path: 'trash', name: 'trash', component: TrashView },
+        { path: 'export', name: 'export', component: ExportView },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

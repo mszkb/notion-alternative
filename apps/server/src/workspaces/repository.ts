@@ -32,6 +32,7 @@ export async function insertWorkspace(db: Db, ownerId: string, name: string) {
     name,
     owner_id: ownerId,
     created_at: new Date().toISOString(),
+    compacted_seq: 0,
   }
   await db.insertInto('workspaces').values(row).execute()
   return row

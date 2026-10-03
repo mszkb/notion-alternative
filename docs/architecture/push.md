@@ -19,10 +19,18 @@ Beispiel-Payload:
 {
   "type": "sync_available",
   "installation": "inst_…",
-  "workspace": "ws_…",
-  "badge": 3
+  "workspace": "ws_…"
 }
 ```
+
+## Umsetzung (Phase 4)
+
+- **Ohne Bibliothek:** Verschlüsselung (RFC 8291, `aes128gcm`) und VAPID (RFC 8292, ES256) mit `node:crypto` in `apps/server/src/push/crypto.ts`, geprüft gegen den Testvektor aus RFC 8291 Anhang A. Keine neue Abhängigkeit, arm64-unkritisch.
+- **Schlüssel:** VAPID-Keypair und Installations-ID entstehen beim ersten Bedarf in der Tabelle `settings` und sind damit Teil des Datenbank-Backups. Gehen sie verloren, müssen alle Geräte Benachrichtigungen neu aktivieren.
+- **Subscriptions** (`push_subscriptions`) gehören zu einem registrierten Gerät; Entfernen des Geräts oder des Kontos löscht sie. Endpunkte nur über `https` und nur zu erlaubten Push-Diensten (`PUSH_ALLOWED_HOSTS`, Standard: Google, Mozilla, Apple, Microsoft) – die URL stammt vom Client, ohne Allowlist könnte der Server beliebige Adressen ansprechen (SSRF).
+- **Versand:** Nach jedem Push mit angewendeten Operationen (auch `merged`/`conflict`) bekommen die **anderen** Geräte des Workspace-Inhabers einen Hinweis; Änderungen innerhalb von 2 s werden zu einer Nachricht pro Gerät gebündelt (`Topic` pro Workspace, `TTL` 24 h). `404`/`410` des Push-Dienstes oder fünf Fehlschläge in Folge entfernen die Subscription.
+- **Payload** genau `{ "type": "sync_available", "installation": "…", "workspace": "…" }`; ein Test entschlüsselt die versendete Nachricht und prüft, dass nichts anderes enthalten ist. Badge-Zahlen werden nicht gesendet; der Service Worker setzt nur einen Punkt (`setAppBadge()`), die App entfernt ihn nach dem nächsten Sync.
+- **Client:** Kontoseite → „Benachrichtigungen aktivieren“ (nur per Klick). Der Service Worker leitet den Hinweis an offene Fenster weiter, die daraufhin synchronisieren; ist keine sichtbar, zeigt er eine allgemeine Benachrichtigung ohne Inhalt („Neue Änderungen“). Auf iOS nur in der installierten App.
 
 ## Später / Paid
 

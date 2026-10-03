@@ -27,7 +27,7 @@ Jede lokale Änderung erzeugt genau eine Operation:
 | `workspace_id` | Ziel-Workspace |
 | `entity` | `document` \| `block` \| `tag` \| `document_tag` (ergänzt durch [ADR 0009](0009-local-data-layer.md)) |
 | `entity_id` | Stabile ID (UUID, vom Client erzeugt) |
-| `kind` | `create` \| `update` \| `move` \| `delete` |
+| `kind` | `create` \| `update` \| `move` \| `delete` \| `restore` (Seite aus dem Papierkorb, ergänzt in Phase 5) |
 | `base_revision` | Revision der Entität, auf der die Änderung beruht (`null` bei `create`) |
 | `payload` | Geänderte Felder (bei `update`) bzw. neue Position (bei `move`) |
 | `created_at` | Zeitstempel auf dem Gerät (nur informativ, nicht zur Konfliktentscheidung) |

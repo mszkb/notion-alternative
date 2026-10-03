@@ -18,6 +18,7 @@ export async function createSession(db: Db, userId: string, ttlDays: number) {
       user_id: userId,
       created_at: now.toISOString(),
       expires_at: expiresAt.toISOString(),
+      device_id: null,
     })
     .execute()
   return { token, expiresAt }
@@ -28,7 +29,7 @@ export async function findSessionUser(db: Db, token: string) {
   return db
     .selectFrom('sessions')
     .innerJoin('users', 'users.id', 'sessions.user_id')
-    .select(['users.id', 'users.email', 'users.created_at'])
+    .select(['users.id', 'users.email', 'users.created_at', 'sessions.device_id'])
     .where('sessions.id', '=', hashToken(token))
     .where('sessions.expires_at', '>', new Date().toISOString())
     .executeTakeFirst()
@@ -40,4 +41,17 @@ export async function deleteSession(db: Db, token: string): Promise<void> {
 
 export async function deleteExpiredSessions(db: Db): Promise<void> {
   await db.deleteFrom('sessions').where('expires_at', '<=', new Date().toISOString()).execute()
+}
+
+/** Ends every session of the user except the one identified by `keepToken`. */
+export async function deleteOtherSessions(db: Db, userId: string, keepToken: string) {
+  await db
+    .deleteFrom('sessions')
+    .where('user_id', '=', userId)
+    .where('id', '!=', hashToken(keepToken))
+    .execute()
+}
+
+export function sessionId(token: string): string {
+  return hashToken(token)
 }

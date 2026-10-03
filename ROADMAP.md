@@ -42,8 +42,10 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 - [x] Images auch für `linux/arm64` (CI-Build, Raspberry Pi gemessen)
 - [x] Datenbank (SQLite) & Migrationen
 - [x] Observability: strukturierte Logs, Healthchecks
-- [ ] Observability: Metriken
-- [ ] Login-Rate-Limiting, Passwort ändern
+- [x] Observability: Metriken
+- [x] Login-Rate-Limiting, Passwort ändern
+
+Idee für später: Passwort-Reset durch den Admin per CLI im Backend-Container (kein Mailversand im MVP).
 
 ## Phase 2 – Local editor
 
@@ -57,51 +59,53 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Lokale Volltextsuche
 - [x] App startet ohne Server aus lokalen Daten (T-OFF-01, T-OFF-02 automatisiert)
 
-Offen bzw. später: blockübergreifendes Undo und Markieren über Blockgrenzen ([ADR 0008](docs/adr/0008-block-editor.md)); „Lokale Daten löschen“ beim Abmelden (Phase 3, Geräteverwaltung); App-Dateien offline cachen (Phase 4, Service Worker).
+- [x] Blockübergreifendes Undo/Redo und Markieren ganzer Blöcke (Kopieren als Markdown, Löschen) – [ADR 0008](docs/adr/0008-block-editor.md)
+
+„Lokale Daten löschen“ beim Abmelden ist mit Phase 3 umgesetzt, App-Dateien offline cachen mit Phase 4 (Service Worker).
 
 ## Phase 3 – Sync
 
-- [ ] Geräteverwaltung (Device-ID, Registrierung)
-- [ ] Änderungslog mit Revisionen
-- [ ] Delta-Sync mit Cursor
-- [ ] Offline-Queue mit idempotenten Operationen
-- [ ] Tombstones für Löschungen
-- [ ] Vollständiger Re-Sync
-- [ ] Sync-Trigger: Start, Fokuswechsel, Push, periodisch
-- [ ] Konfliktanzeige (gemäß ADR 0003)
-- [ ] Serverseitige Volltextsuche (SQLite FTS5)
+- [x] Geräteverwaltung (Device-ID, Registrierung, Umbenennen/Entfernen)
+- [x] Änderungslog mit Revisionen (Server: Entitäten, `changes`, `applyOperation`)
+- [x] Delta-Sync mit Cursor (`GET /api/sync/pull`)
+- [x] Offline-Queue mit idempotenten Operationen (`POST /api/sync/push`)
+- [x] Tombstones für Löschungen (Replikation, Löschen vs. Bearbeiten als Konflikt)
+- [x] Vollständiger Re-Sync (`GET /api/sync/snapshot`, `410`, „Neu synchronisieren“)
+- [x] Sync-Trigger: Start, Fokuswechsel, Push (Hook), periodisch
+- [x] Block-Merge und Konfliktanzeige (gemäß ADR 0003)
+- [x] Serverseitige Volltextsuche (SQLite FTS5)
 
 ## Phase 4 – PWA
 
-- [ ] Web App Manifest
-- [ ] Service Worker
-- [ ] Installationsflow (inkl. iOS-Hinweise)
-- [ ] Cache-Strategie
-- [ ] Web Push (VAPID, Subscription nach Nutzeraktion)
+- [x] Web App Manifest (Icons inkl. maskable/Apple, iOS-Meta-Tags)
+- [x] Service Worker (eigener, ohne Bibliothek; Update-Hinweis, Push-Handler)
+- [x] Installationsflow (inkl. iOS-Hinweise, [Anleitung](docs/user/installation.md); iOS-Test manuell)
+- [x] Cache-Strategie ([`caching.md`](docs/architecture/caching.md))
+- [x] Web Push (VAPID, Subscription nach Nutzeraktion; ohne Bibliothek, Payload ohne Inhalte)
 - [ ] HTTPS für Smartphones/weitere Geräte entscheiden (Optionen in [ADR 0010](docs/adr/0010-reference-deployment-and-https.md))
 
 ## Phase 5 – Files and history
 
-- [ ] Dateianhänge
-- [ ] S3-kompatiblen Object Storage anbinden (optional, ersetzt Datei-Volume)
-- [ ] Speicher- und Größenlimits
-- [ ] Versionen / Revisionsverlauf
-- [ ] Wiederherstellung früherer Versionen
+- [x] Dateianhänge (Bild/Datei, offline anlegbar, [ADR 0012](docs/adr/0012-attachments.md))
+- [x] S3-kompatiblen Object Storage anbinden (optional, ersetzt Datei-Volume; Migration per Befehl)
+- [x] Speicher- und Größenlimits (pro Datei und pro Workspace, Anzeige auf der Kontoseite)
+- [x] Versionen / Revisionsverlauf (aus dem Änderungslog, Diff zur aktuellen Version, [ADR 0013](docs/adr/0013-version-history.md))
+- [x] Wiederherstellung früherer Versionen (ganze Version oder einzelne Blöcke, Papierkorb)
 
 ## Phase 6 – Export/import
 
-- [ ] Markdown-Export
-- [ ] JSON-Export
-- [ ] ZIP-Export (inkl. Anhänge)
-- [ ] Import in frische Installation
-- [ ] Round-Trip-Importtests
+- [x] Markdown-Export
+- [x] JSON-Export
+- [x] ZIP-Export (inkl. Anhänge)
+- [x] Import in frische Installation
+- [x] Round-Trip-Importtests
 
 ## Phase 7 – Hardening
 
-- [ ] Konflikttests (Mehrgeräte)
-- [ ] Offline-Tests
-- [ ] Security Review
-- [ ] Backup/Restore automatisiert getestet
+- [x] Konflikttests (Mehrgeräte)
+- [x] Offline-Tests
+- [x] Security Review
+- [x] Backup/Restore automatisiert getestet
 - [ ] Backup-/Restore-Dokumentation
 - [ ] Lasttests
 

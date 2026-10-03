@@ -1,10 +1,24 @@
 import { Migrator, type Migration } from 'kysely/migration'
 import type { Db } from './database'
 import * as m0001 from './migrations/0001_initial'
+import * as m0002 from './migrations/0002_devices'
+import * as m0003 from './migrations/0003_sync'
+import * as m0004 from './migrations/0004_change_log_floor'
+import * as m0005 from './migrations/0005_search'
+import * as m0006 from './migrations/0006_conflicts'
+import * as m0007 from './migrations/0007_push'
+import * as m0008 from './migrations/0008_attachments'
 
 // Migrations are registered statically so they survive bundling.
-const migrations: Record<string, Migration> = {
+export const migrations: Record<string, Migration> = {
   '0001_initial': m0001,
+  '0002_devices': m0002,
+  '0003_sync': m0003,
+  '0004_change_log_floor': m0004,
+  '0005_search': m0005,
+  '0006_conflicts': m0006,
+  '0007_push': m0007,
+  '0008_attachments': m0008,
 }
 
 export async function migrateToLatest(db: Db): Promise<void> {

@@ -29,7 +29,16 @@ export const documentSchema = z.object({
 })
 export type Document = z.infer<typeof documentSchema>
 
-export const blockTypeSchema = z.enum(['paragraph', 'heading', 'list_item', 'quote', 'code'])
+export const blockTypeSchema = z.enum([
+  'paragraph',
+  'heading',
+  'list_item',
+  'quote',
+  'code',
+  // Attachment blocks (ADR 0012): `attrs.attachmentId`, `content` is the caption.
+  'image',
+  'file',
+])
 export type BlockType = z.infer<typeof blockTypeSchema>
 
 export const blockAttrsSchema = z
@@ -42,6 +51,8 @@ export const blockAttrsSchema = z
     indent: z.number().int().min(0).max(MAX_LIST_INDENT).optional(),
     /** Language hint (`code`). */
     language: z.string().max(40).optional(),
+    /** Attachment shown by an `image` or `file` block. */
+    attachmentId: z.uuid().optional(),
   })
   .strict()
 export type BlockAttrs = z.infer<typeof blockAttrsSchema>
@@ -78,10 +89,29 @@ export const documentTagSchema = z.object({
 })
 export type DocumentTag = z.infer<typeof documentTagSchema>
 
-export const operationEntitySchema = z.enum(['document', 'block', 'tag', 'document_tag'])
+/** Content entities clients change directly. */
+export const contentEntitySchema = z.enum([
+  'document',
+  'block',
+  'tag',
+  'document_tag',
+  'attachment',
+])
+export type ContentEntity = z.infer<typeof contentEntitySchema>
+
+/** `conflict` is created by the server; clients only resolve it (ADR 0003). */
+export const operationEntitySchema = z.enum([
+  'document',
+  'block',
+  'tag',
+  'document_tag',
+  'attachment',
+  'conflict',
+])
 export type OperationEntity = z.infer<typeof operationEntitySchema>
 
-export const operationKindSchema = z.enum(['create', 'update', 'move', 'delete'])
+/** `restore` lifts a page's tombstone (trash, #66); only pages can be restored. */
+export const operationKindSchema = z.enum(['create', 'update', 'move', 'delete', 'restore'])
 export type OperationKind = z.infer<typeof operationKindSchema>
 
 /** One local change, transferred idempotently by `opId` (ADR 0002). */
@@ -100,3 +130,77 @@ export const operationSchema = z.object({
   createdAt: z.string(),
 })
 export type Operation = z.infer<typeof operationSchema>
+
+export const conflictReasonSchema = z.enum(['changed', 'deleted', 'parent_deleted'])
+export type ConflictReason = z.infer<typeof conflictReasonSchema>
+
+export const conflictResolutionSchema = z.enum(['local', 'remote', 'manual'])
+export type ConflictResolution = z.infer<typeof conflictResolutionSchema>
+
+/**
+ * A change the server could not apply because another device changed (or deleted) the same
+ * entity or field first (ADR 0003). Both versions are kept until a user decides.
+ */
+export const conflictSchema = z.object({
+  id: z.uuid(),
+  workspaceId: z.uuid(),
+  entity: contentEntitySchema,
+  entityId: z.uuid(),
+  /** Page the conflict belongs to, for display. */
+  documentId: z.uuid().nullable(),
+  reason: conflictReasonSchema,
+  /** Revision the rejected change was based on. */
+  baseRevision: z.number().int().nonnegative().nullable(),
+  /** The change that was not applied ("this device" for its author). */
+  local: z.object({
+    kind: z.enum(['create', 'update', 'move', 'delete', 'restore']),
+    payload: z.record(z.string(), z.unknown()),
+    deviceId: z.uuid(),
+    opId: z.uuid(),
+  }),
+  /** Server state of the entity when the conflict arose (null if it did not exist). */
+  remote: z.record(z.string(), z.unknown()).nullable(),
+  createdAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  resolution: conflictResolutionSchema.nullable(),
+  ...syncFields,
+})
+export type Conflict = z.infer<typeof conflictSchema>
+
+export const ATTACHMENT_NAME_MAX_LENGTH = 255
+
+/** File attached to a page (ADR 0012). The content never changes for a given id. */
+export const attachmentSchema = z.object({
+  id: z.uuid(),
+  workspaceId: z.uuid(),
+  documentId: z.uuid(),
+  name: z.string().trim().min(1).max(ATTACHMENT_NAME_MAX_LENGTH),
+  mimeType: z
+    .string()
+    .max(100)
+    .regex(/^[\w.+-]+\/[\w.+-]+$/),
+  size: z.number().int().nonnegative(),
+  /** Hex SHA-256 of the content; the upload must match. */
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  createdAt: z.string(),
+  ...syncFields,
+})
+export type Attachment = z.infer<typeof attachmentSchema>
+
+/** Raster images that may be shown inline; everything else is only offered as download. */
+export const INLINE_IMAGE_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+]
+
+/** `GET /api/attachments/usage`: storage of a workspace and the limits set by the operator. */
+export interface AttachmentUsage {
+  usedBytes: number
+  /** null: no workspace limit configured. */
+  quotaBytes: number | null
+  maxFileBytes: number
+  count: number
+}

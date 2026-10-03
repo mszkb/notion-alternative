@@ -14,3 +14,14 @@ export const createWorkspaceInputSchema = z.object({
   name: workspaceNameSchema,
 })
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>
+
+export const searchQuerySchema = z.object({
+  workspaceId: z.uuid(),
+  q: z.string().trim().min(1).max(200),
+})
+
+export interface ServerSearchHit {
+  documentId: string
+  title: string
+  snippet: string
+}

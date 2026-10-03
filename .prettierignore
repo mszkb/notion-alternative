@@ -4,3 +4,4 @@ coverage
 *.md
 test-results
 playwright-report
+docs/architecture/export.schema.json

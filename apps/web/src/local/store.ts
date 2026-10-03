@@ -1,11 +1,22 @@
 import {
+  type Attachment,
+  type AttachmentCreatePayload,
   type Block,
   type BlockAttrs,
+  type BlockCreatePayload,
   type BlockType,
   blockSchema,
+  type Change,
+  type Conflict,
+  type ConflictCreatePayload,
+  type ConflictResolution,
+  type ConflictUpdatePayload,
   compareBySortKey,
   type Document,
+  type DocumentCreatePayload,
   type DocumentTag,
+  type DocumentTagCreatePayload,
+  type ExportInput,
   documentSchema,
   documentTitleSchema,
   extractPageLinks,
@@ -14,12 +25,18 @@ import {
   type OperationEntity,
   type OperationKind,
   sortKeyBetween,
+  type SyncPushResult,
+  type SyncSnapshotResponse,
   type Tag,
+  type TagCreatePayload,
   tagNameSchema,
   tagSchema,
+  INLINE_IMAGE_TYPES,
+  attachmentSchema,
+  validateOperationPayload,
   type Workspace,
 } from '@notion-alt/shared'
-import type { LocalDb } from './db'
+import type { AttachmentContent, LocalDb, QueuedOperation } from './db'
 
 export class LocalStoreError extends Error {
   override name = 'LocalStoreError'
@@ -48,11 +65,24 @@ export interface NewBlock {
 
 export type BlockPatch = Partial<Pick<Block, 'type' | 'content' | 'attrs'>>
 
+/** A block as seen by undo/redo: everything the user can change, in document order. */
+export type BlockState = Pick<Block, 'id' | 'type' | 'content' | 'attrs'>
+
 interface WriteContext {
   touched: Map<string, Set<string>>
 }
 
-const CONTENT_TABLES = ['documents', 'blocks', 'tags', 'documentTags', 'operations', 'links']
+const CONTENT_TABLES = [
+  'documents',
+  'blocks',
+  'tags',
+  'documentTags',
+  'operations',
+  'links',
+  'conflicts',
+  'attachments',
+  'attachmentContents',
+]
 
 /**
  * The only write path for local content (ADR 0009). Every mutation writes the content change and
@@ -91,11 +121,27 @@ export class LocalStore {
     // The scope must be an `async` function: Dexie only then tracks native awaits and keeps the
     // transaction alive across them (otherwise it may commit early).
     const result = await this.db.transaction('rw', CONTENT_TABLES, async () => fn(ctx))
+    this.notify(ctx)
+    return result
+  }
+
+  private notify(ctx: WriteContext) {
     for (const [workspaceId, ids] of ctx.touched) {
       const change = { workspaceId, documentIds: [...ids] }
       for (const listener of this.listeners) listener(change)
     }
-    return result
+  }
+
+  /** Local table of each synchronised entity. */
+  private get entityTables() {
+    return {
+      document: this.db.documents,
+      block: this.db.blocks,
+      tag: this.db.tags,
+      document_tag: this.db.documentTags,
+      attachment: this.db.attachments,
+      conflict: this.db.conflicts,
+    } as const
   }
 
   private mark(ctx: WriteContext, workspaceId: string, documentId: string) {
@@ -172,6 +218,53 @@ export class LocalStore {
   async getDocument(id: string): Promise<Document | undefined> {
     const document = await this.db.documents.get(id)
     return document && !document.deletedAt ? document : undefined
+  }
+
+  /** Deleted pages to offer in the trash: those whose parent is not deleted too. */
+  async trashedDocuments(workspaceId: string): Promise<Document[]> {
+    const all = await this.db.documents.where('workspaceId').equals(workspaceId).toArray()
+    const byId = new Map(all.map((d) => [d.id, d]))
+    return all
+      .filter((d) => d.deletedAt && !(d.parentId && byId.get(d.parentId)?.deletedAt))
+      .sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''))
+  }
+
+  /**
+   * Restores a deleted page with its deleted subpages (trash, #66), offline too. Blocks, tags
+   * and links were kept with the tombstone, so everything comes back under the same ids.
+   */
+  async restoreDocument(id: string): Promise<string[]> {
+    return this.write(async (ctx) => {
+      const root = await this.db.documents.get(id)
+      if (!root?.deletedAt) return []
+      const all = await this.db.documents.where('workspaceId').equals(root.workspaceId).toArray()
+      const restored: Document[] = []
+      const visit = (document: Document) => {
+        restored.push(document)
+        for (const child of all) {
+          if (child.parentId === document.id && child.deletedAt) visit(child)
+        }
+      }
+      visit(root)
+      for (const document of restored) {
+        await this.db.documents.update(document.id, { deletedAt: null })
+        await this.enqueue(
+          document.workspaceId,
+          'document',
+          document.id,
+          'restore',
+          document.revision,
+          {},
+        )
+        this.mark(ctx, document.workspaceId, document.id)
+      }
+      return restored.map((document) => document.id)
+    })
+  }
+
+  /** Title of a page, also of a deleted one (conflicts may refer to it). */
+  async documentTitle(id: string): Promise<string | null> {
+    return (await this.db.documents.get(id))?.title ?? null
   }
 
   private async children(workspaceId: string, parentId: string | null): Promise<Document[]> {
@@ -415,14 +508,53 @@ export class LocalStore {
     return this.write(async (ctx) => this.patchBlock(ctx, id, patch))
   }
 
+  private async relocateBlock(ctx: WriteContext, id: string, position: Position): Promise<void> {
+    const { block, document } = await this.requireBlock(id)
+    const sortKey = LocalStore.sortKeyAt(await this.listBlocks(document.id), position, id)
+    if (sortKey === block.sortKey) return
+    await this.db.blocks.update(id, { sortKey })
+    await this.enqueue(document.workspaceId, 'block', id, 'move', block.revision, { sortKey })
+    await this.touch(ctx, document)
+  }
+
   async moveBlock(id: string, position: Position): Promise<void> {
-    await this.write(async (ctx) => {
-      const { block, document } = await this.requireBlock(id)
-      const sortKey = LocalStore.sortKeyAt(await this.listBlocks(document.id), position, id)
-      if (sortKey === block.sortKey) return
-      await this.db.blocks.update(id, { sortKey })
-      await this.enqueue(document.workspaceId, 'block', id, 'move', block.revision, { sortKey })
-      await this.touch(ctx, document)
+    await this.write((ctx) => this.relocateBlock(ctx, id, position))
+  }
+
+  /**
+   * Brings a document's blocks to `target` (undo/redo, deleting a selection) with ordinary
+   * operations in one transaction. Blocks that no longer exist are recreated under a new id,
+   * because tombstones stay final (sync invariant). Returns the old → new ids of recreated blocks.
+   */
+  async applyBlockState(documentId: string, target: BlockState[]): Promise<Map<string, string>> {
+    return this.write(async (ctx) => {
+      const document = await this.requireDocument(documentId)
+      const current = await this.listBlocks(documentId)
+      const wanted = new Set(target.map((state) => state.id))
+      for (const block of current) {
+        if (!wanted.has(block.id)) await this.removeBlock(ctx, block.id)
+      }
+      const existing = new Set(current.map((block) => block.id))
+      const recreated = new Map<string, string>()
+      // Invariant: after each step, the processed target blocks lead the list in target order.
+      let previousId: string | null = null
+      for (const state of target) {
+        const fields = { type: state.type, content: state.content, attrs: state.attrs }
+        let id = state.id
+        if (existing.has(id)) {
+          await this.patchBlock(ctx, id, fields)
+          const list = await this.listBlocks(documentId)
+          const index = list.findIndex((block) => block.id === id)
+          if ((index > 0 ? list[index - 1]!.id : null) !== previousId) {
+            await this.relocateBlock(ctx, id, { afterId: previousId })
+          }
+        } else {
+          id = (await this.insertBlock(ctx, document, fields, { afterId: previousId })).id
+          recreated.set(state.id, id)
+        }
+        previousId = id
+      }
+      return recreated
     })
   }
 
@@ -550,7 +682,794 @@ export class LocalStore {
     return this.db.operations.count()
   }
 
-  /** Replaces the cached workspace list with the server's (read-only cache, not synced). */
+  /** Queued operations the server did not accept (conflict or rejected); they stay queued. */
+  async operationsWithIssues(): Promise<QueuedOperation[]> {
+    return (await this.db.operations.toArray()).filter((op) => op.issue)
+  }
+
+  /** Oldest queued operations after `afterSeq`, in creation order (sync push). */
+  async queuedOperations(afterSeq: number, limit: number): Promise<QueuedOperation[]> {
+    return this.db.operations.where('seq').above(afterSeq).limit(limit).toArray()
+  }
+
+  /**
+   * Applies push results in one transaction: confirmed operations leave the queue and their
+   * entity learns the server revision; conflicts and rejections stay queued and are marked.
+   */
+  async acknowledge(results: SyncPushResult[]): Promise<void> {
+    const tables = this.entityTables
+    await this.db.transaction('rw', CONTENT_TABLES, async () => {
+      for (const result of results) {
+        const op = await this.db.operations.where('opId').equals(result.opId).first()
+        if (!op?.seq) continue
+        if (result.status === 'conflict') {
+          // The server keeps this change in a conflict object (both versions); it arrives with
+          // the next pull, so the operation leaves the queue (ADR 0003).
+          await this.db.operations.delete(op.seq)
+        } else if (
+          result.status === 'applied' ||
+          result.status === 'duplicate' ||
+          result.status === 'merged'
+        ) {
+          await this.db.operations.delete(op.seq)
+          const table = tables[op.entity]
+          const entity = await table.get(op.entityId)
+          if (entity && (entity.revision ?? 0) < result.revision) {
+            await table.update(op.entityId, { revision: result.revision })
+          }
+        } else {
+          await this.db.operations.update(op.seq, {
+            issue: {
+              status: 'rejected',
+              code: result.code,
+              message: result.message,
+              at: this.now(),
+            },
+          })
+        }
+      }
+    })
+  }
+
+  // ---------------------------------------------------------------- pull
+
+  private static cursorKey(workspaceId: string): string {
+    return `syncCursor:${workspaceId}`
+  }
+
+  /** Last change-log `seq` of the workspace applied locally (0 = nothing yet). */
+  async syncCursor(workspaceId: string): Promise<number> {
+    const entry = await this.db.meta.get(LocalStore.cursorKey(workspaceId))
+    return typeof entry?.value === 'number' ? entry.value : 0
+  }
+
+  /**
+   * Applies pulled changes and stores the new cursor in one transaction (an interrupted pull
+   * repeats the whole page), without creating operations. Own changes only confirm: their queue
+   * entry leaves, the revision is stored. Entities with unsynced local operations stay as they
+   * are; their push then meets the conflict path instead of being overwritten (principle 6).
+   */
+  async applyRemoteChanges(workspaceId: string, changes: Change[], cursor: number): Promise<void> {
+    const ctx: WriteContext = { touched: new Map() }
+    await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
+      for (const change of changes) await this.applyRemoteChange(ctx, workspaceId, change)
+      await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
+    })
+    this.notify(ctx)
+  }
+
+  private async applyRemoteConflict(ctx: WriteContext, workspaceId: string, change: Change) {
+    if (change.kind === 'create') {
+      const p = change.payload as ConflictCreatePayload
+      const conflict: Conflict = {
+        id: change.entityId,
+        workspaceId,
+        ...p,
+        revision: change.revision,
+        deletedAt: null,
+      }
+      await this.db.conflicts.put(conflict)
+      if (p.local.deviceId === this.deviceId) await this.adoptRemote(conflict)
+      if (conflict.documentId) this.mark(ctx, workspaceId, conflict.documentId)
+    } else if (change.kind === 'update') {
+      const p = change.payload as ConflictUpdatePayload
+      const conflict = await this.db.conflicts.get(change.entityId)
+      await this.db.conflicts.update(change.entityId, {
+        resolution: p.resolution,
+        resolvedAt: change.appliedAt,
+        revision: change.revision,
+      })
+      if (conflict?.documentId) this.mark(ctx, workspaceId, conflict.documentId)
+    }
+  }
+
+  /**
+   * On the device whose change became a conflict: show the server state again (its own version
+   * lives on in the conflict until the user decides). Newer local edits of the entity stay.
+   */
+  private async adoptRemote(conflict: Conflict) {
+    if ((await this.db.operations.where('entityId').equals(conflict.entityId).count()) > 0) return
+    if (conflict.remote) {
+      await this.entityTables[conflict.entity].put(conflict.remote as never)
+      if (conflict.entity === 'block') {
+        const block = conflict.remote as unknown as Block
+        const document = await this.db.documents.get(block.documentId)
+        if (block.deletedAt) await this.db.links.delete(block.id)
+        else if (document) await this.updateLinks(block, document)
+      }
+    }
+    // The page was deleted elsewhere; its tombstone was held back while this device had edits.
+    if (conflict.reason === 'parent_deleted' && conflict.documentId) {
+      const document = await this.db.documents.get(conflict.documentId)
+      if (document && !document.deletedAt) {
+        await this.db.documents.update(conflict.documentId, { deletedAt: conflict.createdAt })
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- conflicts
+
+  /** Open conflicts of a workspace, newest first. */
+  async openConflicts(workspaceId: string): Promise<Conflict[]> {
+    const all = await this.db.conflicts.where('workspaceId').equals(workspaceId).toArray()
+    return all
+      .filter((conflict) => !conflict.resolvedAt)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }
+
+  /**
+   * Resolves a conflict (ADR 0003), offline too: the chosen side becomes ordinary operations,
+   * plus a `conflict` update operation that marks it resolved on every device. Changes on a page
+   * that was deleted elsewhere come back as a copy (tombstones stay final). Returns the id of a
+   * restored page, if one was created.
+   */
+  async resolveConflict(
+    id: string,
+    resolution: ConflictResolution,
+    manualContent?: string,
+  ): Promise<string | null> {
+    return this.write(async (ctx) => {
+      const conflict = await this.db.conflicts.get(id)
+      if (!conflict || conflict.resolvedAt) {
+        throw new LocalStoreError(`Conflict ${id} not found or already resolved`)
+      }
+      let restored: string | null = null
+      if (resolution !== 'remote') {
+        restored = await this.applyLocalSide(
+          ctx,
+          conflict,
+          resolution === 'manual' ? manualContent : undefined,
+        )
+      }
+      await this.db.conflicts.update(id, { resolution, resolvedAt: this.now() })
+      await this.enqueue(conflict.workspaceId, 'conflict', id, 'update', conflict.revision, {
+        resolution,
+      })
+      if (conflict.documentId) this.mark(ctx, conflict.workspaceId, conflict.documentId)
+      return restored
+    })
+  }
+
+  private async applyLocalSide(
+    ctx: WriteContext,
+    conflict: Conflict,
+    manualContent: string | undefined,
+  ): Promise<string | null> {
+    const { kind, payload } = conflict.local
+    if (conflict.reason !== 'changed') return this.restoreAsCopy(ctx, conflict, manualContent)
+    if (conflict.entity === 'block') {
+      const block = await this.db.blocks.get(conflict.entityId)
+      if (!block || block.deletedAt) return this.restoreAsCopy(ctx, conflict, manualContent)
+      if (manualContent !== undefined)
+        await this.patchBlock(ctx, block.id, { content: manualContent })
+      else if (kind === 'delete') await this.removeBlock(ctx, block.id)
+      else if (kind === 'move') {
+        const { document } = await this.requireBlock(block.id)
+        await this.db.blocks.update(block.id, { sortKey: payload.sortKey as string })
+        await this.enqueue(document.workspaceId, 'block', block.id, 'move', block.revision, {
+          sortKey: payload.sortKey,
+        })
+        await this.touch(ctx, document)
+      } else await this.patchBlock(ctx, block.id, payload as BlockPatch)
+    } else if (conflict.entity === 'document') {
+      const document = await this.db.documents.get(conflict.entityId)
+      if (!document || document.deletedAt) return this.restoreAsCopy(ctx, conflict, manualContent)
+      if (kind === 'delete') {
+        await this.db.documents.update(document.id, { deletedAt: this.now() })
+        await this.enqueue(
+          document.workspaceId,
+          'document',
+          document.id,
+          'delete',
+          document.revision,
+          {},
+        )
+      } else {
+        const fields =
+          manualContent !== undefined ? { title: manualContent } : (payload as Partial<Document>)
+        await this.db.documents.update(document.id, fields)
+        await this.enqueue(
+          document.workspaceId,
+          'document',
+          document.id,
+          kind === 'move' ? 'move' : 'update',
+          document.revision,
+          fields,
+        )
+      }
+      this.mark(ctx, document.workspaceId, document.id)
+    }
+    // Tags and assignments: keeping the server state is the only sensible outcome.
+    return null
+  }
+
+  /**
+   * Brings back a page that was deleted elsewhere, with this device's change applied, as a new
+   * page next to where it was (new ids: tombstones are final).
+   */
+  private async restoreAsCopy(
+    ctx: WriteContext,
+    conflict: Conflict,
+    manualContent: string | undefined,
+  ): Promise<string | null> {
+    if (!conflict.documentId) return null
+    const source = await this.db.documents.get(conflict.documentId)
+    if (!source) return null
+    const parent = source.parentId ? await this.db.documents.get(source.parentId) : undefined
+    const local = conflict.local.payload as Record<string, unknown>
+    const title =
+      conflict.entity === 'document' && typeof local.title === 'string' ? local.title : source.title
+    const copy = documentSchema.parse({
+      id: newId(),
+      workspaceId: source.workspaceId,
+      parentId: parent && !parent.deletedAt ? parent.id : null,
+      title: `${title} (wiederhergestellt)`.slice(0, 500),
+      sortKey: LocalStore.sortKeyAt(
+        (await this.listDocuments(source.workspaceId)).filter(
+          (d) => d.parentId === (parent && !parent.deletedAt ? parent.id : null),
+        ),
+        {},
+      ),
+      favorite: false,
+      createdAt: this.now(),
+      updatedAt: this.now(),
+      revision: null,
+      deletedAt: null,
+    } satisfies Document)
+    await this.db.documents.add(copy)
+    await this.enqueue(copy.workspaceId, 'document', copy.id, 'create', null, {
+      parentId: copy.parentId,
+      title: copy.title,
+      sortKey: copy.sortKey,
+      favorite: copy.favorite,
+      createdAt: copy.createdAt,
+    })
+    const blocks = (await this.db.blocks.where('documentId').equals(source.id).toArray())
+      .filter((block) => !block.deletedAt)
+      .sort(compareBySortKey)
+    for (const block of blocks) {
+      let fields: NewBlock = { type: block.type, content: block.content, attrs: block.attrs }
+      if (conflict.entity === 'block' && block.id === conflict.entityId) {
+        fields =
+          manualContent !== undefined
+            ? { ...fields, content: manualContent }
+            : { ...fields, ...(local as NewBlock) }
+      }
+      await this.insertBlock(ctx, copy, fields, {})
+    }
+    if (blocks.length === 0) await this.insertBlock(ctx, copy, {}, {})
+    this.mark(ctx, copy.workspaceId, copy.id)
+    return copy.id
+  }
+
+  /**
+   * Full re-sync: replaces the workspace's local state with the server snapshot and stores its
+   * cursor, in one transaction. Entities with queued operations keep their local state, so
+   * nothing unsynced is lost; their push takes the normal (conflict) path.
+   */
+  /**
+   * After a server restore from an older backup (#75): queues `create` operations for active
+   * local entities the snapshot lacks (parents first) and update/move/delete operations for
+   * entities whose synced local state is newer than the snapshot's. Returns the ids kept local.
+   */
+  private async recreateLost(
+    workspaceId: string,
+    snapshot: SyncSnapshotResponse,
+    pending: Set<string>,
+    local: {
+      documents: Document[]
+      blocks: Block[]
+      tags: Tag[]
+      documentTags: DocumentTag[]
+      attachments: Attachment[]
+    },
+  ): Promise<Set<string>> {
+    const known = new Set(
+      [
+        snapshot.documents,
+        snapshot.blocks,
+        snapshot.tags,
+        snapshot.documentTags,
+        snapshot.attachments,
+      ].flatMap((list) => list.map((entity) => entity.id)),
+    )
+    const lost = <T extends { id: string; deletedAt: string | null }>(items: T[]) =>
+      items.filter((i) => !i.deletedAt && !known.has(i.id) && !pending.has(i.id))
+    const recreated = new Set<string>()
+    const create = async (
+      entity: Exclude<OperationEntity, 'conflict'>,
+      item: { id: string },
+      payload: Record<string, unknown>,
+    ) => {
+      await this.enqueue(workspaceId, entity, item.id, 'create', null, payload)
+      // Unsynced again: the server assigns a new revision.
+      await this.entityTables[entity].update(item.id, { revision: null })
+      recreated.add(item.id)
+    }
+
+    // Parents first: a page is created after the page it lies in.
+    const documents = lost(local.documents)
+    const byId = new Map(documents.map((d) => [d.id, d]))
+    const depth = (d: Document): number => {
+      const parent = d.parentId ? byId.get(d.parentId) : undefined
+      return parent ? depth(parent) + 1 : 0
+    }
+    for (const d of documents.sort((a, b) => depth(a) - depth(b))) {
+      await create('document', d, {
+        parentId: d.parentId,
+        title: d.title,
+        sortKey: d.sortKey,
+        favorite: d.favorite,
+        createdAt: d.createdAt,
+      })
+    }
+    for (const t of lost(local.tags)) {
+      await create('tag', t, { name: t.name })
+    }
+    for (const a of lost(local.attachments)) {
+      await create('attachment', a, {
+        documentId: a.documentId,
+        name: a.name,
+        mimeType: a.mimeType,
+        size: a.size,
+        sha256: a.sha256,
+        createdAt: a.createdAt,
+      })
+      // Upload the content again if this device has it.
+      await this.db.attachmentContents.update(a.id, { uploaded: false })
+    }
+    for (const b of lost(local.blocks)) {
+      await create('block', b, {
+        documentId: b.documentId,
+        type: b.type,
+        content: b.content,
+        attrs: b.attrs,
+        sortKey: b.sortKey,
+      })
+    }
+    for (const a of lost(local.documentTags)) {
+      await create('document_tag', a, {
+        documentId: a.documentId,
+        tagId: a.tagId,
+      })
+    }
+
+    // Entities the restored server has in an older synced state: send the newer local state
+    // against the server's revision (merged there, or a visible conflict), never drop it.
+    const remote = new Map<string, { revision: number | null; deletedAt: string | null }>(
+      [...snapshot.documents, ...snapshot.blocks, ...snapshot.tags, ...snapshot.documentTags].map(
+        (e) => [e.id, e],
+      ),
+    )
+    const newer = <T extends { id: string; revision: number | null }>(items: T[]) =>
+      items.flatMap((item) => {
+        const server = remote.get(item.id)
+        if (pending.has(item.id) || !server || server.revision === null) return []
+        if (item.revision === null || item.revision <= server.revision) return []
+        return [{ item, server: server as T & { deletedAt: string | null } }]
+      })
+    const resend = async (
+      entity: Exclude<OperationEntity, 'conflict' | 'attachment'>,
+      id: string,
+      base: number,
+      ops: [OperationKind, Record<string, unknown>][],
+    ) => {
+      if (ops.length === 0) return
+      for (const [kind, payload] of ops) {
+        await this.enqueue(workspaceId, entity, id, kind, base, payload)
+      }
+      await this.entityTables[entity].update(id, { revision: base })
+      recreated.add(id)
+    }
+    const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b)
+    for (const { item: d, server } of newer(local.documents)) {
+      const ops: [OperationKind, Record<string, unknown>][] = []
+      if (d.deletedAt) {
+        if (!server.deletedAt) ops.push(['delete', {}])
+      } else if (!server.deletedAt) {
+        const fields: Record<string, unknown> = {}
+        if (d.title !== server.title) fields.title = d.title
+        if (d.favorite !== server.favorite) fields.favorite = d.favorite
+        if (Object.keys(fields).length) ops.push(['update', fields])
+        if (d.parentId !== server.parentId || d.sortKey !== server.sortKey) {
+          ops.push(['move', { parentId: d.parentId, sortKey: d.sortKey }])
+        }
+      }
+      await resend('document', d.id, server.revision!, ops)
+    }
+    for (const { item: b, server } of newer(local.blocks)) {
+      const ops: [OperationKind, Record<string, unknown>][] = []
+      if (b.deletedAt) {
+        if (!server.deletedAt) ops.push(['delete', {}])
+      } else if (!server.deletedAt) {
+        const fields: Record<string, unknown> = {}
+        if (b.type !== server.type) fields.type = b.type
+        if (b.content !== server.content) fields.content = b.content
+        if (changed(b.attrs, server.attrs)) fields.attrs = b.attrs
+        if (Object.keys(fields).length) ops.push(['update', fields])
+        if (b.sortKey !== server.sortKey) ops.push(['move', { sortKey: b.sortKey }])
+      }
+      await resend('block', b.id, server.revision!, ops)
+    }
+    for (const { item: t, server } of newer(local.tags)) {
+      await resend(
+        'tag',
+        t.id,
+        server.revision!,
+        t.deletedAt && !server.deletedAt ? [['delete', {}]] : [],
+      )
+    }
+    for (const { item: a, server } of newer(local.documentTags)) {
+      await resend(
+        'document_tag',
+        a.id,
+        server.revision!,
+        a.deletedAt && !server.deletedAt ? [['delete', {}]] : [],
+      )
+    }
+    return recreated
+  }
+
+  async replaceWithSnapshot(workspaceId: string, snapshot: SyncSnapshotResponse): Promise<void> {
+    const ctx: WriteContext = { touched: new Map() }
+    await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
+      const pending = new Set((await this.db.operations.toArray()).map((op) => op.entityId))
+      const keep = <T extends { id: string }>(items: T[]) => items.filter((i) => !pending.has(i.id))
+      const drop = <T extends { id: string }>(items: T[]) =>
+        items.filter((i) => !pending.has(i.id)).map((i) => i.id)
+
+      const localDocuments = await this.db.documents
+        .where('workspaceId')
+        .equals(workspaceId)
+        .toArray()
+      const documentIds = [...new Set([...localDocuments, ...snapshot.documents].map((d) => d.id))]
+      const localBlocks = await this.db.blocks.where('documentId').anyOf(documentIds).toArray()
+      const localTags = await this.db.tags.where('workspaceId').equals(workspaceId).toArray()
+      const localAssignments = await this.db.documentTags
+        .where('workspaceId')
+        .equals(workspaceId)
+        .toArray()
+      const localAttachments = await this.db.attachments
+        .where('workspaceId')
+        .equals(workspaceId)
+        .toArray()
+      // The server never forgets an entity (tombstones stay), unless it was restored from an
+      // older backup. Content this device knows but the server lost is sent again, not dropped.
+      const lost = await this.recreateLost(workspaceId, snapshot, pending, {
+        documents: localDocuments,
+        blocks: localBlocks,
+        tags: localTags,
+        documentTags: localAssignments,
+        attachments: localAttachments,
+      })
+      for (const id of lost) pending.add(id)
+      await this.db.documents.bulkDelete(drop(localDocuments))
+      await this.db.blocks.bulkDelete(drop(localBlocks))
+      await this.db.tags.bulkDelete(drop(localTags))
+      await this.db.documentTags.bulkDelete(drop(localAssignments))
+      await this.db.documents.bulkPut(keep(snapshot.documents))
+      await this.db.blocks.bulkPut(keep(snapshot.blocks))
+      await this.db.tags.bulkPut(keep(snapshot.tags))
+      await this.db.documentTags.bulkPut(keep(snapshot.documentTags))
+      await this.db.attachments.bulkDelete(drop(localAttachments))
+      await this.db.attachments.bulkPut(keep(snapshot.attachments))
+      await this.db.conflicts.bulkDelete(
+        drop(await this.db.conflicts.where('workspaceId').equals(workspaceId).toArray()),
+      )
+      await this.db.conflicts.bulkPut(keep(snapshot.conflicts))
+
+      // Derived link index: rebuild for the whole workspace.
+      await this.db.links.where('workspaceId').equals(workspaceId).delete()
+      const documents = new Map(
+        (await this.db.documents.where('workspaceId').equals(workspaceId).toArray()).map((d) => [
+          d.id,
+          d,
+        ]),
+      )
+      for (const block of await this.db.blocks
+        .where('documentId')
+        .anyOf([...documents.keys()])
+        .toArray()) {
+        if (!block.deletedAt) await this.updateLinks(block, documents.get(block.documentId)!)
+      }
+      for (const id of new Set([...documentIds, ...documents.keys()])) {
+        this.mark(ctx, workspaceId, id)
+      }
+      await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: snapshot.cursor })
+    })
+    this.notify(ctx)
+  }
+
+  private async applyRemoteChange(ctx: WriteContext, workspaceId: string, change: Change) {
+    if (change.entity === 'conflict') {
+      await this.applyRemoteConflict(ctx, workspaceId, change)
+      return
+    }
+    const table = this.entityTables[change.entity]
+    const local = await table.get(change.entityId)
+    const queued = await this.db.operations.where('opId').equals(change.opId).first()
+    if (queued?.seq !== undefined) await this.db.operations.delete(queued.seq)
+    if (queued || change.deviceId === this.deviceId) {
+      if (local && (local.revision ?? 0) < change.revision) {
+        await table.update(change.entityId, { revision: change.revision })
+      }
+      return
+    }
+    if ((await this.db.operations.where('entityId').equals(change.entityId).count()) > 0) return
+    // A page deleted elsewhere stays while this device has unsynced edits in it (T-DEL-02):
+    // their push becomes a visible conflict instead of disappearing with the page.
+    if (change.entity === 'document' && change.kind === 'delete') {
+      const blockIds = await this.db.blocks
+        .where('documentId')
+        .equals(change.entityId)
+        .primaryKeys()
+      if ((await this.db.operations.where('entityId').anyOf(blockIds).count()) > 0) return
+    }
+    const invalid = validateOperationPayload(change.entity, change.kind, change.payload)
+    if (invalid) {
+      console.warn('Skipping invalid change', change.seq, invalid)
+      return
+    }
+    const revision = change.revision
+    switch (change.entity) {
+      case 'document': {
+        if (change.kind === 'create') {
+          const p = change.payload as DocumentCreatePayload
+          await this.db.documents.put({
+            id: change.entityId,
+            workspaceId,
+            parentId: p.parentId,
+            title: p.title,
+            sortKey: p.sortKey,
+            favorite: p.favorite,
+            createdAt: p.createdAt,
+            updatedAt: change.appliedAt,
+            revision,
+            deletedAt: null,
+          })
+        } else if (local) {
+          const fields =
+            change.kind === 'delete'
+              ? { deletedAt: change.appliedAt }
+              : change.kind === 'restore'
+                ? { deletedAt: null, updatedAt: change.appliedAt }
+                : { ...(change.payload as Partial<Document>), updatedAt: change.appliedAt }
+          await this.db.documents.update(change.entityId, { ...fields, revision })
+        }
+        this.mark(ctx, workspaceId, change.entityId)
+        return
+      }
+      case 'block': {
+        let block: Block | undefined
+        if (change.kind === 'create') {
+          const p = change.payload as BlockCreatePayload
+          block = {
+            id: change.entityId,
+            documentId: p.documentId,
+            type: p.type,
+            content: p.content,
+            attrs: p.attrs,
+            sortKey: p.sortKey,
+            revision,
+            deletedAt: null,
+          }
+        } else if (local) {
+          const fields = change.kind === 'delete' ? { deletedAt: change.appliedAt } : change.payload
+          block = { ...(local as Block), ...fields, revision }
+        }
+        if (!block) return
+        await this.db.blocks.put(block)
+        const document = await this.db.documents.get(block.documentId)
+        if (block.deletedAt) await this.db.links.delete(block.id)
+        else if (document) await this.updateLinks(block, document)
+        this.mark(ctx, workspaceId, block.documentId)
+        return
+      }
+      case 'tag': {
+        if (change.kind === 'create') {
+          const p = change.payload as TagCreatePayload
+          await this.db.tags.put({
+            id: change.entityId,
+            workspaceId,
+            name: p.name,
+            revision,
+            deletedAt: null,
+          })
+        } else if (local) {
+          const fields = change.kind === 'delete' ? { deletedAt: change.appliedAt } : change.payload
+          await this.db.tags.update(change.entityId, { ...fields, revision })
+        }
+        return
+      }
+      case 'attachment': {
+        if (change.kind === 'create') {
+          const p = change.payload as AttachmentCreatePayload
+          await this.db.attachments.put({
+            id: change.entityId,
+            workspaceId,
+            ...p,
+            revision,
+            deletedAt: null,
+          })
+          this.mark(ctx, workspaceId, p.documentId)
+        } else if (local) {
+          await this.db.attachments.update(change.entityId, {
+            deletedAt: change.appliedAt,
+            revision,
+          })
+          // The content is no longer needed on this device.
+          await this.db.attachmentContents.delete(change.entityId)
+          this.mark(ctx, workspaceId, (local as Attachment).documentId)
+        }
+        return
+      }
+      case 'document_tag': {
+        let documentId = (local as DocumentTag | undefined)?.documentId
+        if (change.kind === 'create') {
+          const p = change.payload as DocumentTagCreatePayload
+          documentId = p.documentId
+          await this.db.documentTags.put({
+            id: change.entityId,
+            workspaceId,
+            documentId: p.documentId,
+            tagId: p.tagId,
+            revision,
+            deletedAt: null,
+          })
+        } else if (local) {
+          await this.db.documentTags.update(change.entityId, {
+            deletedAt: change.appliedAt,
+            revision,
+          })
+        }
+        if (documentId) this.mark(ctx, workspaceId, documentId)
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- attachments
+
+  /**
+   * Adds a file to a page (ADR 0012), offline too: content stays on this device until it is
+   * uploaded after the sync confirmed the metadata. Inserts an image block for raster images,
+   * otherwise a file block. `sha256` must be computed beforehand (see `sha256Hex`): awaiting
+   * crypto inside a Dexie transaction would commit it early.
+   */
+  async addAttachment(
+    documentId: string,
+    file: { name: string; type: string; data: ArrayBuffer; sha256: string },
+    position: Position = {},
+  ): Promise<{ attachment: Attachment; block: Block }> {
+    return this.write(async (ctx) => {
+      const document = await this.requireDocument(documentId)
+      const attachment = attachmentSchema.parse({
+        id: newId(),
+        workspaceId: document.workspaceId,
+        documentId,
+        name: file.name.trim().slice(0, 255) || 'Datei',
+        mimeType: /^[\w.+-]+\/[\w.+-]+$/.test(file.type) ? file.type : 'application/octet-stream',
+        size: file.data.byteLength,
+        sha256: file.sha256,
+        createdAt: this.now(),
+        revision: null,
+        deletedAt: null,
+      } satisfies Attachment)
+      await this.db.attachments.add(attachment)
+      await this.db.attachmentContents.put({ id: attachment.id, data: file.data, uploaded: false })
+      await this.enqueue(document.workspaceId, 'attachment', attachment.id, 'create', null, {
+        documentId,
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+        sha256: attachment.sha256,
+        createdAt: attachment.createdAt,
+      })
+      const image = INLINE_IMAGE_TYPES.includes(attachment.mimeType)
+      const block = await this.insertBlock(
+        ctx,
+        document,
+        {
+          type: image ? 'image' : 'file',
+          content: image ? '' : attachment.name,
+          attrs: { attachmentId: attachment.id },
+        },
+        position,
+      )
+      return { attachment, block }
+    })
+  }
+
+  /** Deletes an attachment (tombstone, replicated); its block shows it as removed. */
+  async deleteAttachment(id: string): Promise<void> {
+    await this.write(async (ctx) => {
+      const attachment = await this.db.attachments.get(id)
+      if (!attachment || attachment.deletedAt) return
+      await this.db.attachments.update(id, { deletedAt: this.now() })
+      await this.db.attachmentContents.delete(id)
+      await this.enqueue(
+        attachment.workspaceId,
+        'attachment',
+        id,
+        'delete',
+        attachment.revision,
+        {},
+      )
+      this.mark(ctx, attachment.workspaceId, attachment.documentId)
+    })
+  }
+
+  /** All content of a workspace, tombstones included, read consistently (export, ADR 0004). */
+  async exportData(workspaceId: string): Promise<ExportInput> {
+    const db = this.db
+    return db.transaction(
+      'r',
+      [db.documents, db.blocks, db.tags, db.documentTags, db.attachments],
+      async () => {
+        const documents = await db.documents.where('workspaceId').equals(workspaceId).toArray()
+        const blocks = await db.blocks
+          .where('documentId')
+          .anyOf(documents.map((d) => d.id))
+          .toArray()
+        const [tags, documentTags, attachments] = await Promise.all([
+          db.tags.where('workspaceId').equals(workspaceId).toArray(),
+          db.documentTags.where('workspaceId').equals(workspaceId).toArray(),
+          db.attachments.where('workspaceId').equals(workspaceId).toArray(),
+        ])
+        return { documents, blocks, tags, documentTags, attachments }
+      },
+    )
+  }
+
+  async getAttachment(id: string): Promise<Attachment | undefined> {
+    return this.db.attachments.get(id)
+  }
+
+  async attachmentContent(id: string): Promise<AttachmentContent | undefined> {
+    return this.db.attachmentContents.get(id)
+  }
+
+  /** Keeps downloaded content for offline use. */
+  async cacheAttachmentContent(id: string, data: ArrayBuffer): Promise<void> {
+    await this.db.attachmentContents.put({ id, data, uploaded: true })
+  }
+
+  /** Content from an import: kept here and uploaded once the metadata arrived by sync. */
+  async stageAttachmentContent(id: string, data: ArrayBuffer): Promise<void> {
+    await this.db.attachmentContents.put({ id, data, uploaded: false })
+  }
+
+  /** Contents waiting for upload whose metadata the server already knows. */
+  async pendingUploads(): Promise<Attachment[]> {
+    const contents = await this.db.attachmentContents.toArray()
+    const waiting = contents.filter((content) => !content.uploaded).map((content) => content.id)
+    const attachments = await this.db.attachments.bulkGet(waiting)
+    return attachments.filter((a): a is Attachment => !!a && a.revision !== null && !a.deletedAt)
+  }
+
+  async markUploaded(id: string): Promise<void> {
+    await this.db.attachmentContents.update(id, { uploaded: true })
+  }
+
   async cacheWorkspaces(workspaces: Workspace[]): Promise<void> {
     await this.db.transaction('rw', this.db.workspaces, async () => {
       await this.db.workspaces.clear()
@@ -572,4 +1491,10 @@ function sameAttrs(a: BlockAttrs, b: BlockAttrs): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof BlockAttrs>
   for (const key of keys) if (a[key] !== b[key]) return false
   return true
+}
+
+/** Hex SHA-256 of a file, as the server verifies it (ADR 0012). */
+export async function sha256Hex(data: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }

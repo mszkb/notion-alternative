@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import type { Document } from '@notion-alt/shared'
+import type { Document, ServerSearchHit } from '@notion-alt/shared'
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
+import { api } from '../api'
 import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
 import { expanded } from '../composables/tree-state'
 import { displayTitle, workspaceKey } from '../composables/workspace'
+import { deviceStatus } from '../device'
+import { dismissIosHint, installApp, installPrompt, showIosHint } from '../install'
+import { refreshAttachmentUsage } from '../limits'
 import {
   persistence,
   refreshWorkspaces,
@@ -17,6 +21,9 @@ import {
 } from '../local/context'
 import type { SearchHit } from '../local/search'
 import { connection, currentUser, refreshSession } from '../session'
+import { onPushHint } from '../pwa'
+import { onSyncHint, requestSync, syncState } from '../sync/engine'
+import { DEFAULT_TRIGGERS, startSyncTriggers } from '../sync/triggers'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,6 +50,9 @@ const recent = computed(() =>
 )
 const tags = useLiveQuery(() => store.listTags(workspaceId.value), [], workspaceId)
 const pending = useLiveQuery(() => store.pendingOperationCount(), 0)
+const withIssues = useLiveQuery(() => store.operationsWithIssues(), [])
+const conflicts = useLiveQuery(() => store.openConflicts(workspaceId.value), [], workspaceId)
+const rejected = computed(() => withIssues.value.filter((op) => op.issue?.status === 'rejected'))
 
 watch(workspaceId, (id) => rememberWorkspace(id), { immediate: true })
 
@@ -78,6 +88,41 @@ watch([query, documents], () => {
   }, 120)
 })
 
+/**
+ * Server-side hits (FTS5) only complement the local search, e.g. for pages not synced to this
+ * device yet; offline the local search is all there is.
+ */
+const serverHits = ref<ServerSearchHit[]>([])
+let serverTimer: ReturnType<typeof setTimeout> | null = null
+watch([query, workspaceId], () => {
+  if (serverTimer) clearTimeout(serverTimer)
+  serverHits.value = []
+  const q = query.value.trim()
+  if (q.length < 2 || connection.value !== 'online') return
+  serverTimer = setTimeout(async () => {
+    try {
+      const { hits: found } = await api.search(workspaceId.value, q)
+      if (query.value.trim() === q) serverHits.value = found
+    } catch {
+      // Server unreachable: local results stand on their own.
+    }
+  }, 300)
+})
+const extraServerHits = computed(() => {
+  const local = new Set(hits.value.map((hit) => hit.id))
+  return serverHits.value.filter((hit) => !local.has(hit.documentId))
+})
+
+async function openServerHit(hit: ServerSearchHit) {
+  query.value = ''
+  // Not on this device yet: fetch it first.
+  if (!documentsById.value.has(hit.documentId)) await requestSync(store)
+  await router.push({
+    name: 'page',
+    params: { workspaceId: workspaceId.value, documentId: hit.documentId },
+  })
+}
+
 async function openHit(hit: SearchHit) {
   query.value = ''
   await router.push({
@@ -100,25 +145,46 @@ async function createPage() {
 
 async function recheck() {
   try {
-    if ((await refreshSession()) === 'online') await refreshWorkspaces(store)
+    if ((await refreshSession()) === 'online') {
+      await refreshWorkspaces(store)
+      void requestSync(store)
+      void refreshAttachmentUsage(workspaceId.value)
+    }
   } catch {
     connection.value = 'offline'
   }
 }
 
-let interval: ReturnType<typeof setInterval> | null = null
+// Local changes are pushed shortly after they were made; the queue keeps them meanwhile.
+let triggers: ReturnType<typeof startSyncTriggers> | null = null
+const stopChangeListener = store.onChange(() => triggers?.changed())
+const stopPushHints = onPushHint(() => void onSyncHint(store))
+
 onMounted(() => {
-  void recheck()
-  window.addEventListener('online', recheck)
+  triggers = startSyncTriggers(recheck, DEFAULT_TRIGGERS, () => requestSync(store))
   window.addEventListener('offline', markOffline)
-  window.addEventListener('focus', recheck)
-  interval = setInterval(recheck, 60_000)
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('online', recheck)
+  triggers?.stop()
   window.removeEventListener('offline', markOffline)
-  window.removeEventListener('focus', recheck)
-  if (interval) clearInterval(interval)
+  stopChangeListener()
+  stopPushHints()
+})
+
+async function syncNow() {
+  await recheck()
+}
+
+const timeFormat = new Intl.DateTimeFormat('de-DE', { timeStyle: 'short' })
+
+/** One line telling whether local data is on the server. */
+const syncLabel = computed(() => {
+  if (connection.value !== 'online') return null
+  if (syncState.value.running) return 'Synchronisiert…'
+  if (syncState.value.lastError) return 'Synchronisierung fehlgeschlagen – neuer Versuch folgt'
+  if (pending.value > withIssues.value.length) return 'Änderungen ausstehend'
+  const at = syncState.value.lastSyncAt
+  return at ? `Synchronisiert um ${timeFormat.format(new Date(at))}` : 'Noch nicht synchronisiert'
 })
 
 function markOffline() {
@@ -189,7 +255,20 @@ watch(
             </button>
           </li>
         </ul>
-        <p v-if="hits.length === 0" class="muted empty">Keine Treffer</p>
+        <p v-if="hits.length === 0 && extraServerHits.length === 0" class="muted empty">
+          Keine Treffer
+        </p>
+        <template v-if="extraServerHits.length">
+          <h2 id="nav-server-hits">Weitere Treffer vom Server</h2>
+          <ul class="nav-list search-results" aria-labelledby="nav-server-hits">
+            <li v-for="hit in extraServerHits" :key="hit.documentId">
+              <button type="button" class="nav-item" @click="openServerHit(hit)">
+                <strong>{{ hit.title || 'Unbenannt' }}</strong>
+                <small v-if="hit.snippet" class="muted">{{ hit.snippet }}</small>
+              </button>
+            </li>
+          </ul>
+        </template>
       </section>
 
       <template v-else>
@@ -275,10 +354,44 @@ watch(
           Der Browser darf lokale Daten bei Speichermangel löschen. Tipp: App installieren oder
           regelmäßig exportieren.
         </p>
+        <p v-if="deviceStatus === 'revoked'" class="error" data-testid="device-revoked">
+          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten, werden aber
+          nicht mehr synchronisiert.
+        </p>
+        <p v-if="installPrompt" class="status">
+          <button type="button" class="link" @click="installApp">App installieren</button>
+          – startet wie eine eigene App, auch offline.
+        </p>
+        <p v-if="showIosHint" class="hint muted" data-testid="ios-install-hint">
+          Als App installieren: in Safari <strong>Teilen</strong> →
+          <strong>„Zum Home-Bildschirm“</strong>. Erst dann bleiben die lokalen Daten dauerhaft
+          gespeichert, und Benachrichtigungen sind möglich.
+          <button type="button" class="link" @click="dismissIosHint">Ausblenden</button>
+        </p>
         <p class="muted" data-testid="pending">
           {{ pending }} lokale Änderung{{ pending === 1 ? '' : 'en' }} noch nicht synchronisiert
         </p>
-        <p class="muted">{{ currentUser?.email }}</p>
+        <p v-if="conflicts.length" class="error" data-testid="sync-conflicts">
+          <RouterLink :to="{ name: 'conflicts', params: { workspaceId } }">
+            {{ conflicts.length }} Konflikt{{ conflicts.length === 1 ? '' : 'e' }}
+          </RouterLink>
+          – gleichzeitige Änderungen auf mehreren Geräten. Beide Stände sind erhalten.
+        </p>
+        <p v-if="rejected.length" class="error" data-testid="sync-rejected">
+          {{ rejected.length }} Änderung{{ rejected.length === 1 ? '' : 'en' }} vom Server abgelehnt
+          ({{ rejected[0]?.issue?.message }}). Sie bleiben lokal erhalten.
+        </p>
+        <p v-if="syncLabel" class="muted sync-status" data-testid="sync-status">
+          {{ syncLabel }}
+          <button type="button" class="link" :disabled="syncState.running" @click="syncNow">
+            Jetzt synchronisieren
+          </button>
+        </p>
+        <p class="muted">
+          {{ currentUser?.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
+          <RouterLink :to="{ name: 'trash', params: { workspaceId } }">Papierkorb</RouterLink> ·
+          <RouterLink :to="{ name: 'export', params: { workspaceId } }">Export & Import</RouterLink>
+        </p>
       </footer>
     </aside>
 

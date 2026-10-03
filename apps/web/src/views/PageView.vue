@@ -6,6 +6,7 @@ import TagBar from '../components/TagBar.vue'
 import { useLiveQuery } from '../composables/live-query'
 import { displayTitle, useWorkspace } from '../composables/workspace'
 import PageEditor from '../editor/PageEditor.vue'
+import { registerPendingEdits } from '../pending-edits'
 
 const { store, workspaceId, documents, documentsById } = useWorkspace()
 const route = useRoute()
@@ -35,6 +36,11 @@ const ancestors = computed(() => {
 })
 const children = computed(() => documents.value.filter((d) => d.parentId === documentId))
 const backlinks = useLiveQuery(() => store.backlinks(documentId), [])
+const conflicts = useLiveQuery(
+  async () =>
+    (await store.openConflicts(workspaceId.value)).filter((c) => c.documentId === documentId),
+  [],
+)
 
 // ---------------------------------------------------------------- title
 
@@ -53,13 +59,15 @@ watch(
   { immediate: true },
 )
 
-function saveTitle() {
+function saveTitle(): Promise<void> {
   if (titleTimer) clearTimeout(titleTimer)
   titleTimer = null
   if (document.value && title.value !== document.value.title) {
-    void store.renameDocument(documentId, title.value)
+    return store.renameDocument(documentId, title.value)
   }
+  return Promise.resolve()
 }
+const stopPendingTitle = registerPendingEdits(saveTitle)
 
 function onTitleInput() {
   if (titleTimer) clearTimeout(titleTimer)
@@ -72,7 +80,10 @@ function focusFirstBlock() {
   first?.focus()
 }
 
-onBeforeUnmount(saveTitle)
+onBeforeUnmount(() => {
+  void saveTitle()
+  stopPendingTitle()
+})
 
 // ---------------------------------------------------------------- actions
 
@@ -110,6 +121,13 @@ async function deletePage() {
 
 <template>
   <article v-if="document" class="page">
+    <p v-if="conflicts.length" class="error conflict-banner" data-testid="page-conflicts">
+      Diese Seite hat {{ conflicts.length }} offene{{
+        conflicts.length === 1 ? 'n' : ''
+      }}
+      Konflikt{{ conflicts.length === 1 ? '' : 'e' }}.
+      <RouterLink :to="{ name: 'conflicts', params: { workspaceId } }">Anzeigen</RouterLink>
+    </p>
     <header class="page-header">
       <nav class="breadcrumbs" aria-label="Pfad">
         <template v-for="ancestor in ancestors" :key="ancestor.id">
@@ -132,6 +150,12 @@ async function deletePage() {
           {{ document.favorite ? '★' : '☆' }}
         </button>
         <button type="button" class="secondary" @click="addChild">+ Unterseite</button>
+        <RouterLink
+          class="secondary"
+          :to="{ name: 'history', params: { workspaceId, documentId } }"
+        >
+          Verlauf
+        </RouterLink>
         <button type="button" class="secondary danger" @click="deletePage">Löschen</button>
       </div>
     </header>

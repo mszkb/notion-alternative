@@ -1,8 +1,8 @@
 import 'fake-indexeddb/auto'
-import { newId, operationSchema } from '@notion-alt/shared'
+import { type Block, newId, operationSchema, validateOperationPayload } from '@notion-alt/shared'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { LocalDb } from './db'
-import { LocalStore, LocalStoreError, type StoreChange } from './store'
+import { type BlockState, LocalStore, LocalStoreError, type StoreChange } from './store'
 
 const WS = '11111111-1111-4111-8111-111111111111'
 
@@ -286,5 +286,102 @@ describe('persistence across reopen (T-OFF-02, data layer)', () => {
     expect((await reopened.pendingOperations()).length).toBe(queued)
     reopenedDb.close()
     db = reopenedDb
+  })
+})
+
+describe('applyBlockState', () => {
+  async function setup() {
+    const document = await store.createDocument({ workspaceId: WS, title: 'Undo' })
+    const [first] = await store.listBlocks(document.id)
+    await store.updateBlock(first!.id, { content: 'eins' })
+    const second = await store.createBlock(document.id, { content: 'zwei' })
+    const third = await store.createBlock(document.id, { type: 'quote', content: 'drei' })
+    return { document, ids: [first!.id, second.id, third.id] }
+  }
+
+  const state = (blocks: Block[]): BlockState[] =>
+    blocks.map(({ id, type, content, attrs }) => ({ id, type, content, attrs }))
+
+  it('restores content, type, order and deleted blocks with ordinary operations', async () => {
+    const { document, ids } = await setup()
+    const before = state(await store.listBlocks(document.id))
+    const opsBefore = (await ops()).length
+
+    await store.updateBlock(ids[0]!, { content: 'geändert', type: 'heading', attrs: { level: 1 } })
+    await store.moveBlock(ids[2]!, { afterId: null })
+    await store.deleteBlock(ids[1]!)
+
+    const recreated = await store.applyBlockState(document.id, before)
+    const after = await store.listBlocks(document.id)
+    expect(after.map((b) => b.content)).toEqual(['eins', 'zwei', 'drei'])
+    expect(after[0]!.type).toBe('paragraph')
+    expect(after[2]!.type).toBe('quote')
+    // The deleted block keeps its tombstone; the restored copy has a new id.
+    expect(recreated.get(ids[1]!)).toBe(after[1]!.id)
+    expect(after[1]!.id).not.toBe(ids[1])
+    expect((await db.blocks.get(ids[1]!))!.deletedAt).not.toBeNull()
+
+    const queue = (await ops()).slice(opsBefore)
+    for (const op of queue) expect(operationSchema.safeParse(op).success).toBe(true)
+    expect(queue.slice(-3).map((op) => op.kind)).toEqual(expect.arrayContaining(['create']))
+  })
+
+  it('deletes blocks missing from the target and writes nothing when unchanged', async () => {
+    const { document, ids } = await setup()
+    const current = state(await store.listBlocks(document.id))
+    const count = (await ops()).length
+    await store.applyBlockState(document.id, current)
+    expect((await ops()).length).toBe(count)
+
+    await store.applyBlockState(
+      document.id,
+      current.filter((b) => b.id !== ids[1]),
+    )
+    expect((await store.listBlocks(document.id)).map((b) => b.content)).toEqual(['eins', 'drei'])
+    expect((await ops()).at(-1)!.kind).toBe('delete')
+  })
+
+  it('reorders with moves only where needed', async () => {
+    const { document } = await setup()
+    const current = state(await store.listBlocks(document.id))
+    const count = (await ops()).length
+    await store.applyBlockState(document.id, [current[2]!, current[0]!, current[1]!])
+    expect((await store.listBlocks(document.id)).map((b) => b.content)).toEqual([
+      'drei',
+      'eins',
+      'zwei',
+    ])
+    expect((await ops()).slice(count).map((op) => op.kind)).toEqual(['move'])
+  })
+})
+
+describe('operation payloads', () => {
+  it('match the shared schemas the server validates against', async () => {
+    const parent = await store.createDocument({ workspaceId: WS, title: 'Eltern' })
+    const child = await store.createDocument({
+      workspaceId: WS,
+      title: 'Kind',
+      parentId: parent.id,
+    })
+    await store.renameDocument(child.id, 'Kind 2')
+    await store.setFavorite(child.id, true)
+    await store.moveDocument(child.id, null)
+    const [first] = await store.listBlocks(parent.id)
+    await store.updateBlock(first!.id, { content: 'x', type: 'heading', attrs: { level: 2 } })
+    const tail = await store.splitBlock(first!.id, 'x', { content: 'y' })
+    await store.moveBlock(tail.id, { afterId: null })
+    await store.mergeBlocks(first!.id, tail.id, 'xy')
+    const tag = await store.addTag(parent.id, 'Projekt')
+    await store.removeTag(parent.id, tag.id)
+    await store.deleteDocument(parent.id)
+
+    const queue = await ops()
+    expect(new Set(queue.map((op) => `${op.entity}:${op.kind}`)).size).toBeGreaterThanOrEqual(10)
+    for (const op of queue) {
+      expect(
+        validateOperationPayload(op.entity, op.kind, op.payload),
+        JSON.stringify(op),
+      ).toBeNull()
+    }
   })
 })

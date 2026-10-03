@@ -76,8 +76,58 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 | `ALLOW_REGISTRATION` | `false` | Weitere Registrierungen nach dem ersten Konto erlauben |
 | `COOKIE_SECURE` | `false` | Session-Cookie nur über HTTPS senden |
 | `LOG_LEVEL` | `info` | `fatal` … `trace`, `silent` |
+| `METRICS_ENABLED` | `false` | Prometheus-Metriken unter `/api/metrics` im Backend bereitstellen |
+| `ATTACHMENT_MAX_MB` | `25` | Maximale Größe eines Anhangs (MB = 1 000 000 Byte) (nginx erlaubt für Uploads bis 30 MB; bei höheren Werten `client_max_body_size` in `apps/web/nginx.conf` mit anheben) |
+| `ATTACHMENT_RETENTION_DAYS` | `30` | So lange bleibt die Datei eines gelöschten Anhangs erhalten |
+| `WORKSPACE_STORAGE_MB` | `2048` | Gesamtgröße der Anhänge pro Konto über alle seine Workspaces (`0` = unbegrenzt); gelöschte Anhänge zählen, bis ihre Datei nach `ATTACHMENT_RETENTION_DAYS` entfernt wird. Darüber lehnt der Server neue Anhänge ab; sie bleiben auf dem Gerät und werden dort markiert. Ein späteres Senken des Werts löscht nichts, verhindert nur neue Anhänge. |
+| `IMPORT_MAX_MB` | `50` | Maximale Größe eines Imports (JSON ohne Anhang-Inhalte, die werden einzeln hochgeladen). Es läuft immer nur ein Import gleichzeitig. nginx erlaubt für `/api/import` bis 50 MB; bei höheren Werten `client_max_body_size` in `apps/web/nginx.conf` mit anheben (RAM: grob das Zehnfache der Importgröße einplanen). |
+| `PUSH_SUBJECT` | `mailto:admin@localhost` | Kontakt für Web Push (VAPID); eine echte Adresse eintragen, manche Push-Dienste lehnen Platzhalter ab |
+| `PUSH_ALLOWED_HOSTS` | Google, Mozilla, Apple, Microsoft | Push-Dienste, an die der Server senden darf (kommagetrennt, `*.` für Subdomains) |
 
-Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`): siehe `apps/server/src/config.ts`.
+Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`, `ATTACHMENTS_DIR`): siehe `apps/server/src/config.ts`.
+
+### Login-Rate-Limiting
+
+Das Backend begrenzt fehlgeschlagene Logins und Registrierungsversuche im Arbeitsspeicher (Zähler gehen bei einem Neustart verloren). Ist ein Limit erreicht, antwortet es mit `429` und `Retry-After`, unabhängig davon, ob das Konto existiert oder das Passwort stimmt. Ein erfolgreicher Login setzt den Zähler der E-Mail-Adresse zurück.
+
+| Variable | Standard | Bedeutung |
+| --- | --- | --- |
+| `AUTH_RATE_LIMIT_WINDOW_MINUTES` | `15` | Zeitfenster aller Zähler |
+| `LOGIN_MAX_FAILURES_PER_EMAIL` | `5` | Fehlversuche je E-Mail-Adresse (gegen Brute Force auf ein Konto) |
+| `LOGIN_MAX_FAILURES_PER_IP` | `20` | Fehlversuche je Client-IP (gegen Credential Stuffing) |
+| `REGISTER_MAX_ATTEMPTS_PER_IP` | `10` | Registrierungsversuche je Client-IP |
+
+Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`frontend`) anhängt; das Backend vertraut genau einem Proxy-Hop. Ein weiterer Reverse Proxy davor (z. B. für TLS) erscheint deshalb als Client-IP; dann teilen sich alle Nutzer das IP-Limit. In diesem Fall `LOGIN_MAX_FAILURES_PER_IP` erhöhen. Bei rootless Docker sieht nginx je nach Port-Treiber ebenfalls nicht die echte Adresse.
+
+## Zugriff von Smartphones (HTTPS)
+
+Für Installation, Offline-Neustart und Web Push auf Smartphones braucht die App HTTPS mit einem vertrauenswürdigen Zertifikat. Vorschlag ([ADR 0011](../adr/0011-https-for-mobile-devices.md), noch `Proposed`):
+
+- **Tailscale (empfohlen, nicht öffentlich):** Tailscale auf Host und Geräten, dann auf dem Host `tailscale serve --bg --https=443 http://127.0.0.1:8080`. Die App ist im Tailnet unter `https://<host>.<tailnet>.ts.net` erreichbar; `BIND_ADDRESS=127.0.0.1` bleibt.
+- **Eigener Reverse Proxy mit Let's Encrypt** (öffentlich, eigene Domain): Proxy auf `127.0.0.1:8080` zeigen lassen.
+
+In beiden Fällen `COOKIE_SECURE=true` setzen. Für Web Push muss der Server ausgehend die Push-Dienste erreichen (`PUSH_ALLOWED_HOSTS`).
+
+### Echte Client-IP hinter einem TLS-Proxy
+
+Ohne weitere Einstellung sieht das Backend hinter einem TLS-Proxy für alle Clients dieselbe Adresse (die des Proxys); das Login-Rate-Limiting pro IP gilt dann für alle gemeinsam. Damit nginx die echte Adresse weitergibt, den TLS-Proxy `X-Forwarded-For` setzen lassen und in `apps/web/nginx.conf` im `server`-Block ergänzen (Adresse des Proxys aus Sicht des Containers, z. B. das Docker-Gateway):
+
+```nginx
+set_real_ip_from 172.16.0.0/12;
+real_ip_header X-Forwarded-For;
+```
+
+Das Backend vertraut `X-Forwarded-For` nur von einem Proxy aus einem privaten Netz (dem nginx-Container), ein direkt verbundener Client kann seine Adresse also nicht vorgeben.
+
+### Was in Logs landet
+
+Das Backend loggt Anfragen ohne Query-String (Suchbegriffe sind Inhalte). nginx protokolliert im Access-Log die vollständige URL; wer das nicht möchte, setzt in `apps/web/nginx.conf` für `location /api/` `access_log off;` oder ein eigenes `log_format` ohne `$request_uri`.
+
+## App offline (Service Worker)
+
+Der Production-Build enthält einen Service Worker (`/sw.js`), der die App-Dateien zwischenspeichert, damit die App auch ohne Netz neu geladen werden kann. Er braucht einen sicheren Kontext: `https://` oder `http://localhost` (z. B. über den SSH-Tunnel). Über eine reine HTTP-LAN-Adresse läuft die App ohne Service Worker weiter, nur das Neuladen offline geht dann nicht ([ADR 0010](../adr/0010-reference-deployment-and-https.md)).
+
+Nach einem Update zeigt die App „Eine neue Version ist verfügbar – Neu laden“; offene Eingaben werden vorher gespeichert. Hängt ein Gerät auf einer alten Version fest: Kontoseite → „App-Cache zurücksetzen“ (lokale Daten bleiben), notfalls in den Browser-Einstellungen die Website-Daten nur für „Cache“/„Service Worker“ löschen.
 
 ## Healthchecks
 
@@ -85,13 +135,58 @@ Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`): sie
 - `GET /api/health` – Backend-Prozess läuft (Liveness)
 - `GET /api/ready` – Datenbank erreichbar (Readiness)
 
+## Anhänge auf S3-kompatiblem Speicher (optional)
+
+Standardmäßig liegen Dateianhänge im Daten-Volume (`/data/attachments`). Alternativ in einem S3-kompatiblen Bucket (AWS S3, MinIO, Garage, SeaweedFS, Backblaze B2 …), ohne zusätzlichen Container und ohne SDK (Signatur V4 mit `node:crypto`):
+
+| Variable | Standard | Bedeutung |
+| --- | --- | --- |
+| `ATTACHMENT_STORAGE` | `volume` | `s3` schaltet auf den Bucket um |
+| `S3_ENDPOINT` | – | z. B. `https://s3.eu-central-1.amazonaws.com` oder `http://minio:9000` |
+| `S3_REGION` | `us-east-1` | Region für die Signatur |
+| `S3_BUCKET` | – | Bucket (muss existieren) |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | – | Zugangsdaten mit Lese-/Schreib-/Löschrecht auf dem Bucket |
+| `S3_FORCE_PATH_STYLE` | `true` | `https://host/bucket/key`; für AWS mit virtuellen Hosts `false` |
+
+Fehlen Pflichtangaben, startet das Backend nicht und nennt nur die Variablennamen (Zugangsdaten erscheinen nie in Logs). Metadaten bleiben in SQLite; ein Objekt heißt `<workspace-id>/<anhang-id>` und ändert sich nie.
+
+**Umzug Volume → S3:**
+
+```sh
+# 1. S3-Variablen in .env eintragen (ATTACHMENT_STORAGE=s3 …)
+docker compose up -d backend
+# 2. Bestehende Dateien kopieren und per SHA-256 prüfen (wiederholbar, idempotent)
+docker compose exec backend node dist/index.js migrate-attachments-to-s3
+# Ausgabe z. B. {"copied":42,"skipped":0,"failed":[]}; bei failed ≠ [] nicht weitermachen
+```
+
+Danach liefert das Backend aus dem Bucket. Die alten Dateien unter `/data/attachments` erst löschen, wenn ein Backup des Buckets existiert.
+
+**Backup:** Mit Volume enthält das Volume-Backup (unten) alles. Mit S3 gehören **zwei** Teile zusammen: das Volume (SQLite mit Metadaten) und der Bucket (z. B. Versionierung oder `rclone sync`). Beide möglichst zeitnah sichern; fehlende Objekte zeigt die App als „nicht verfügbar“ an, Metadaten ohne Objekt schaden nicht.
+
+## Metriken
+
+Mit `METRICS_ENABLED=true` liefert das Backend unter `GET /api/metrics` Metriken im Prometheus-Textformat:
+
+- `http_requests_total` und `http_request_duration_seconds` je Methode, Routen-Template (z. B. `/api/workspaces/:id`) und Status
+- Prozess: `process_resident_memory_bytes`, `process_heap_used_bytes`, `process_uptime_seconds`, `nodejs_eventloop_lag_seconds`
+- `sqlite_file_size_bytes` für Datenbank- und WAL-Datei
+
+Labels enthalten keine personenbezogenen Daten, IDs oder konkreten Pfade. nginx (`frontend`) beantwortet `/api/metrics` immer mit `404`; der Endpunkt ist nur im Backend-Container bzw. im internen Docker-Netz erreichbar. Einmalig abrufen:
+
+```sh
+docker compose exec backend node -e "fetch('http://127.0.0.1:3000/api/metrics').then(r => r.text()).then(console.log)"
+```
+
+Einen Prometheus-Server betreibt das Projekt bewusst nicht (genau zwei Container, ADR 0006); ein vorhandener Prometheus kann das Backend über ein gemeinsames Docker-Netz abfragen.
+
 ## Migrationen
 
 Datenbank-Migrationen laufen beim Start des Backends automatisch.
 
 ## Backup (vorläufig)
 
-> **Wichtig bis Phase 3 (Sync):** Seiteninhalte liegen nur lokal im Browser (IndexedDB) des jeweiligen Geräts und werden noch nicht zum Server übertragen. Das Server-Backup enthält deshalb nur Konten und Workspaces. Abmelden löscht die lokalen Daten nicht; das Löschen der Website-Daten im Browser schon. Die Seitenleiste zeigt, ob der Browser den Speicher dauerhaft gewährt hat.
+> **Was das Server-Backup enthält:** Konten, Geräte, Workspaces und alle synchronisierten Seiten, Blöcke und Tags samt Änderungslog, außerdem die Dateianhänge (`/data/attachments`) und die VAPID-Schlüssel für Web Push und die Push-Subscriptions (Tabellen `settings`, `push_subscriptions`; ohne sie müssen alle Geräte Benachrichtigungen neu aktivieren). Änderungen, die ein Gerät noch nicht synchronisiert hat (Seitenleiste: „lokale Änderungen noch nicht synchronisiert“), liegen nur in dessen Browser (IndexedDB). Abmelden behält die lokalen Daten; beim Abmelden kann man sie für gemeinsam genutzte Geräte ausdrücklich löschen lassen (bei ungesyncten Änderungen nur nach zusätzlicher Bestätigung). Das Löschen der Website-Daten im Browser entfernt sie ebenfalls.
 
 Bis zum automatisierten Backup (Phase 7): Backend stoppen, Volume sichern, wieder starten. Im Verzeichnis mit der `docker-compose.yml` ausführen:
 

@@ -20,9 +20,21 @@ export const loginInputSchema = z.object({
 })
 export type LoginInput = z.infer<typeof loginInputSchema>
 
+export const changePasswordInputSchema = z.object({
+  currentPassword: z.string().min(1).max(PASSWORD_MAX_LENGTH),
+  newPassword: passwordSchema,
+})
+export type ChangePasswordInput = z.infer<typeof changePasswordInputSchema>
+
 export const userSchema = z.object({
   id: z.uuid(),
   email: z.string(),
   createdAt: z.string(),
 })
 export type User = z.infer<typeof userSchema>
+
+export const logoutInputSchema = z.object({
+  /** Also remove this device from the account (shared computers). */
+  removeDevice: z.boolean().optional(),
+})
+export type LogoutInput = z.infer<typeof logoutInputSchema>

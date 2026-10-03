@@ -4,6 +4,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 const API_PORT = 3100
 const WEB_PORT = 5180
+// Production build (service worker) for the PWA tests.
+const PREVIEW_PORT = 5181
 const databasePath = path.join(tmpdir(), `notion-alt-e2e-${Date.now()}.sqlite`)
 
 export default defineConfig({
@@ -20,7 +22,20 @@ export default defineConfig({
       ? { executablePath: process.env.PW_CHROMIUM_PATH }
       : {},
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /pwa-.*\.spec\.ts/ },
+    {
+      name: 'pwa',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Full Chromium in new headless mode: the default headless shell has no notifications
+        // and no push, so the push tests could never pass there.
+        channel: 'chromium',
+        baseURL: `http://localhost:${PREVIEW_PORT}`,
+      },
+      testMatch: /pwa-.*\.spec\.ts/,
+    },
+  ],
   webServer: [
     {
       command: 'pnpm --filter @notion-alt/server exec tsx src/index.ts',
@@ -31,7 +46,19 @@ export default defineConfig({
         DATABASE_PATH: databasePath,
         LOG_LEVEL: 'warn',
         ALLOW_REGISTRATION: 'true',
+        // Every test registers from the same address; keep the per-IP limit out of the way.
+        REGISTER_MAX_ATTEMPTS_PER_IP: '100000',
+        // Fake push service used by the PWA tests.
+        PUSH_ALLOWED_HOSTS: 'push.test',
+        // Small per-workspace attachment quota for the limit test (each test has its own account).
+        WORKSPACE_STORAGE_MB: '0.05',
       },
+      reuseExistingServer: false,
+    },
+    {
+      command: `pnpm exec vite build && pnpm exec vite preview --port ${PREVIEW_PORT} --strictPort`,
+      url: `http://localhost:${PREVIEW_PORT}`,
+      env: { API_PROXY_TARGET: `http://localhost:${API_PORT}` },
       reuseExistingServer: false,
     },
     {

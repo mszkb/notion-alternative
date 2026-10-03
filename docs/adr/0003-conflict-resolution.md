@@ -29,3 +29,11 @@ Prinzip: Konflikte werden sichtbar und nachvollziehbar behandelt, nicht still ü
 - Eine Konflikt-UI ist Teil von Phase 3.
 - CRDT/operation-based Sync bleibt für Phase 8 (Echtzeit) möglich; das Datenmodell darf das nicht verbauen (stabile IDs, Operationen statt Snapshots).
 - Abgedeckte Testfälle: T-MD-02, T-MD-03, T-DEL-02.
+
+## Nachtrag: Umsetzung (Phase 3, Issue #55)
+
+- **Wer zählt als „konkurrierend“:** nur Änderungen **anderer Geräte** seit der `base_revision`. Die eigenen gequeueten Operationen eines Geräts bauen aufeinander auf und sind nie ein Konflikt.
+- **Merge-Regel (auch für Metadaten):** Änderungen an verschiedenen Blöcken sind unabhängig (eigene Revisionen). Ändern zwei Geräte **verschiedene Felder derselben Entität** (z. B. Inhalt vs. Position eines Blocks, Titel vs. Favorit einer Seite), wird angewendet und `merged` gemeldet. Dasselbe Feld, oder Anlegen/Löschen auf einer Seite, ist ein Konflikt. Tags und Tag-Zuordnungen folgen denselben Regeln.
+- **Löschen vs. Bearbeiten:** Bearbeiten einer anderswo gelöschten Entität (`deleted`) oder von Blöcken/Tags einer anderswo gelöschten Seite (`parent_deleted`) ist ein Konflikt; Löschen eines anderswo bearbeiteten Blocks ebenso.
+- **Konfliktobjekt:** Der Server speichert die nicht angewendete Operation (`local`) und den Serverstand der Entität (`remote`) in `conflicts` und schreibt einen Change mit Entität `conflict` ins Log; alle Geräte erhalten ihn per Pull. Erneutes Senden derselben Operation liefert denselben Konflikt. Auf dem Gerät, dessen Änderung betroffen ist, zeigt die Entität danach wieder den Serverstand; die eigene Fassung steht im Konflikt.
+- **Auflösung:** in der Ansicht „Konflikte“ (Seitenleiste, Hinweis auf der Seite, Markierung am Block) mit beiden Fassungen: eigene Änderung übernehmen, Server-Stand behalten oder (bei Text) manuell zusammenführen. Bei Löschkonflikten: als neue Seite wiederherstellen (neue IDs, Tombstones bleiben endgültig) oder Löschung übernehmen. Die gewählte Fassung wird als normale Operation geschrieben, dazu eine `conflict`-`update`-Operation – beides offline möglich. Hat ein anderes Gerät denselben Konflikt bereits aufgelöst, ist das ein `duplicate`, kein neuer Konflikt.

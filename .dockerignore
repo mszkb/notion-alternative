@@ -3,7 +3,7 @@
 **/coverage
 .git
 .github
-data
+**/data
 docs
 *.md
 !apps/**/*.md

@@ -29,3 +29,11 @@ export async function insertUser(db: Db, email: string, passwordHash: string) {
   await db.insertInto('users').values(row).execute()
   return row
 }
+
+export async function findUserById(db: Db, id: string) {
+  return db.selectFrom('users').selectAll().where('id', '=', id).executeTakeFirst()
+}
+
+export async function updatePasswordHash(db: Db, id: string, passwordHash: string) {
+  await db.updateTable('users').set({ password_hash: passwordHash }).where('id', '=', id).execute()
+}

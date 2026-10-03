@@ -1,7 +1,10 @@
 import type { Workspace } from '@notion-alt/shared'
+import { Dexie } from 'dexie'
 import { ref, shallowRef } from 'vue'
 import { api } from '../api'
+import { deviceStatus, registerDevice } from '../device'
 import { connection } from '../session'
+import { stopSync } from '../sync/engine'
 import { LocalDb, localDbName } from './db'
 import { ensurePersistentStorage, type PersistenceStatus } from './persistence'
 import { WorkspaceSearch } from './search'
@@ -59,6 +62,8 @@ export function closeLocalStore(): void {
   localStore.value?.db.close()
   localStore.value = null
   workspaces.value = []
+  deviceStatus.value = 'unknown'
+  stopSync()
   opening = null
   openUserId = null
   generation = null
@@ -74,9 +79,13 @@ export async function requestPersistence(): Promise<void> {
   persistence.value = await ensurePersistentStorage()
 }
 
-/** Refreshes the workspace cache from the server; keeps the cached list when offline. */
+/**
+ * Online refresh: registers this device (idempotent, also after an offline start) and refreshes
+ * the workspace cache; keeps the cached list when offline.
+ */
 export async function refreshWorkspaces(store: LocalStore): Promise<Workspace[]> {
   if (connection.value === 'online') {
+    await registerDevice(store.deviceId)
     try {
       await store.cacheWorkspaces((await api.listWorkspaces()).workspaces)
     } catch {
@@ -104,6 +113,23 @@ export function rememberWorkspace(workspaceId: string): void {
     localStorage.setItem(LAST_WORKSPACE_KEY, workspaceId)
   } catch {
     // Not essential.
+  }
+}
+
+/**
+ * Removes everything this app stored locally for the user: the local database (pages, queue,
+ * device id) and the remembered workspace. Only after explicit confirmation (shared devices).
+ */
+export async function deleteLocalData(userId: string): Promise<void> {
+  closeLocalStore()
+  // Other tabs close their connection on `versionchange` (Dexie default), so this completes.
+  await Dexie.delete(localDbName(userId))
+  try {
+    localStorage.removeItem(LAST_WORKSPACE_KEY)
+    // Ids of pages expanded in the tree are traces of the content too.
+    localStorage.removeItem('notion-alt.expanded')
+  } catch {
+    // Storage unavailable: nothing stored there either.
   }
 }
 
