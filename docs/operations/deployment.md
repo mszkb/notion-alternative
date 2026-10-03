@@ -97,7 +97,7 @@ Das Backend begrenzt fehlgeschlagene Logins und Registrierungsversuche im Arbeit
 | `LOGIN_MAX_FAILURES_PER_IP` | `20` | Fehlversuche je Client-IP (gegen Credential Stuffing) |
 | `REGISTER_MAX_ATTEMPTS_PER_IP` | `10` | Registrierungsversuche je Client-IP |
 
-Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`frontend`) anhängt; das Backend vertraut genau einem Proxy-Hop. Ein weiterer Reverse Proxy davor (z. B. für TLS) erscheint deshalb als Client-IP; dann teilen sich alle Nutzer das IP-Limit. In diesem Fall `LOGIN_MAX_FAILURES_PER_IP` erhöhen. Bei rootless Docker sieht nginx je nach Port-Treiber ebenfalls nicht die echte Adresse.
+Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`frontend`) anhängt; das Backend vertraut genau einem Proxy-Hop. Ein weiterer Reverse Proxy davor (z. B. für TLS) erscheint deshalb als Client-IP; dann teilen sich alle Nutzer das IP-Limit. Abhilfe: [Echte Client-IP hinter einem TLS-Proxy](#echte-client-ip-hinter-einem-tls-proxy) oder `LOGIN_MAX_FAILURES_PER_IP` erhöhen. Bei rootless Docker sieht nginx je nach Port-Treiber ebenfalls nicht die echte Adresse.
 
 ## Zugriff von Smartphones (HTTPS)
 
@@ -117,11 +117,13 @@ set_real_ip_from 172.16.0.0/12;
 real_ip_header X-Forwarded-For;
 ```
 
-Das Backend vertraut `X-Forwarded-For` nur von einem Proxy aus einem privaten Netz (dem nginx-Container), ein direkt verbundener Client kann seine Adresse also nicht vorgeben.
+`real_ip_header X-Forwarded-For` übernimmt den **letzten** Eintrag des Headers, also die Adresse, die der TLS-Proxy angehängt hat (ohne `real_ip_recursive on`, das ist Absicht). nginx gibt sie per `$proxy_add_x_forwarded_for` ans Backend weiter. Das Backend vertraut `X-Forwarded-For` nur von genau einem Proxy-Hop aus einem privaten Netz (dem nginx-Container); ein Client, der das Backend direkt erreicht, kann seine Adresse also nicht vorgeben.
+
+Wichtig: `set_real_ip_from` vertraut **jeder** Verbindung aus dem angegebenen Netz. Veröffentlicht Docker den Port, kommen alle Verbindungen vom Host über das Docker-Gateway, auch solche, die nicht über den TLS-Proxy laufen. Deshalb nur zusammen mit `BIND_ADDRESS=127.0.0.1` verwenden (dann kann nur der Host selbst den Header setzen), nie mit `0.0.0.0`. Prüfen: nach dem Neustart von `frontend` mit einem falschen Passwort anmelden; das Backend-Log (`docker compose logs backend`) zeigt bei der Anfrage die Adresse des Geräts, nicht die des Gateways.
 
 ### Was in Logs landet
 
-Das Backend loggt Anfragen ohne Query-String (Suchbegriffe sind Inhalte). nginx protokolliert im Access-Log die vollständige URL; wer das nicht möchte, setzt in `apps/web/nginx.conf` für `location /api/` `access_log off;` oder ein eigenes `log_format` ohne `$request_uri`.
+Das Backend loggt Anfragen ohne Query-String (Suchbegriffe sind Inhalte). nginx protokolliert im Access-Log (`docker compose logs frontend`) dagegen die vollständige URL, also auch Suchbegriffe der serverseitigen Suche; wer das nicht möchte, setzt in `apps/web/nginx.conf` für `location /api/` `access_log off;` oder ein eigenes `log_format` ohne `$request_uri`.
 
 ## App offline (Service Worker)
 
