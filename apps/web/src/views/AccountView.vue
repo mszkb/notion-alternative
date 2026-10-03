@@ -3,7 +3,8 @@ import { onMounted, ref, watch } from 'vue'
 import { type Device, PASSWORD_MIN_LENGTH } from '@notion-alt/shared'
 import { ApiError, api } from '../api'
 import { deviceStatus } from '../device'
-import { refreshWorkspaces, requireStore } from '../local/context'
+import { persistence, refreshWorkspaces, requireStore } from '../local/context'
+import { formatBytes, type StorageUsage, storageUsage } from '../local/persistence'
 import { connection, currentUser } from '../session'
 import { resetAppCache } from '../pwa'
 import { requestSync, syncState } from '../sync/engine'
@@ -41,6 +42,13 @@ async function loadDevices() {
 }
 
 onMounted(loadDevices)
+
+// ------------------------------------------------------------------ storage
+
+const usage = ref<StorageUsage | null>(null)
+onMounted(async () => {
+  usage.value = await storageUsage()
+})
 // The device registers itself on the online refresh; show it once that happened.
 watch(deviceStatus, loadDevices)
 
@@ -230,6 +238,20 @@ async function changePassword() {
     <p v-if="resyncDone" class="muted" data-testid="resync-done">Vollständig synchronisiert.</p>
     <p v-if="!resyncing && syncState.lastError" class="error">
       Synchronisierung fehlgeschlagen: {{ syncState.lastError }}
+    </p>
+
+    <h2>Speicher auf diesem Gerät</h2>
+    <p v-if="usage" data-testid="storage-usage">
+      {{ formatBytes(usage.usage) }} von {{ formatBytes(usage.quota) }} belegt (lokale Daten und
+      App-Dateien).
+    </p>
+    <p v-else class="muted">Der Browser nennt keinen Speicherverbrauch.</p>
+    <p class="muted">
+      {{
+        persistence === 'persisted'
+          ? 'Der Browser hat dauerhaften Speicher gewährt.'
+          : 'Der Browser darf lokale Daten bei Speichermangel löschen; installieren hilft.'
+      }}
     </p>
 
     <h2>App-Version</h2>

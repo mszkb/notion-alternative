@@ -4,6 +4,7 @@ test.describe('account', () => {
   test('changes the password from the account page', async ({ signedIn: page }) => {
     await page.getByRole('link', { name: 'Konto' }).click()
     await expect(page).toHaveURL(/\/account$/)
+    await expect(page.getByTestId('storage-usage')).toContainText(/belegt/)
 
     await page.getByLabel('Aktuelles Passwort').fill('wrong password')
     await page.getByLabel('Neues Passwort', { exact: true }).fill('a brand new passphrase')
