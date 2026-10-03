@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Client-Lasttest</title>
+  </head>
+  <body>
+    <!-- Served by `vite` only for scripts/loadtest-browser.mjs (#77); not part of the build. -->
+    <script type="module">
+      import { runClientLoad } from '/src/local/load-scenario.ts'
+      window.runClientLoad = runClientLoad
+      window.loadtestReady = true
+    </script>
+  </body>
+</html>

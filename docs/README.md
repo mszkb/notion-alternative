@@ -20,6 +20,7 @@ Abgeleitet aus der ursprünglichen Roadmap-Spezifikation („Roadmap: Self-hoste
 ## Betrieb
 
 - [Deployment & Betrieb](operations/deployment.md)
+- [Backup, Restore, Upgrade](operations/backup.md)
 
 ## Prozess
 
@@ -29,5 +30,6 @@ Abgeleitet aus der ursprünglichen Roadmap-Spezifikation („Roadmap: Self-hoste
 ## Tests
 
 - [Testmatrix](testing/test-matrix.md)
+- [Lasttests: Skripte, Ergebnisse, Grenzen](testing/load-tests.md)
 
 Gesamtplanung: [`../ROADMAP.md`](../ROADMAP.md)

@@ -123,6 +123,18 @@ describe('syncWorkspace', () => {
     expect(await syncWorkspace(b, WS, server)).toBe('pull')
   })
 
+  it('rebuilds the backlink index from the snapshot', async () => {
+    const target = await a.createDocument({ workspaceId: WS, title: 'Ziel' })
+    const source = await a.createDocument({ workspaceId: WS, title: 'Quelle' })
+    const [block] = await a.listBlocks(source.id)
+    await a.updateBlock(block!.id, { content: `Siehe [Ziel](page:${target.id})` })
+    await syncA()
+
+    expect(await syncWorkspace(b, WS, server)).toBe('resync')
+    expect((await b.backlinks(target.id)).map((d) => d.id)).toEqual([source.id])
+    expect(await b.backlinks(source.id)).toEqual([])
+  })
+
   it('T-MD-05: after compaction the device re-syncs without losing local changes', async () => {
     const doc = await a.createDocument({ workspaceId: WS, title: 'Basis' })
     await syncA()

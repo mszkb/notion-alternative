@@ -83,6 +83,7 @@ Node 22 und pnpm (`corepack enable`).
 | `pnpm lint` / `pnpm format:check` | ESLint / Prettier (`pnpm format` korrigiert) |
 | `pnpm typecheck` | `tsc` bzw. `vue-tsc` in allen Paketen |
 | `pnpm test` | Vitest in allen Paketen |
+| `node scripts/loadtest/server-load.mjs`, `pnpm --filter @notion-alt/web loadtest:browser` | Lasttests Server/Client (`PAGES=10000` = Zielgröße), siehe `docs/testing/load-tests.md` |
 | `pnpm --filter @notion-alt/web test:e2e` | Playwright (startet Server + Vite selbst); lokal ohne Browser-Download: `PW_CHROMIUM_PATH=/pfad/zu/chromium` |
 | `pnpm build` | Server-Bundle und SPA bauen |
 | `docker compose up -d --build` | Produktiv-Stack auf `:8080` |
@@ -101,4 +102,4 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
 - Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.
 - Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`findWorkspaceForUser`).
-- Betrieb, Konfiguration, Backup: `docs/operations/deployment.md`.
+- Betrieb, Konfiguration: `docs/operations/deployment.md`; Backup, Restore, Upgrade: `docs/operations/backup.md`. Ändern sich die Backup-Befehle, beides anpassen: Doku und `scripts/backup-restore-test.sh`.

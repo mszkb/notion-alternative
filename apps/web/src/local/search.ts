@@ -1,4 +1,4 @@
-import { type Block, inlineToPlainText } from '@notion-alt/shared'
+import { type Block, type Document, inlineToPlainText, type Tag } from '@notion-alt/shared'
 import MiniSearch from 'minisearch'
 import type { LocalStore } from './store'
 
@@ -85,6 +85,15 @@ export function makeSnippet(text: string, terms: string[], radius = 60): string 
   return `${start > 0 ? '…' : ''}${excerpt}${end < text.length ? '…' : ''}`
 }
 
+function entryFor(document: Document, blocks: Block[], tags: Tag[]): SearchEntry {
+  return {
+    id: document.id,
+    title: document.title,
+    text: blocksToText(blocks),
+    tags: tags.map((tag) => tag.name).join(' '),
+  }
+}
+
 /** Keeps a SearchIndex in step with the local store for one workspace. */
 export class WorkspaceSearch {
   readonly index = new SearchIndex()
@@ -104,8 +113,11 @@ export class WorkspaceSearch {
       for (const id of change.documentIds) this.pending.add(id)
       this.schedule()
     })
-    const documents = await this.store.listDocuments(this.workspaceId)
-    for (const document of documents) await this.reindex(document.id)
+    for (const { document, blocks, tags } of await this.store.documentsWithContent(
+      this.workspaceId,
+    )) {
+      this.index.upsert(entryFor(document, blocks, tags))
+    }
   }
 
   stop(): void {
@@ -138,11 +150,6 @@ export class WorkspaceSearch {
       this.store.listBlocks(documentId),
       this.store.tagsForDocument(documentId),
     ])
-    this.index.upsert({
-      id: document.id,
-      title: document.title,
-      text: blocksToText(blocks),
-      tags: tags.map((tag) => tag.name).join(' '),
-    })
+    this.index.upsert(entryFor(document, blocks, tags))
   }
 }

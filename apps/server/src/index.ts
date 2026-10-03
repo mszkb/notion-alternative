@@ -8,6 +8,7 @@ import { createBackup, restoreBackup } from './backup/backup'
 import { loadConfig } from './config'
 import { createDatabase } from './db/database'
 import { migrateToLatest } from './db/migrate'
+import { reindexMarked } from './search/index'
 
 const config = loadConfig()
 
@@ -40,6 +41,8 @@ if (command === 'restore') {
 
 const db = createDatabase(config.databasePath)
 await migrateToLatest(db)
+// Search entries a crash left outdated (#99).
+await reindexMarked(db)
 
 // One-off command: copy attachment files from the volume to S3 (#63), then exit.
 if (process.argv[2] === 'migrate-attachments-to-s3') {

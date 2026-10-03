@@ -36,7 +36,7 @@ import {
   validateOperationPayload,
   type Workspace,
 } from '@notion-alt/shared'
-import type { AttachmentContent, LocalDb, QueuedOperation } from './db'
+import type { AttachmentContent, LinkEntry, LocalDb, QueuedOperation } from './db'
 
 export class LocalStoreError extends Error {
   override name = 'LocalStoreError'
@@ -83,6 +83,13 @@ const CONTENT_TABLES = [
   'attachments',
   'attachmentContents',
 ]
+
+/** Backlink index entry of a block, or null when it links to no page. */
+function linkEntry(block: Block, document: Document): LinkEntry | null {
+  const targets = block.type === 'code' ? [] : extractPageLinks(block.content)
+  if (targets.length === 0) return null
+  return { blockId: block.id, documentId: document.id, workspaceId: document.workspaceId, targets }
+}
 
 /**
  * The only write path for local content (ADR 0009). Every mutation writes the content change and
@@ -484,17 +491,9 @@ export class LocalStore {
   }
 
   private async updateLinks(block: Block, document: Document) {
-    const targets = block.type === 'code' ? [] : extractPageLinks(block.content)
-    if (targets.length === 0) {
-      await this.db.links.delete(block.id)
-    } else {
-      await this.db.links.put({
-        blockId: block.id,
-        documentId: document.id,
-        workspaceId: document.workspaceId,
-        targets,
-      })
-    }
+    const entry = linkEntry(block, document)
+    if (entry) await this.db.links.put(entry)
+    else await this.db.links.delete(block.id)
   }
 
   async createBlock(documentId: string, input: NewBlock, position: Position = {}): Promise<Block> {
@@ -598,6 +597,47 @@ export class LocalStore {
     return tags
       .filter((tag): tag is Tag => !!tag && !tag.deletedAt)
       .sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  /**
+   * Active pages of a workspace with their active blocks (in order) and tags, read in one pass
+   * per table instead of per page: building the search index of 10 000 pages took 25 s (#98).
+   */
+  async documentsWithContent(
+    workspaceId: string,
+  ): Promise<{ document: Document; blocks: Block[]; tags: Tag[] }[]> {
+    const documents = await this.listDocuments(workspaceId)
+    const ids = new Set(documents.map((d) => d.id))
+    // One getAll over the whole table (all workspaces, usually one or two) and a filter here:
+    // an indexed anyOf() over thousands of pages or Dexie's filter() walk a cursor, 3× slower.
+    const [blocks, tags, assignments] = await Promise.all([
+      this.db.blocks.toArray(),
+      this.db.tags.where('workspaceId').equals(workspaceId).toArray(),
+      this.db.documentTags.where('workspaceId').equals(workspaceId).toArray(),
+    ])
+    const blocksByDocument = new Map<string, Block[]>()
+    for (const block of blocks) {
+      if (block.deletedAt || !ids.has(block.documentId)) continue
+      const list = blocksByDocument.get(block.documentId)
+      if (list) list.push(block)
+      else blocksByDocument.set(block.documentId, [block])
+    }
+    const tagById = new Map(tags.filter((t) => !t.deletedAt).map((t) => [t.id, t]))
+    const tagsByDocument = new Map<string, Set<Tag>>()
+    for (const assignment of assignments) {
+      const tag = tagById.get(assignment.tagId)
+      if (assignment.deletedAt || !tag) continue
+      const set = tagsByDocument.get(assignment.documentId) ?? new Set<Tag>()
+      set.add(tag)
+      tagsByDocument.set(assignment.documentId, set)
+    }
+    return documents.map((document) => ({
+      document,
+      blocks: (blocksByDocument.get(document.id) ?? []).sort(compareBySortKey),
+      tags: [...(tagsByDocument.get(document.id) ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ),
+    }))
   }
 
   async documentsForTag(tagId: string): Promise<Document[]> {
@@ -1186,12 +1226,16 @@ export class LocalStore {
           d,
         ]),
       )
+      // One bulk write: per-block writes made a re-sync of a large workspace take minutes (#77).
+      const links: LinkEntry[] = []
       for (const block of await this.db.blocks
         .where('documentId')
         .anyOf([...documents.keys()])
         .toArray()) {
-        if (!block.deletedAt) await this.updateLinks(block, documents.get(block.documentId)!)
+        const entry = block.deletedAt ? null : linkEntry(block, documents.get(block.documentId)!)
+        if (entry) links.push(entry)
       }
+      await this.db.links.bulkPut(links)
       for (const id of new Set([...documentIds, ...documents.keys()])) {
         this.mark(ctx, workspaceId, id)
       }
