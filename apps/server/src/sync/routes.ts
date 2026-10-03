@@ -17,6 +17,7 @@ import { latestSeq, listChangesSince } from './changes'
 import { toChange } from './mapping'
 import { loadSnapshot } from './snapshot'
 import { findWorkspaceForUser } from '../workspaces/repository'
+import { reindexMarked } from '../search/index'
 
 export async function syncRoutes(app: FastifyInstance): Promise<void> {
   const { db } = app
@@ -41,6 +42,8 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
       pushed.inc({ status: result.status })
       results.push({ opId: op.opId, ...result } as SyncPushResult)
     }
+    // Search entries of the changed pages, once per page instead of per operation (#99).
+    await reindexMarked(db)
     for (const deviceId of new Set(operations.map((op) => op.deviceId))) {
       await touchDevice(db, user.id, deviceId, now)
     }

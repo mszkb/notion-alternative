@@ -19,7 +19,7 @@ import type { SelectQueryBuilder } from 'kysely'
 import type { Db } from '../db/database'
 import type { Database } from '../db/schema'
 import { findActiveDevice } from '../devices/repository'
-import { reindexDocument } from '../search/index'
+import { markForReindex } from '../search/index'
 import { findWorkspaceForUser } from '../workspaces/repository'
 import { toAttachment, toBlock, toDocument, toDocumentTag, toTag } from './mapping'
 
@@ -794,7 +794,7 @@ export async function applyOperation(
         throw error
       }
       const indexed = await indexedDocument(trx, op)
-      if (indexed) await reindexDocument(trx, indexed)
+      if (indexed) await markForReindex(trx, indexed)
       const seq = await nextSeq(trx, op.workspaceId)
       await trx
         .insertInto('changes')

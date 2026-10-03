@@ -22,6 +22,7 @@ describe('migrations', () => {
       'document_tags',
       'documents',
       'push_subscriptions',
+      'search_dirty',
       'search_documents',
       'search_index',
       'sessions',

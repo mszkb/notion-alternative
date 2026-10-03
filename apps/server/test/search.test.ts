@@ -5,7 +5,8 @@ import { Migrator } from 'kysely/migration'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createDatabase } from '../src/db/database'
 import { migrateToLatest, migrations } from '../src/db/migrate'
-import { toFtsQuery } from '../src/search/index'
+import { reindexMarked, searchWorkspace, toFtsQuery } from '../src/search/index'
+import { applyOperation } from '../src/sync/apply'
 import { createTestApp, register, type TestApp } from './helpers'
 
 let app: TestApp
@@ -125,6 +126,41 @@ describe('GET /api/search', () => {
     expect(await titles('umbenannt')).toEqual(['Umbenannt'])
     await push([op('document', 'delete', doc, {}, 2)])
     expect(await titles('umbenannt')).toEqual([])
+  })
+
+  it('#99: rebuilds a page once per push, with every block of the batch', async () => {
+    const doc = randomUUID()
+    const ops = [op('document', 'create', doc, page('Lang'))]
+    for (let i = 0; i < 300; i++) {
+      ops.push(
+        op('block', 'create', randomUUID(), { ...block(doc, `zeile${i}`), sortKey: `a${i}` }),
+      )
+    }
+    await push(ops)
+    const marks = await sql<{ n: number }>`select count(*) as n from search_dirty`.execute(app.db)
+    expect(marks.rows[0]!.n).toBe(0)
+    expect(await titles('zeile0')).toEqual(['Lang'])
+    expect(await titles('zeile299')).toEqual(['Lang'])
+  })
+
+  it('#99: an operation applied without the push route (crash) is indexed before searching', async () => {
+    const user = (await app.inject({ url: '/api/auth/me', headers: { cookie } })).json().user
+    const doc = randomUUID()
+    await push([op('document', 'create', doc, page('Absturz'))])
+    // Applied and committed, but the process dies before the push route reindexes.
+    await applyOperation(
+      app.db,
+      user.id,
+      op('block', 'create', randomUUID(), block(doc, 'gerettet')),
+    )
+    const marks = await sql<{ n: number }>`select count(*) as n from search_dirty`.execute(app.db)
+    expect(marks.rows[0]!.n).toBe(1)
+    expect(
+      (await searchWorkspace(app.db, user.id, workspaceId, 'gerettet'))?.map((h) => h.title),
+    ).toEqual(['Absturz'])
+    // Startup does the same; nothing is left to do now.
+    await reindexMarked(app.db)
+    expect(await titles('gerettet')).toEqual(['Absturz'])
   })
 
   it('never returns hits from foreign workspaces', async () => {

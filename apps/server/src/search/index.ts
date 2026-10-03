@@ -50,6 +50,29 @@ export async function reindexDocument(db: Db, documentId: string): Promise<void>
   )
 }
 
+/** Marks a page's search entry as outdated; called in the transaction that changes the page. */
+export async function markForReindex(db: Db, documentId: string): Promise<void> {
+  await sql`insert or ignore into search_dirty (document_id) values (${documentId})`.execute(db)
+}
+
+/**
+ * Rebuilds the entries of all marked pages, once per page (#99). Runs after each push, before
+ * each search (so results never lag behind applied operations) and at startup (a crash between
+ * applying and reindexing leaves marks behind, never a stale index without a mark).
+ */
+export async function reindexMarked(db: Db): Promise<void> {
+  const marked = await sql<{ document_id: string }>`select document_id from search_dirty`.execute(
+    db,
+  )
+  if (marked.rows.length === 0) return
+  await db.transaction().execute(async (trx) => {
+    for (const { document_id } of marked.rows) {
+      await reindexDocument(trx, document_id)
+      await sql`delete from search_dirty where document_id = ${document_id}`.execute(trx)
+    }
+  })
+}
+
 /**
  * Turns user input into a safe FTS5 query: every word becomes a quoted prefix term, all must
  * match. FTS syntax in the input (quotes, operators, columns) is never interpreted.
@@ -78,6 +101,7 @@ export async function searchWorkspace(
   limit = 20,
 ): Promise<SearchHit[] | null> {
   if (!(await findWorkspaceForUser(db, workspaceId, userId))) return null
+  await reindexMarked(db)
   const query = toFtsQuery(input)
   if (!query) return []
   const { rows } = await sql<SearchHit>`
