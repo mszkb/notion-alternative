@@ -5,6 +5,7 @@ import { deviceStatus } from '../device'
 import { LocalDb } from '../local/db'
 import { LocalStore } from '../local/store'
 import { connection } from '../session'
+import type * as Engine from './engine'
 import { requestSync, stopSync, syncState, type SyncTransport } from './engine'
 
 const WS = '11111111-1111-4111-8111-111111111111'
@@ -107,7 +108,7 @@ describe('requestSync', () => {
     const otherTab = await LocalStore.open(new LocalDb(db.name))
     // A query string gives a fresh module instance, like a second tab.
     const tabModule = `./engine?tab=${2}`
-    const other = (await import(/* @vite-ignore */ tabModule)) as typeof import('./engine')
+    const other = (await import(/* @vite-ignore */ tabModule)) as typeof Engine
     expect(other.requestSync).not.toBe(requestSync)
 
     t.block()
