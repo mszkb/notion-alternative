@@ -11,12 +11,21 @@ function longestBacktickRun(text: string): number {
   return Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
 }
 
+export interface BlocksToMarkdownOptions {
+  /** Link target of an attachment; default `attachment:<id>`. */
+  attachmentHref?: (attachmentId: string) => string
+}
+
 /**
  * Serialises blocks as Markdown (block content already is Markdown inline, ADR 0008).
  * Consecutive list items form one list; ordered items are numbered per indent level.
  * Page links stay `[Title](page:<id>)`; the export (ADR 0004) rewrites them separately.
  */
-export function blocksToMarkdown(blocks: MarkdownBlock[]): string {
+export function blocksToMarkdown(
+  blocks: MarkdownBlock[],
+  options: BlocksToMarkdownOptions = {},
+): string {
+  const attachmentHref = options.attachmentHref ?? ((id: string) => `attachment:${id}`)
   const parts: string[] = []
   const counters: number[] = []
   let previousWasList = false
@@ -52,10 +61,10 @@ export function blocksToMarkdown(blocks: MarkdownBlock[]): string {
           break
         }
         case 'image':
-          text = `![${block.content || 'Bild'}](attachment:${block.attrs.attachmentId ?? ''})`
+          text = `![${block.content || 'Bild'}](${attachmentHref(block.attrs.attachmentId ?? '')})`
           break
         case 'file':
-          text = `[${block.content || 'Datei'}](attachment:${block.attrs.attachmentId ?? ''})`
+          text = `[${block.content || 'Datei'}](${attachmentHref(block.attrs.attachmentId ?? '')})`
           break
         default:
           text = block.content

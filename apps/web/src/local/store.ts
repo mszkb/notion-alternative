@@ -16,6 +16,7 @@ import {
   type DocumentCreatePayload,
   type DocumentTag,
   type DocumentTagCreatePayload,
+  type ExportInput,
   documentSchema,
   documentTitleSchema,
   extractPageLinks,
@@ -1239,6 +1240,28 @@ export class LocalStore {
       )
       this.mark(ctx, attachment.workspaceId, attachment.documentId)
     })
+  }
+
+  /** All content of a workspace, tombstones included, read consistently (export, ADR 0004). */
+  async exportData(workspaceId: string): Promise<ExportInput> {
+    const db = this.db
+    return db.transaction(
+      'r',
+      [db.documents, db.blocks, db.tags, db.documentTags, db.attachments],
+      async () => {
+        const documents = await db.documents.where('workspaceId').equals(workspaceId).toArray()
+        const blocks = await db.blocks
+          .where('documentId')
+          .anyOf(documents.map((d) => d.id))
+          .toArray()
+        const [tags, documentTags, attachments] = await Promise.all([
+          db.tags.where('workspaceId').equals(workspaceId).toArray(),
+          db.documentTags.where('workspaceId').equals(workspaceId).toArray(),
+          db.attachments.where('workspaceId').equals(workspaceId).toArray(),
+        ])
+        return { documents, blocks, tags, documentTags, attachments }
+      },
+    )
   }
 
   async getAttachment(id: string): Promise<Attachment | undefined> {

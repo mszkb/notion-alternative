@@ -4,6 +4,7 @@ import { lastWorkspaceId, openLocalStore, refreshWorkspaces, workspaces } from '
 import { connection, loadCurrentUser } from './session'
 import AccountView from './views/AccountView.vue'
 import ConflictsView from './views/ConflictsView.vue'
+import ExportView from './views/ExportView.vue'
 import HistoryView from './views/HistoryView.vue'
 import HomeView from './views/HomeView.vue'
 import LoginView from './views/LoginView.vue'
@@ -31,6 +32,7 @@ export const router = createRouter({
         { path: 'tags/:tagId', name: 'tag', component: TagView },
         { path: 'conflicts', name: 'conflicts', component: ConflictsView },
         { path: 'trash', name: 'trash', component: TrashView },
+        { path: 'export', name: 'export', component: ExportView },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
