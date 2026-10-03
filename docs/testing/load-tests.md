@@ -6,14 +6,14 @@ Belastbarkeit großer Workspaces ([#77](https://github.com/mszkb/notion-alternat
 
 | Was | Befehl | Misst |
 | --- | --- | --- |
-| Server | `pnpm --filter @notion-alt/server build && node scripts/loadtest/server-load.mjs` | Seed per Sync-Push (volle Batches à 500 Operationen), mehrere Geräte gleichzeitig (Push + Delta-Pull), vollständiger Pull, Snapshot (Re-Sync), Änderungslog (JSON-Export), Serversuche; RAM/CPU des Serverprozesses |
-| Client (Chromium) | `pnpm --filter @notion-alt/web loadtest:browser` | Snapshot in die lokale Datenbank schreiben (neues Gerät/Re-Sync), Seitenliste, Blöcke einer Seite, Aufbau des Suchindex (MiniSearch), Suchanfragen, JS-Heap |
+| Server | `pnpm --filter @notion-alt/server build && node scripts/loadtest/server-load.mjs` | Seed per Sync-Push (volle Batches à 500 Operationen), mehrere Geräte gleichzeitig (Push + Delta-Pull), vollständiger Pull, Snapshot seitenweise (Re-Sync, #97), Änderungslog (JSON-Export), Serversuche; RAM/CPU des Serverprozesses |
+| Client (Chromium) | `pnpm --filter @notion-alt/web loadtest:browser` | Snapshot seitenweise in die lokale Datenbank schreiben (neues Gerät/Re-Sync), Seitenliste, Blöcke einer Seite, Aufbau, Speichern und Laden des Suchindex (MiniSearch, #98), Suchanfragen, JS-Heap |
 | Client (Node) | `pnpm --filter @notion-alt/web loadtest` | Dasselbe Szenario mit fake-indexeddb. Nur für schnelle Vergleiche: Die IndexedDB-Zeiten sind dort viel zu hoch, weil Index-Cursor quadratisch laufen (10 000 Zeilen per `anyOf`: 51 s statt 0,5 s). |
 
 **Parameter** (Umgebungsvariablen):
 
 - `PAGES` (Standard: Server und Chromium 1 000, Node 200) und `BLOCKS_PER_PAGE` (50).
-- Nur Server: `DEVICES` (10), `ROUNDS` (20), `OPS_PER_ROUND` (50), `SEARCHES` (50).
+- Nur Server: `DEVICES` (10), `ROUNDS` (20), `OPS_PER_ROUND` (50), `SEARCHES` (50), `SNAPSHOT_PAGE` (2 000). `LEGACY_SNAPSHOT=1` misst zusätzlich den alten Snapshot in einer Antwort.
 - `OUT=datei.json` speichert das Ergebnis.
 
 **Ziele:**
@@ -32,25 +32,32 @@ Die Zielgröße aus dem Issue ist `PAGES=10000`, also 10 000 Seiten und 500 000 
 
 | Szenario | Ergebnis |
 | --- | --- |
-| Seed: 510 000 Operationen in 1 020 Pushes à 500 | **1 118 Ops/s** über den ganzen Lauf; Push à 500: p50 442 ms, p95 503 ms, max 659 ms; RSS ≤ 290 MB; Datenbank 660 MB |
-| 10 Geräte gleichzeitig, je 20 × (Push von 50 Block-Updates + Delta-Pull) | 10 000 × `applied`, **keine Fehler, kein `SQLITE_BUSY`**; Push p50 212 ms, p95 411 ms, max 1,3 s; Pull p50 175 ms, p95 364 ms |
-| Vollständiger Pull (neues Gerät, 520 000 Changes, 1 000 pro Seite) | 4,2 s; 264 MB übertragen; Seite p50 6 ms, max 23 ms |
-| Snapshot (Re-Sync) | 4,1 s; **168 MB in einer Antwort; RSS-Spitze 1,07 GB** |
-| Änderungslog für den JSON-Export | 4,1 s für 520 000 Changes |
-| Serversuche (FTS5, 50 Anfragen) | p50 64 ms, p95 71 ms, max 84 ms |
+| Seed: 510 000 Operationen in 1 020 Pushes à 500 | **1 128 Ops/s** über den ganzen Lauf; Push à 500: p50 441 ms, p95 508 ms, max 576 ms; RSS ≤ 286 MB; Datenbank 707 MB (mit den Indizes aus `0011`) |
+| 10 Geräte gleichzeitig, je 20 × (Push von 50 Block-Updates + Delta-Pull) | 10 000 × `applied`, **keine Fehler, kein `SQLITE_BUSY`**; Push p50 207 ms, p95 415 ms, max 1,4 s; Pull p50 167 ms, p95 344 ms |
+| Vollständiger Pull (neues Gerät, 520 000 Changes, 1 000 pro Seite) | 3,8 s; 264 MB übertragen; Seite p50 6 ms, max 25 ms |
+| Snapshot (Re-Sync), seitenweise à 2 000 Entitäten (#97) | 3,2 s für 256 Seiten; Seite p50 11 ms, max 39 ms; 168 MB insgesamt; **RSS-Spitze 297 MB** (vorher eine Antwort mit 1,07 GB RSS) |
+| Änderungslog für den JSON-Export | 3,4 s für 520 000 Changes |
+| Serversuche (FTS5, 50 Anfragen) | p50 56 ms, p95 71 ms, max 84 ms |
 | Lange Seiten: 20 Seiten à 500 Blöcke | 1 199 Ops/s, Push à 500 p50 409 ms (vor #99: 325 Ops/s, p50 1,5 s) |
 
 **SQLite:** Der WAL-Modus und `busy_timeout = 5000` sind gesetzt (`apps/server/src/db/database.ts`). Parallele Pushes serialisieren sich an der Schreibsperre. Die Wartezeit erscheint als längere Antwortzeit (max 1,3 s bei 10 Geräten), nicht als Fehler.
 
 ### Client, Chromium
 
-| Seiten / Blöcke | Snapshot schreiben | Seitenliste | Suchindex aufbauen | Suche p50 / max | JS-Heap nach Index |
-| --- | --- | --- | --- | --- | --- |
-| 200 / 10 000 | 2,4 s | 9 ms | 0,5 s | 0 / 4 ms | 31 MB |
-| 1 000 / 50 000 | 26 s | 17 ms | 1,1 s (vor #98: 2,5 s) | 1 ms | 106 MB |
-| 10 000 / 500 000 | **5,5 min** | 303 ms | **10,8 s** (vor #98: 25 s) | 15 / 23 ms | 318 MB vor #98; danach ohne GC gemessen 722 MB, weil alle Blöcke zum Indexieren auf einmal gelesen werden |
+| Seiten / Blöcke | Snapshot schreiben | Seitenliste | Suchindex aufbauen | Suchindex laden (#98) | Suche p50 / max | JS-Heap nach Index |
+| --- | --- | --- | --- | --- | --- | --- |
+| 200 / 10 000 | 2,4 s | 9 ms | 0,5 s | – | 0 / 4 ms | 31 MB |
+| 1 000 / 50 000 | 26 s | 17 ms | 1,1 s (vor #98: 2,5 s) | – | 1 ms | 106 MB |
+| 10 000 / 500 000 | **5,4 min** in 256 Seiten à 2 000, je p50 1,2 s, max 2,4 s (#97) | 219 ms | 10,5 s | **0,46 s**; Speichern einmalig 3,2 s | 12 / 52 ms | 421 MB |
 
-Das Schreiben des Snapshots wird von IndexedDB bestimmt. `bulkPut` der Blöcke schafft rund 2 000 Zeilen/s; der Rest von `replaceWithSnapshot` (Lesen, Link-Index) braucht zusammen unter 2 s.
+Die Zeilen mit 200 und 1 000 Seiten stammen aus dem Lauf vor #97; nur die Zeile mit 10 000 Seiten ist neu gemessen (2026-10-03, nach #97/#98).
+
+Das Schreiben des Snapshots wird von IndexedDB bestimmt: `bulkPut` der Blöcke schafft rund 1 600–2 000 Zeilen/s. Seit #97 geschieht das in einer Transaktion pro Seite. Die App bleibt dabei bedienbar, zeigt den Fortschritt an, und ein Abbruch verliert nur den laufenden Re-Sync, nicht den lokalen Stand. Schneller wird es dadurch nicht.
+
+**Suchindex (#98):**
+- Der erste Start baut den Index auf (10,5 s) und speichert ihn danach im Leerlauf (3,2 s, einmalig).
+- Jeder weitere Start lädt ihn in 0,46 s und indexiert nur die seitdem geänderten Seiten.
+- Gemessen ist der Start im selben Tab. Der Heap nach Aufbau und Laden liegt bei 421 MB, ohne GC gemessen.
 
 ## Gefundene und behobene Engpässe
 
@@ -65,19 +72,23 @@ Das Schreiben des Snapshots wird von IndexedDB bestimmt. `bulkPut` der Blöcke s
 - **Link-Index beim Re-Sync (Client):**
   - Pro Block lief ein eigener Schreibzugriff, obwohl der Index vorher geleert wurde. Jetzt ist es ein `bulkPut`.
   - Bei 50 000 Blöcken: 27 s statt 34 s.
+- **Snapshot in einer Antwort** (behoben mit [#97](https://github.com/mszkb/notion-alternative/issues/97)):
+  - Server-RSS über 1 GB bei 500 000 Blöcken.
+  - Jetzt seitenweise mit festem Cursor: RSS-Spitze 297 MB, im Rahmen des Normalbetriebs.
+  - Ohne `limit` antwortet der Server weiter in einem Stück, für ältere, noch zwischengespeicherte Clients.
+- **Aufbau des lokalen Suchindex** (behoben mit [#98](https://github.com/mszkb/notion-alternative/issues/98)): erst Bulk-Lesen (25 s → 10,5 s), dann der gespeicherte Index (Start 0,46 s).
 
 ## Grenzen und offene Engpässe
 
-- **Snapshot in einer Antwort** ([#97](https://github.com/mszkb/notion-alternative/issues/97)):
-  - Server-RSS über 1 GB bei 500 000 Blöcken. Auf einem Raspberry Pi mit 2 GB wird das knapp.
-  - Der Client hält den Snapshot ebenfalls komplett im Speicher.
-  - Vorschlag: Snapshot seitenweise liefern und in Abschnitten schreiben.
-- **Re-Sync großer Workspaces im Browser** ([#97](https://github.com/mszkb/notion-alternative/issues/97)): Bei 500 000 Blöcken dauert das Schreiben in IndexedDB mehrere Minuten, in einer einzigen Transaktion und ohne Fortschrittsanzeige. Vorschlag: in Abschnitten schreiben, Fortschritt anzeigen. Die Atomarität bleibt über den Cursor erhalten, der erst am Ende gesetzt wird.
-- **Aufbau des lokalen Suchindex** ([#98](https://github.com/mszkb/notion-alternative/issues/98)):
-  - Früher las `WorkspaceSearch.start()` jede Seite einzeln. Jetzt liest es einmal pro Tabelle (`documentsWithContent`, Blöcke per `getAll`). Bei 10 000 Seiten sinkt die Zeit damit von 25 s auf 10,8 s; davon entfallen 5 s auf das Lesen und rund 6 s auf MiniSearch.
-  - Ziel < 5 s noch nicht erreicht. Bis zum Ende des Aufbaus findet die Suche nur einen Teil.
-  - Alle Blöcke liegen beim Aufbau kurzzeitig gleichzeitig im Speicher.
-  - Vorschlag: den Index in IndexedDB zwischenspeichern (MiniSearch `toJSON`/`loadJSON`) und in Abschnitten aufbauen.
+- **Re-Sync großer Workspaces im Browser:**
+  - Bei 500 000 Blöcken dauert das Schreiben in IndexedDB weiterhin rund 5 Minuten, jetzt aber in Abschnitten und mit Fortschrittsanzeige.
+  - Die Daten gehen über das Netz einmal als Snapshot (168 MB) und danach als Pull ab dem Cursor.
+  - Bei einem neuen Gerät wäre ein Import ohne Link-Index und ohne Prüfung auf verlorene Inhalte schneller. Das ist nicht umgesetzt, weil die Prüfungen die Invarianten aus #75 schützen.
+- **Erster Aufbau des Suchindex:** Bei 10 000 Seiten dauert er 10,5 s, bis die Suche alles findet. Danach startet der Index aus dem Speicher.
+- **Seitenliste:**
+  - 219 ms bei 10 000 Seiten, Ziel 200 ms. Im vorigen Lauf waren es 303 ms, ohne Änderung an `listDocuments`; der Unterschied ist Messschwankung.
+  - Die Zeit geht fast vollständig in das Lesen der 10 000 Seiten aus IndexedDB.
+  - Die Seitenleiste lädt die Liste bei jeder Änderung an einer Seite neu (`useLiveQuery`). Für noch größere Workspaces bräuchte es eine Liste im Speicher, die nur geänderte Seiten nachlädt.
 
 Zielwerte für den Referenz-Host (VPS oder Raspberry Pi 4) bis zu 10 000 Seiten:
 
@@ -87,7 +98,7 @@ Zielwerte für den Referenz-Host (VPS oder Raspberry Pi 4) bis zu 10 000 Seiten:
 | Delta-Pull | < 1 s |
 | Serversuche | < 300 ms |
 | Lokale Suche | < 50 ms |
-| Seitenliste lokal | < 200 ms (gemessen 307 ms bei 10 000 Seiten) |
+| Seitenliste lokal | < 200 ms (gemessen 219 ms bei 10 000 Seiten) |
 | Server-RSS | < 512 MB im Normalbetrieb |
 
-Snapshot, Re-Sync, lokaler Suchindex und Seitenliste großer Workspaces erreichen das noch nicht (siehe oben). Bis etwa 1 000 Seiten / 50 000 Blöcke bleiben alle Vorgänge außer dem Re-Sync (27 s) im Ziel.
+Bei 10 000 Seiten verfehlen nur noch die Dauer des Re-Syncs im Browser und knapp die Seitenliste das Ziel (siehe oben). Der Server-RSS beim Snapshot liegt seit #97 im Ziel. Bis etwa 1 000 Seiten / 50 000 Blöcke bleiben alle Vorgänge außer dem Re-Sync (27 s) im Ziel.
