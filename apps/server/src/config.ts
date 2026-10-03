@@ -98,7 +98,10 @@ function s3Config(parsed: z.infer<typeof envSchema>): S3Config | undefined {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = envSchema.parse(env)
+  // Compose passes unset optional variables as empty strings (`${S3_ENDPOINT:-}`): treat as unset.
+  const parsed = envSchema.parse(
+    Object.fromEntries(Object.entries(env).filter(([, value]) => value !== '')),
+  )
   return {
     host: parsed.HOST,
     port: parsed.PORT,
