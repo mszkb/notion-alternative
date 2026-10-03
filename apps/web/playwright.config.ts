@@ -26,7 +26,13 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /pwa-.*\.spec\.ts/ },
     {
       name: 'pwa',
-      use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PREVIEW_PORT}` },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Full Chromium in new headless mode: the default headless shell has no notifications
+        // and no push, so the push tests could never pass there.
+        channel: 'chromium',
+        baseURL: `http://localhost:${PREVIEW_PORT}`,
+      },
       testMatch: /pwa-.*\.spec\.ts/,
     },
   ],
