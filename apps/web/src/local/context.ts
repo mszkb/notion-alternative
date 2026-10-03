@@ -1,4 +1,5 @@
 import type { Workspace } from '@notion-alt/shared'
+import { Dexie } from 'dexie'
 import { ref, shallowRef } from 'vue'
 import { api } from '../api'
 import { deviceStatus, registerDevice } from '../device'
@@ -112,6 +113,21 @@ export function rememberWorkspace(workspaceId: string): void {
     localStorage.setItem(LAST_WORKSPACE_KEY, workspaceId)
   } catch {
     // Not essential.
+  }
+}
+
+/**
+ * Removes everything this app stored locally for the user: the local database (pages, queue,
+ * device id) and the remembered workspace. Only after explicit confirmation (shared devices).
+ */
+export async function deleteLocalData(userId: string): Promise<void> {
+  closeLocalStore()
+  // Other tabs close their connection on `versionchange` (Dexie default), so this completes.
+  await Dexie.delete(localDbName(userId))
+  try {
+    localStorage.removeItem(LAST_WORKSPACE_KEY)
+  } catch {
+    // Storage unavailable: nothing stored there either.
   }
 }
 

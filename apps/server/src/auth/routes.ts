@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify'
 import {
   changePasswordInputSchema,
   loginInputSchema,
+  logoutInputSchema,
   registerInputSchema,
 } from '@notion-alt/shared'
 import { HttpError } from '../errors'
@@ -10,7 +11,14 @@ import { insertWorkspace } from '../workspaces/repository'
 import { hashPassword, verifyPassword } from './password'
 import { currentUser, requireAuth } from './plugin'
 import { AttemptLimiter } from './rate-limit'
-import { SESSION_COOKIE, createSession, deleteOtherSessions, deleteSession } from './sessions'
+import { revokeDevice } from '../devices/repository'
+import {
+  SESSION_COOKIE,
+  createSession,
+  deleteOtherSessions,
+  deleteSession,
+  findSessionUser,
+} from './sessions'
 import {
   countUsers,
   findUserByEmail,
@@ -105,7 +113,15 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   })
 
   app.post('/auth/logout', async (request, reply) => {
+    const { removeDevice } = parseInput(logoutInputSchema, request.body ?? {})
     const token = request.cookies[SESSION_COOKIE]
+    if (token && removeDevice) {
+      // Shared computer: the device leaves the account as well (ends all its sessions).
+      const session = await findSessionUser(db, token)
+      if (session?.device_id) {
+        await revokeDevice(db, session.id, session.device_id, new Date().toISOString())
+      }
+    }
     if (token) await deleteSession(db, token)
     reply.clearCookie(SESSION_COOKIE, { path: '/api' })
     return reply.code(204).send()

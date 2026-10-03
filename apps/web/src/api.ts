@@ -3,6 +3,7 @@ import type {
   CreateWorkspaceInput,
   Device,
   LoginInput,
+  LogoutInput,
   RegisterDeviceInput,
   RegisterInput,
   ServerSearchHit,
@@ -53,7 +54,7 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
     authStatus: () => request<{ registrationOpen: boolean }>('GET', '/auth/status'),
     register: (input: RegisterInput) => request<{ user: User }>('POST', '/auth/register', input),
     login: (input: LoginInput) => request<{ user: User }>('POST', '/auth/login', input),
-    logout: () => request<void>('POST', '/auth/logout'),
+    logout: (input: LogoutInput = {}) => request<void>('POST', '/auth/logout', input),
     changePassword: (input: ChangePasswordInput) => request<void>('POST', '/auth/password', input),
     me: () => request<{ user: User }>('GET', '/auth/me'),
     registerDevice: (input: RegisterDeviceInput) =>

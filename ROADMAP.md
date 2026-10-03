@@ -61,7 +61,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 
 - [x] Blockübergreifendes Undo/Redo und Markieren ganzer Blöcke (Kopieren als Markdown, Löschen) – [ADR 0008](docs/adr/0008-block-editor.md)
 
-Offen bzw. später: „Lokale Daten löschen“ beim Abmelden (Phase 3, Geräteverwaltung); App-Dateien offline cachen (Phase 4, Service Worker).
+Offen bzw. später: App-Dateien offline cachen (Phase 4, Service Worker). „Lokale Daten löschen“ beim Abmelden ist mit Phase 3 umgesetzt.
 
 ## Phase 3 – Sync
 

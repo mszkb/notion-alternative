@@ -124,3 +124,60 @@ describe('devices', () => {
     expect(retry.json().error.code).toBe('device_revoked')
   })
 })
+
+describe('logout', () => {
+  let app: TestApp
+  afterEach(() => app.close())
+
+  it('can remove the current device on the way out', async () => {
+    ;({ app } = await createTestApp())
+    const { cookie } = await register(app, 'alice@example.com')
+    const id = randomUUID()
+    await app.inject({
+      method: 'POST',
+      url: '/api/devices',
+      headers: { cookie },
+      payload: { id, name: 'Gemeinsamer PC' },
+    })
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/logout',
+      headers: { cookie },
+      payload: { removeDevice: true },
+    })
+    expect(response.statusCode).toBe(204)
+
+    const again = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'alice@example.com', password: PASSWORD },
+    })
+    const fresh = sessionCookie(again)
+    const devices = await app.inject({ url: '/api/devices', headers: { cookie: fresh } })
+    expect(devices.json().devices).toEqual([])
+  })
+
+  it('keeps the device by default and works without a body', async () => {
+    ;({ app } = await createTestApp())
+    const { cookie } = await register(app, 'alice@example.com')
+    const id = randomUUID()
+    await app.inject({
+      method: 'POST',
+      url: '/api/devices',
+      headers: { cookie },
+      payload: { id, name: 'Laptop' },
+    })
+    const out = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } })
+    expect(out.statusCode).toBe(204)
+    const again = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'alice@example.com', password: PASSWORD },
+    })
+    const devices = await app.inject({
+      url: '/api/devices',
+      headers: { cookie: sessionCookie(again) },
+    })
+    expect(devices.json().devices.map((d: { id: string }) => d.id)).toEqual([id])
+  })
+})
