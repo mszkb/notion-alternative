@@ -22,6 +22,10 @@ Entschieden (`Accepted`):
 - **Editor** ([ADR 0008](docs/adr/0008-block-editor.md)): eigener Block-Editor (ein `contenteditable` pro Block); `Block.content` ist Markdown-Inline, Seitenlinks `[Titel](page:<uuid>)`, kursiv wird als `_x_` geschrieben.
 - **Lokale Datenschicht** ([ADR 0009](docs/adr/0009-local-data-layer.md)): eine Dexie-DB pro Benutzer, Operationen in derselben Transaktion, Entität `document_tag`, Feldnamen camelCase, MiniSearch für die lokale Suche, Offline-Start mit zwischengespeichertem Benutzer.
 
+Vorgeschlagen (`Proposed`):
+
+- **Raspberry Pi und HTTPS im LAN** ([ADR 0010](docs/adr/0010-raspberry-pi-and-lan-https.md)): Pi 4 (arm64) ist Referenzgerät, CI baut die Images auch für `linux/arm64`. HTTPS-Variante (Tailscale serve oder TLS im `frontend`-nginx) noch offen, kein dritter Container.
+
 Noch offen in Phase 0: Zielgruppe schärfen.
 
 ## Wo steht was
@@ -92,6 +96,7 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Neue DB-Migration: Datei in `apps/server/src/db/migrations/` anlegen **und** in `src/db/migrate.ts` registrieren; Migrationen nie nachträglich ändern.
 - Lokale Inhalte nur über `LocalStore` schreiben (`apps/web/src/local/store.ts`): Er schreibt Entität und Operation in einer Transaktion. Dexie-Transaktions-Scopes müssen `async`-Funktionen sein, sonst committet Dexie bei nativen `await`s zu früh.
 - Lokales Schema ändern: neue `this.version(n + 1)` in `apps/web/src/local/db.ts` mit Upgrade; bestehende Versionen nie ändern (T-MIG-02).
+- Neue Abhängigkeiten im Server-Image müssen auf `linux/arm64` ohne Compiler installierbar sein (Prebuild im Paket); der CI-Job `docker-arm64` prüft das.
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
 - Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.
 - Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`findWorkspaceForUser`).
