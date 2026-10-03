@@ -15,7 +15,7 @@ import { parseInput } from '../validation'
 import { applyOperation } from './apply'
 import { latestSeq, listChangesSince } from './changes'
 import { toChange } from './mapping'
-import { loadSnapshot } from './snapshot'
+import { loadSnapshot, loadSnapshotPage } from './snapshot'
 import { findWorkspaceForUser } from '../workspaces/repository'
 import { reindexMarked } from '../search/index'
 
@@ -106,8 +106,13 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
 
   /** Full re-sync: complete workspace including tombstones and the matching cursor. */
   app.get('/sync/snapshot', async (request) => {
-    const { workspaceId } = parseInput(syncSnapshotQuerySchema, request.query)
-    const snapshot = await loadSnapshot(db, currentUser(request).id, workspaceId)
+    const { workspaceId, limit, after } = parseInput(syncSnapshotQuerySchema, request.query)
+    const userId = currentUser(request).id
+    // Paged (#97) unless an older client asks for everything at once.
+    const snapshot =
+      limit === undefined
+        ? await loadSnapshot(db, userId, workspaceId)
+        : await loadSnapshotPage(db, userId, workspaceId, limit, after)
     if (!snapshot) throw new HttpError(404, 'not_found', 'Workspace not found')
     return snapshot
   })

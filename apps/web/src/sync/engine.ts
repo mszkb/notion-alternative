@@ -5,16 +5,23 @@ import type { LocalStore } from '../local/store'
 import { connection } from '../session'
 import type { PullFetch } from './pull'
 import { pushQueue, type PushSend } from './push'
-import { type SnapshotFetch, syncWorkspace } from './resync'
+import { type ResyncProgress, type SnapshotFetch, syncWorkspace } from './resync'
 
 export interface SyncState {
   running: boolean
   lastSyncAt: string | null
   /** Last failure (network, server); cleared by the next successful run. */
   lastError: string | null
+  /** Progress of a running full re-sync (#97), null otherwise. */
+  resync: ResyncProgress | null
 }
 
-export const syncState = ref<SyncState>({ running: false, lastSyncAt: null, lastError: null })
+export const syncState = ref<SyncState>({
+  running: false,
+  lastSyncAt: null,
+  lastError: null,
+  resync: null,
+})
 
 const MAX_BACKOFF_MS = 5 * 60_000
 
@@ -75,12 +82,20 @@ export function requestSync(
         } else {
           if (transport.upload) await uploadPendingAttachments(store, transport.upload)
           for (const workspace of await store.cachedWorkspaces()) {
-            await syncWorkspace(store, workspace.id, transport, options.full)
+            await syncWorkspace(store, workspace.id, transport, options.full, (progress) => {
+              syncState.value = { ...syncState.value, resync: progress }
+            })
+            syncState.value = { ...syncState.value, resync: null }
           }
         }
       })
       failures = 0
-      syncState.value = { running: false, lastSyncAt: new Date().toISOString(), lastError: null }
+      syncState.value = {
+        running: false,
+        lastSyncAt: new Date().toISOString(),
+        lastError: null,
+        resync: null,
+      }
       // The push badge ("changes waiting") is settled now.
       void (globalThis.navigator as Navigator & { clearAppBadge?: () => Promise<void> })
         ?.clearAppBadge?.()
@@ -90,6 +105,7 @@ export function requestSync(
       syncState.value = {
         ...syncState.value,
         running: false,
+        resync: null,
         lastError: error instanceof Error ? error.message : String(error),
       }
       // Retry with exponential backoff; triggers (focus, online, timer) may run it earlier.
@@ -150,5 +166,5 @@ export function stopSync(): void {
   retryTimer = null
   again = null
   failures = 0
-  syncState.value = { running: false, lastSyncAt: null, lastError: null }
+  syncState.value = { running: false, lastSyncAt: null, lastError: null, resync: null }
 }

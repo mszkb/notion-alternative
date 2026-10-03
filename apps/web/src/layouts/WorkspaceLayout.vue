@@ -180,6 +180,11 @@ const timeFormat = new Intl.DateTimeFormat('de-DE', { timeStyle: 'short' })
 /** One line telling whether local data is on the server. */
 const syncLabel = computed(() => {
   if (connection.value !== 'online') return null
+  const resync = syncState.value.resync
+  if (resync) {
+    const percent = resync.total ? Math.floor((resync.done / resync.total) * 100) : 0
+    return `Neu synchronisieren… ${percent} %`
+  }
   if (syncState.value.running) return 'Synchronisiert…'
   if (syncState.value.lastError) return 'Synchronisierung fehlgeschlagen – neuer Versuch folgt'
   if (pending.value > withIssues.value.length) return 'Änderungen ausstehend'

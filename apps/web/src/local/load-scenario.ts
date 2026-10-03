@@ -1,4 +1,10 @@
-import { newId, type Block, type Document, type SyncSnapshotResponse } from '@notion-alt/shared'
+import {
+  newId,
+  SNAPSHOT_PAGE_SIZE,
+  type Block,
+  type Document,
+  type SyncSnapshotResponse,
+} from '@notion-alt/shared'
 import { LocalDb } from './db'
 import { WorkspaceSearch } from './search'
 import { LocalStore } from './store'
@@ -84,9 +90,25 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
   const heapBefore = heapMb()
   const store = await LocalStore.open(new LocalDb(`load-${workspaceId}`))
 
-  const [, snapshotMs] = await time(() => store.replaceWithSnapshot(workspaceId, data))
+  // Re-sync page by page like the sync engine does (#97).
+  const pageMs: number[] = []
+  const [, snapshotMs] = await time(async () => {
+    const progress = await store.beginResync(workspaceId)
+    const entities = [...data.documents.map((d) => ['documents', d] as const)].concat(
+      data.blocks.map((b) => ['blocks', b] as const) as never,
+    )
+    for (let i = 0; i < entities.length; i += SNAPSHOT_PAGE_SIZE) {
+      const page: SyncSnapshotResponse = { ...data, documents: [], blocks: [] }
+      for (const [key, entity] of entities.slice(i, i + SNAPSHOT_PAGE_SIZE)) {
+        ;(page[key] as unknown[]).push(entity)
+      }
+      pageMs.push((await time(() => store.applySnapshotPage(workspaceId, page, progress)))[1])
+    }
+    await store.finishResync(workspaceId, data.cursor, progress)
+  })
+  pageMs.sort((a, b) => a - b)
   const [documents, listMs] = await time(() => store.listDocuments(workspaceId))
-  const [, pageMs] = await time(() => store.listBlocks(documents[pages - 1]!.id))
+  const [, blocksMs] = await time(() => store.listBlocks(documents[pages - 1]!.id))
 
   const [, contentReadMs] = await time(() => store.documentsWithContent(workspaceId))
   const search = new WorkspaceSearch(store, workspaceId)
@@ -105,9 +127,11 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
     config: { pages, blocksPerPage },
     documents: documents.length,
     indexed: search.index.size,
+    /** Paged re-sync: all pages plus the final step. */
     replaceWithSnapshotMs: snapshotMs,
+    snapshotPageMs: { p50: pageMs[Math.floor(pageMs.length / 2)], max: pageMs.at(-1) },
     listDocumentsMs: listMs,
-    listBlocksOnePageMs: pageMs,
+    listBlocksOnePageMs: blocksMs,
     /** Bulk read of all pages, blocks and tags (part of the index build). */
     contentReadMs,
     searchIndexBuildMs: indexMs,

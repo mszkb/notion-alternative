@@ -230,3 +230,172 @@ describe('snapshot after a server restore from an older backup', () => {
     expect((await store.getDocument(lostPage.id))!.revision).toBeNull()
   })
 })
+
+/**
+ * Paged snapshot like the server's (#97): every page reads the origin's current state, walking
+ * the tables in a fixed order and each by id, while the cursor stays the one of the first page.
+ */
+function pagedSnapshot(limit: number, hooks: { beforePage?: (n: number) => Promise<void> } = {}) {
+  let pages = 0
+  return async (workspaceId: string, after?: string): Promise<SyncSnapshotResponse> => {
+    await hooks.beforePage?.(pages)
+    pages++
+    const [cursorPart, offsetPart] = (after ?? '').split(':')
+    const whole = await server.snapshot()
+    const cursor = after ? Number(cursorPart) : whole.cursor
+    const byId = <T extends { id: string }>(list: T[]) =>
+      [...list].sort((x, y) => (x.id < y.id ? -1 : 1))
+    const keys = [
+      'documents',
+      'tags',
+      'documentTags',
+      'attachments',
+      'blocks',
+      'conflicts',
+    ] as const
+    const flat = keys.flatMap((key) => byId(whole[key] as { id: string }[]).map((e) => [key, e]))
+    // Resume after the last id of the previous page (like the server's `after`).
+    let start = 0
+    if (after) {
+      const [key, id] = offsetPart!.split('/')
+      start = flat.findIndex(
+        ([k, e]) =>
+          keys.indexOf(k as never) > keys.indexOf(key as never) ||
+          (k === key && (e as { id: string }).id > id!),
+      )
+      if (start < 0) start = flat.length
+    }
+    const slice = flat.slice(start, start + limit)
+    const page: SyncSnapshotResponse = {
+      documents: [],
+      blocks: [],
+      tags: [],
+      documentTags: [],
+      attachments: [],
+      conflicts: [],
+      cursor,
+      next: null,
+      ...(after ? {} : { total: flat.length }),
+    }
+    for (const [key, entity] of slice)
+      (page[key as (typeof keys)[number]] as unknown[]).push(entity)
+    const last = slice.at(-1)
+    if (start + limit < flat.length && last) {
+      page.next = `${cursor}:${last[0]}/${(last[1] as { id: string }).id}`
+    }
+    expect(workspaceId).toBe(WS)
+    return page
+  }
+}
+
+describe('paged re-sync (#97)', () => {
+  async function workspaceWithBlocks(pages: number, blocks: number) {
+    const docs = []
+    for (let i = 0; i < pages; i++) {
+      const doc = await a.createDocument({ workspaceId: WS, title: `Seite ${i}` })
+      for (let j = 1; j < blocks; j++) await a.createBlock(doc.id, { content: `Block ${i}.${j}` })
+      docs.push(doc)
+    }
+    await syncA()
+    return docs
+  }
+
+  async function sameState(x: LocalStore, y: LocalStore) {
+    const state = async (s: LocalStore) => ({
+      documents: (await s.db.documents.orderBy('id').toArray()).map(({ id, title, deletedAt }) => ({
+        id,
+        title,
+        deleted: !!deletedAt,
+      })),
+      blocks: (await s.db.blocks.orderBy('id').toArray()).map(({ id, content, deletedAt }) => ({
+        id,
+        content,
+        deleted: !!deletedAt,
+      })),
+    })
+    expect(await state(x)).toEqual(await state(y))
+  }
+
+  it('writes the snapshot page by page, reports progress and stores the cursor at the end', async () => {
+    await workspaceWithBlocks(3, 4)
+    const progress: { done: number; total: number }[] = []
+    const cursors: number[] = []
+    const snapshot = pagedSnapshot(5)
+    const transport = {
+      pull: server.pull,
+      snapshot: async (ws: string, after?: string) => {
+        cursors.push(await b.syncCursor(WS))
+        return snapshot(ws, after)
+      },
+    }
+    expect(await syncWorkspace(b, WS, transport, false, (p) => progress.push(p))).toBe('resync')
+    // 3 pages with 4 blocks each = 15 entities in pages of 5.
+    expect(progress.map((p) => p.done)).toEqual([0, 5, 10, 15])
+    expect(progress.every((p) => p.total === 15)).toBe(true)
+    expect(cursors).toEqual([0, 0, 0])
+    expect(await b.syncCursor(WS)).toBe(await a.syncCursor(WS))
+    expect(await b.pendingOperationCount()).toBe(0)
+    await sameState(a, b)
+  })
+
+  it('an interrupted re-sync leaves no cursor and is repeated as a whole', async () => {
+    const [first] = await workspaceWithBlocks(3, 4)
+    await syncWorkspace(b, WS, { pull: server.pull, snapshot: pagedSnapshot(100) })
+    // Content changes on the server; b's re-sync breaks off after the first page.
+    await a.renameDocument(first!.id, 'Neu')
+    await syncA()
+    const broken = pagedSnapshot(4, {
+      beforePage: async (n) => {
+        if (n === 2) throw new TypeError('Failed to fetch')
+      },
+    })
+    await expect(
+      syncWorkspace(b, WS, { pull: server.pull, snapshot: broken }, true),
+    ).rejects.toThrow('Failed to fetch')
+    expect(await b.syncCursor(WS)).toBe(0)
+
+    // Next start: no cursor, so a full re-sync instead of a pull on top of a half state.
+    expect(await syncWorkspace(b, WS, { pull: server.pull, snapshot: pagedSnapshot(4) })).toBe(
+      'resync',
+    )
+    expect(await b.syncCursor(WS)).toBe(await a.syncCursor(WS))
+    // Nothing from the first attempt is mistaken for content the server lost (#75).
+    expect(await b.pendingOperationCount()).toBe(0)
+    expect((await b.getDocument(first!.id))!.title).toBe('Neu')
+    await sameState(a, b)
+  })
+
+  it('entities created or deleted between two pages arrive through the pull', async () => {
+    const [first, second] = await workspaceWithBlocks(2, 3)
+    let created = ''
+    const snapshot = pagedSnapshot(3, {
+      beforePage: async (n) => {
+        if (n !== 1) return
+        // Between page 1 and 2 on another device: a new page, a deleted page, a deleted block.
+        created = (await a.createDocument({ workspaceId: WS, title: 'Dazwischen' })).id
+        await a.deleteDocument(first!.id)
+        const [block] = await a.listBlocks(second!.id)
+        await a.deleteBlock(block!.id)
+        await syncA()
+      },
+    })
+    expect(await syncWorkspace(b, WS, { pull: server.pull, snapshot })).toBe('resync')
+    expect((await b.getDocument(created))!.title).toBe('Dazwischen')
+    expect((await b.db.documents.get(first!.id))!.deletedAt).not.toBeNull()
+    expect(await b.pendingOperationCount()).toBe(0)
+    expect(await b.syncCursor(WS)).toBe(await a.syncCursor(WS))
+    await sameState(a, b)
+  })
+
+  it('keeps unsynced local edits across pages', async () => {
+    const [doc] = await workspaceWithBlocks(2, 3)
+    await syncWorkspace(b, WS, { pull: server.pull, snapshot: pagedSnapshot(100) })
+    const [block] = await b.listBlocks(doc!.id)
+    await b.updateBlock(block!.id, { content: 'Offline bearbeitet' })
+    const local = await b.createDocument({ workspaceId: WS, title: 'Nur lokal' })
+    await syncWorkspace(b, WS, { pull: server.pull, snapshot: pagedSnapshot(2) }, true)
+    expect((await b.db.blocks.get(block!.id))!.content).toBe('Offline bearbeitet')
+    expect((await b.getDocument(local.id))!.title).toBe('Nur lokal')
+    expect(await b.pendingOperationCount()).toBeGreaterThan(0)
+  })
+})

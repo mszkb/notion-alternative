@@ -23,6 +23,7 @@ const DEVICES = env('DEVICES', 10)
 const ROUNDS = env('ROUNDS', 20)
 const OPS_PER_ROUND = env('OPS_PER_ROUND', 50)
 const SEARCHES = env('SEARCHES', 50)
+const SNAPSHOT_PAGE = env('SNAPSHOT_PAGE', 2000)
 const BATCH = 500 // SYNC_PUSH_MAX_OPERATIONS
 const PASSWORD = 'load test password 123'
 
@@ -364,20 +365,48 @@ async function main() {
     return { changes, megabytes: Math.round(bytes / 1e6), pageMs: stats(timings.get('pull_page')) }
   })
 
-  // 4. Re-sync: complete snapshot in one response.
+  // 4. Re-sync: snapshot page by page with a fixed cursor (#97), as the web app requests it.
   results.phases.snapshot = await phase('snapshot', async () => {
-    const { json, bytes, ms } = await request(
-      'snapshot',
-      'GET',
-      `/api/sync/snapshot?workspaceId=${workspaceId}`,
-    )
+    const started = performance.now()
+    let after = null
+    let bytes = 0
+    let pages = 0
+    const counts = { documents: 0, blocks: 0 }
+    do {
+      const query = new URLSearchParams({ workspaceId, limit: String(SNAPSHOT_PAGE) })
+      if (after) query.set('after', after)
+      const page = await request('snapshot_page', 'GET', `/api/sync/snapshot?${query}`)
+      bytes += page.bytes
+      pages++
+      counts.documents += page.json.documents.length
+      counts.blocks += page.json.blocks.length
+      after = page.json.next
+    } while (after)
     return {
-      ms: Math.round(ms),
+      ms: Math.round(performance.now() - started),
       megabytes: Math.round(bytes / 1e6),
-      documents: json.documents?.length,
-      blocks: json.blocks?.length,
+      pages,
+      pageMs: stats(timings.get('snapshot_page')),
+      ...counts,
     }
   })
+
+  // 4b. Optional: the old single-response snapshot (clients before #97), for comparison.
+  if (process.env.LEGACY_SNAPSHOT === '1') {
+    results.phases.snapshotLegacy = await phase('snapshot-legacy', async () => {
+      const { json, bytes, ms } = await request(
+        'snapshot',
+        'GET',
+        `/api/sync/snapshot?workspaceId=${workspaceId}`,
+      )
+      return {
+        ms: Math.round(ms),
+        megabytes: Math.round(bytes / 1e6),
+        documents: json.documents?.length,
+        blocks: json.blocks?.length,
+      }
+    })
+  }
 
   // 5. JSON export reads the whole change log (ADR 0004).
   results.phases.exportLog = await phase('export-log', async () => {
