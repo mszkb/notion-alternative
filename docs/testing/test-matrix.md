@@ -70,8 +70,8 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 
 | ID | Szenario | Erwartung | AC | Auto |
 | --- | --- | --- | --- | --- |
-| T-BAK-01 | Backup erstellen und in leere Umgebung restoren | Daten & Anhänge vollständig | AC-09 | ☐ |
-| T-MIG-01 | Server-Migration auf bestehenden Daten | Kein Datenverlust, App funktionsfähig | – | ☐ |
+| T-BAK-01 | Backup erstellen und in leere Umgebung restoren | Daten & Anhänge vollständig | AC-09 | ☑ ¹⁶ |
+| T-MIG-01 | Server-Migration auf bestehenden Daten | Kein Datenverlust, App funktionsfähig | – | ☑ ¹⁶ |
 | T-MIG-02 | Lokales Schema-Upgrade mit ungesyncter Queue | Queue bleibt erhalten und wird gesynct | – | ☑ ⁹ |
 
 ⁸ Manuelle Prüfliste in [`docs/user/installation.md`](../user/installation.md#prüfliste-t-pwa-01-manuell). Automatisiert: Installierbarkeit in Chromium (`apps/web/e2e/pwa-offline.spec.ts`), Installations-Button und iOS-Hinweis (`apps/web/e2e/install.spec.ts`).
@@ -89,3 +89,5 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 ¹⁴ T-OFF-07: `apps/web/src/sync/restart.integration.test.ts` – echter Server-Prozess wird mitten im Push per `SIGKILL` beendet und mit derselben Datenbank neu gestartet; danach leere Queue, Serverstand gleich lokalem Stand, jede Operation genau einmal im Änderungslog. T-OFF-08/09/10: `apps/web/e2e/offline-hardening.spec.ts` (Sitzung offline abgelaufen und neu angemeldet; IndexedDB-Schreibfehler `QuotaExceededError` – der Text bleibt sichtbar, auch wenn die Seite aus der Datenbank neu gerendert wird, und wird nach 5 s erneut gespeichert; zwei Tabs offline mit gemeinsamer lokaler Datenbank).
 
 ¹⁵ [`docs/testing/mobile-offline-checklist.md`](mobile-offline-checklist.md)
+
+¹⁶ `apps/server/test/backup.test.ts`: Backup im laufenden Betrieb (SQLite-Online-Backup + Anhänge, Manifest mit SHA-256), Restore in leere Umgebung (Inhalte, Anhang-Bytes, Konten, Sitzungen, VAPID-Schlüssel), Schutz vor Überschreiben, beschädigtes Backup; T-MIG-01: Backup einer Datenbank auf Migrationsstand `0007_push` wird restauriert und auf den aktuellen Stand migriert. `scripts/backup-restore-test.sh` (CI-Job `backup`): derselbe Ablauf gegen den Docker-Compose-Stack (`MODE=local` ohne Docker). Clients nach Restore: `apps/web/src/sync/restore.integration.test.ts` (echter Server, Restore eines älteren Backups: Gerät synchronisiert neu und sendet Fehlendes und neuere Stände erneut), `apps/web/src/sync/resync.test.ts`.

@@ -13,7 +13,7 @@ import { touchDevice } from '../devices/repository'
 import { HttpError } from '../errors'
 import { parseInput } from '../validation'
 import { applyOperation } from './apply'
-import { listChangesSince } from './changes'
+import { latestSeq, listChangesSince } from './changes'
 import { toChange } from './mapping'
 import { loadSnapshot } from './snapshot'
 import { findWorkspaceForUser } from '../workspaces/repository'
@@ -66,6 +66,11 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     if (cursor < workspace.compacted_seq) {
       // Changes after the cursor are gone: the client needs a full re-sync (snapshot).
       throw new HttpError(410, 'cursor_expired', 'Cursor is older than the change log')
+    }
+    if (cursor > (await latestSeq(db, workspaceId, workspace.compacted_seq))) {
+      // The client saw changes this server does not have (restored from an older backup):
+      // its state must be rebuilt from a snapshot, re-sending what the server lost.
+      throw new HttpError(410, 'cursor_ahead', 'Cursor is ahead of the change log')
     }
     // One extra row tells whether another page follows.
     const rows = (await listChangesSince(db, userId, workspaceId, cursor, limit + 1)) ?? []

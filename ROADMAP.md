@@ -105,7 +105,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Konflikttests (Mehrgeräte)
 - [x] Offline-Tests
 - [ ] Security Review
-- [ ] Backup/Restore automatisiert getestet
+- [x] Backup/Restore automatisiert getestet
 - [ ] Backup-/Restore-Dokumentation
 - [ ] Lasttests
 

@@ -131,6 +131,16 @@ describe('compacted change log', () => {
   })
 })
 
+describe('cursor ahead of the server', () => {
+  it('answers 410 so a client re-syncs after the server was restored from a backup', async () => {
+    await push(op('document', 'create', randomUUID(), docPayload))
+    const ahead = await get(`/api/sync/pull?workspaceId=${workspaceId}&cursor=5`)
+    expect(ahead.statusCode).toBe(410)
+    expect(ahead.json().error.code).toBe('cursor_ahead')
+    expect((await get(`/api/sync/pull?workspaceId=${workspaceId}&cursor=1`)).statusCode).toBe(200)
+  })
+})
+
 describe('GET /api/sync/log', () => {
   it('returns the remaining log after compaction instead of 410', async () => {
     await push(

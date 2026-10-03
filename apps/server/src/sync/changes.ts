@@ -23,6 +23,16 @@ export async function listChangesSince(
     .execute()
 }
 
+/** Highest `seq` handed out in the workspace, including compacted ones. */
+export async function latestSeq(db: Db, workspaceId: string, compactedSeq: number) {
+  const row = await db
+    .selectFrom('changes')
+    .select((eb) => eb.fn.max('seq').as('max'))
+    .where('workspace_id', '=', workspaceId)
+    .executeTakeFirst()
+  return Math.max(Number(row?.max ?? 0), compactedSeq)
+}
+
 /**
  * Removes change-log entries up to `throughSeq` (log compaction). Not scheduled in the MVP
  * (ADR 0002); used to test the re-sync path (T-MD-05). Pulls from an older cursor get 410.

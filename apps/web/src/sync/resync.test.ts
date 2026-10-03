@@ -159,3 +159,62 @@ describe('syncWorkspace', () => {
     expect(server.calls.snapshot).toBe(1)
   })
 })
+
+describe('snapshot after a server restore from an older backup', () => {
+  it('keeps content the server lost and sends it again, parents first', async () => {
+    const store = await device()
+    const kept = await store.createDocument({ workspaceId: WS, title: 'Vor dem Backup' })
+    const lostPage = await store.createDocument({ workspaceId: WS, title: 'Nach dem Backup' })
+    const lostChild = await store.createDocument({
+      workspaceId: WS,
+      parentId: lostPage.id,
+      title: 'Unterseite',
+    })
+    const block = await store.createBlock(lostChild.id, { content: 'Nur noch hier' })
+    const tag = await store.addTag(lostPage.id, 'neu')
+    // Everything was synced (revisions assigned, queue empty).
+    let revision = 0
+    await store.acknowledge(
+      (await store.pendingOperations()).map((op) => ({
+        opId: op.opId,
+        status: 'applied' as const,
+        revision: ++revision,
+        seq: revision,
+      })),
+    )
+    expect(await store.pendingOperationCount()).toBe(0)
+
+    // The restored server only knows the first page.
+    const document = (await store.getDocument(kept.id))!
+    await store.replaceWithSnapshot(WS, {
+      documents: [document],
+      blocks: [],
+      tags: [],
+      documentTags: [],
+      attachments: [],
+      conflicts: [],
+      cursor: 1,
+    })
+
+    expect((await store.listDocuments(WS)).map((d) => d.title).sort()).toEqual([
+      'Nach dem Backup',
+      'Unterseite',
+      'Vor dem Backup',
+    ])
+    // New pages start with an empty block.
+    expect((await store.listBlocks(lostChild.id)).map((b) => b.content)).toContain('Nur noch hier')
+    expect((await store.tagsForDocument(lostPage.id)).map((t) => t.name)).toEqual(['neu'])
+    const queued = await store.pendingOperations(WS)
+    expect(queued.every((op) => op.kind === 'create')).toBe(true)
+    // Parents before children, tags before their assignments, pages before blocks.
+    const order = queued.map((op) => op.entityId)
+    expect(order.slice(0, 2)).toEqual([lostPage.id, lostChild.id])
+    expect(order[2]).toBe(tag.id)
+    expect(order).toContain(block.id)
+    expect(queued.at(-1)!.entity).toBe('document_tag')
+    // The page kept by the server is not sent again.
+    expect(order).not.toContain(kept.id)
+    expect(queued.every((op) => op.baseRevision === null)).toBe(true)
+    expect((await store.getDocument(lostPage.id))!.revision).toBeNull()
+  })
+})

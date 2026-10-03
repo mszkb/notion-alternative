@@ -81,6 +81,17 @@ jobs:
           S3_TEST_ACCESS_KEY: cikey
           S3_TEST_SECRET_KEY: cisecret123
 
+  backup:
+    # T-BAK-01 (#75): back up the running stack, restore into an empty volume, verify.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Backup and restore
+        run: ./scripts/backup-restore-test.sh
+
   docker:
     runs-on: ubuntu-latest
     steps:
