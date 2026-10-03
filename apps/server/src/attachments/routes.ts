@@ -7,7 +7,6 @@ import { HttpError } from '../errors'
 import { parseInput } from '../validation'
 import { attachmentUsage } from '../sync/apply'
 import { findWorkspaceForUser } from '../workspaces/repository'
-import { readContent, storeContent } from './storage'
 
 const paramsSchema = z.object({ id: z.uuid() })
 const usageQuerySchema = z.object({ workspaceId: z.uuid() })
@@ -19,8 +18,8 @@ function disposition(kind: 'inline' | 'attachment', name: string): string {
 }
 
 export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
-  const { db, config } = app
-  const { dir, maxBytes } = config.attachments
+  const { db, config, contentStore } = app
+  const { maxBytes } = config.attachments
   app.addHook('preHandler', requireAuth)
   app.addContentTypeParser(
     'application/octet-stream',
@@ -68,7 +67,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
     if (createHash('sha256').update(body).digest('hex') !== row.sha256) {
       throw new HttpError(400, 'checksum_mismatch', 'Checksum differs')
     }
-    await storeContent(dir, row.workspace_id, row.id, body)
+    await contentStore.put(row.workspace_id, row.id, body)
     await db
       .updateTable('attachments')
       .set({ stored_at: new Date().toISOString() })
@@ -87,6 +86,8 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
     if (!row.stored_at) {
       throw new HttpError(404, 'not_uploaded', 'Content not uploaded yet or removed')
     }
+    const content = await contentStore.get(row.workspace_id, row.id)
+    if (!content) throw new HttpError(404, 'not_uploaded', 'Content not found in storage')
     const inline = INLINE_IMAGE_TYPES.includes(row.mime_type)
     return (
       reply
@@ -97,7 +98,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         .header('Content-Security-Policy', "sandbox; default-src 'none'")
         // The content of an id never changes.
         .header('Cache-Control', 'private, max-age=31536000, immutable')
-        .send(readContent(dir, row.workspace_id, row.id))
+        .send(content)
     )
   })
 }

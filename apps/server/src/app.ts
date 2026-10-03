@@ -1,5 +1,6 @@
 import cookie from '@fastify/cookie'
 import Fastify, { type FastifyServerOptions } from 'fastify'
+import { type ContentStore, createContentStore } from './attachments/content-store'
 import { attachmentRoutes } from './attachments/routes'
 import { authRoutes } from './auth/routes'
 import type { Config } from './config'
@@ -21,6 +22,7 @@ declare module 'fastify' {
     config: Config
     metrics: Registry
     pushNotifier: PushNotifier
+    contentStore: ContentStore
   }
 }
 
@@ -30,9 +32,11 @@ export interface AppOptions {
   logger?: FastifyServerOptions['logger']
   /** Web Push sending (tests inject a fake push service). */
   push?: PushNotifierOptions
+  /** Attachment storage (tests inject one); default from config. */
+  contentStore?: ContentStore
 }
 
-export async function buildApp({ db, config, logger = false, push }: AppOptions) {
+export async function buildApp({ db, config, logger = false, push, contentStore }: AppOptions) {
   const app = Fastify({
     logger,
     bodyLimit: 1024 * 1024,
@@ -43,6 +47,7 @@ export async function buildApp({ db, config, logger = false, push }: AppOptions)
   app.decorate('db', db)
   app.decorate('config', config)
   app.decorate('pushNotifier', new PushNotifier(db, config.push, push))
+  app.decorate('contentStore', contentStore ?? createContentStore(config.attachments))
   app.decorateRequest('user', null)
   app.decorateRequest('deviceId', null)
   await app.register(cookie)

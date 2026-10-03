@@ -28,4 +28,4 @@ Option 2.
 - Speicherort `DATA_DIR/attachments/<workspace>/<id>` ist Teil des Volume-Backups.
 - nginx erlaubt für `/api/attachments/` größere Requests als für die übrige API.
 - Lokaler Cache der Inhalte liegt in IndexedDB getrennt von den Metadaten ([Cache-Strategie](../architecture/caching.md)); Eviction und Quoten folgen mit #64.
-- Ein S3-Backend (#63) ersetzt nur die Speicherschicht; Protokoll und IDs bleiben.
+- Optional S3-kompatibler Speicher (#63): ersetzt nur die Speicherschicht (`ContentStore`), Protokoll und IDs bleiben; Signatur V4 ohne SDK, geprüft gegen das AWS-Beispiel und in der CI gegen SeaweedFS.

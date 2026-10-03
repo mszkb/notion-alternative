@@ -1,7 +1,7 @@
-import { createReadStream } from 'node:fs'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Db } from '../db/database'
+import type { ContentStore } from './content-store'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -25,17 +25,13 @@ export async function storeContent(
   await rename(temp, target)
 }
 
-export function readContent(dir: string, workspaceId: string, id: string) {
-  return createReadStream(contentPath(dir, workspaceId, id))
-}
-
 /**
  * Removes the files of attachments deleted longer than `retentionDays` ago (ADR 0012). The
  * tombstones stay for the sync; only the content goes. Returns the number of removed files.
  */
 export async function purgeDeletedAttachments(
   db: Db,
-  dir: string,
+  store: ContentStore,
   retentionDays: number,
   now = new Date(),
 ): Promise<number> {
@@ -48,7 +44,7 @@ export async function purgeDeletedAttachments(
     .where('stored_at', 'is not', null)
     .execute()
   for (const row of rows) {
-    await rm(contentPath(dir, row.workspace_id, row.id), { force: true })
+    await store.remove(row.workspace_id, row.id)
     await db.updateTable('attachments').set({ stored_at: null }).where('id', '=', row.id).execute()
   }
   return rows.length

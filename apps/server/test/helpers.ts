@@ -5,7 +5,7 @@ import { migrateToLatest } from '../src/db/migrate'
 
 export async function createTestApp(
   overrides: Partial<Config> = {},
-  options: Pick<AppOptions, 'push'> = {},
+  options: Pick<AppOptions, 'push' | 'contentStore'> = {},
 ) {
   const config = { ...loadConfig({}), databasePath: ':memory:', ...overrides }
   const db = createDatabase(config.databasePath)

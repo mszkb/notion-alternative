@@ -119,6 +119,35 @@ Nach einem Update zeigt die App „Eine neue Version ist verfügbar – Neu lade
 - `GET /api/health` – Backend-Prozess läuft (Liveness)
 - `GET /api/ready` – Datenbank erreichbar (Readiness)
 
+## Anhänge auf S3-kompatiblem Speicher (optional)
+
+Standardmäßig liegen Dateianhänge im Daten-Volume (`/data/attachments`). Alternativ in einem S3-kompatiblen Bucket (AWS S3, MinIO, Garage, SeaweedFS, Backblaze B2 …), ohne zusätzlichen Container und ohne SDK (Signatur V4 mit `node:crypto`):
+
+| Variable | Standard | Bedeutung |
+| --- | --- | --- |
+| `ATTACHMENT_STORAGE` | `volume` | `s3` schaltet auf den Bucket um |
+| `S3_ENDPOINT` | – | z. B. `https://s3.eu-central-1.amazonaws.com` oder `http://minio:9000` |
+| `S3_REGION` | `us-east-1` | Region für die Signatur |
+| `S3_BUCKET` | – | Bucket (muss existieren) |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | – | Zugangsdaten mit Lese-/Schreib-/Löschrecht auf dem Bucket |
+| `S3_FORCE_PATH_STYLE` | `true` | `https://host/bucket/key`; für AWS mit virtuellen Hosts `false` |
+
+Fehlen Pflichtangaben, startet das Backend nicht und nennt nur die Variablennamen (Zugangsdaten erscheinen nie in Logs). Metadaten bleiben in SQLite; ein Objekt heißt `<workspace-id>/<anhang-id>` und ändert sich nie.
+
+**Umzug Volume → S3:**
+
+```sh
+# 1. S3-Variablen in .env eintragen (ATTACHMENT_STORAGE=s3 …)
+docker compose up -d backend
+# 2. Bestehende Dateien kopieren und per SHA-256 prüfen (wiederholbar, idempotent)
+docker compose exec backend node dist/index.js migrate-attachments-to-s3
+# Ausgabe z. B. {"copied":42,"skipped":0,"failed":[]}; bei failed ≠ [] nicht weitermachen
+```
+
+Danach liefert das Backend aus dem Bucket. Die alten Dateien unter `/data/attachments` erst löschen, wenn ein Backup des Buckets existiert.
+
+**Backup:** Mit Volume enthält das Volume-Backup (unten) alles. Mit S3 gehören **zwei** Teile zusammen: das Volume (SQLite mit Metadaten) und der Bucket (z. B. Versionierung oder `rclone sync`). Beide möglichst zeitnah sichern; fehlende Objekte zeigt die App als „nicht verfügbar“ an, Metadaten ohne Objekt schaden nicht.
+
 ## Metriken
 
 Mit `METRICS_ENABLED=true` liefert das Backend unter `GET /api/metrics` Metriken im Prometheus-Textformat:

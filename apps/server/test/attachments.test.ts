@@ -166,10 +166,10 @@ describe('attachments', () => {
     expect((await download(id)).statusCode).toBe(200)
 
     const file = contentPath(dir, workspaceId, id)
-    expect(await purgeDeletedAttachments(db, dir, 30)).toBe(0)
+    expect(await purgeDeletedAttachments(db, app.contentStore, 30)).toBe(0)
     expect(existsSync(file)).toBe(true)
     const later = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000)
-    expect(await purgeDeletedAttachments(db, dir, 30, later)).toBe(1)
+    expect(await purgeDeletedAttachments(db, app.contentStore, 30, later)).toBe(1)
     expect(existsSync(file)).toBe(false)
     expect((await download(id)).json().error.code).toBe('not_uploaded')
   })
