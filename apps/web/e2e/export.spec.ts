@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { jsonExportSchema, readZip } from '@notion-alt/shared'
+import { jsonExportSchema, readZip, verifyExportArchive } from '@notion-alt/shared'
+import type { Download, Page } from '@playwright/test'
 import { createVia, expect, newPage, takeServerDown, test, waitForSaved } from './fixtures'
 
 test('exports the workspace as Markdown, offline too', async ({ signedIn: page }) => {
@@ -72,4 +73,78 @@ test('exports JSON with and without history', async ({ signedIn: page }) => {
   const offline = await readJson()
   expect(offline.history).toBeNull()
   expect(offline.documents).toHaveLength(2)
+})
+
+// 1×1 PNG.
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+  'base64',
+)
+
+async function downloadVia(page: Page, button: string): Promise<Download> {
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: button }).click()
+  return downloadPromise
+}
+
+/** Removes an attachment's content from this device, as if it was never downloaded. */
+async function forgetContent(page: Page, attachmentId: string) {
+  await page.evaluate(async (id) => {
+    const name = (await indexedDB.databases()).find((d) => d.name?.startsWith('notion-alt-'))!.name!
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(name)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('attachmentContents', 'readwrite')
+      tx.objectStore('attachmentContents').delete(id)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+    db.close()
+  }, attachmentId)
+}
+
+test('T-EXP-01: complete ZIP with attachments, manifest and checksums', async ({
+  signedIn: page,
+}) => {
+  await newPage(page, 'Mit Anhängen')
+  await page.keyboard.type('Bericht im Anhang.')
+  await waitForSaved(page)
+  await page.getByTestId('attachment-input').setInputFiles([
+    { name: 'punkt.png', mimeType: 'image/png', buffer: PNG },
+    { name: 'bericht.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') },
+  ])
+  await expect(page.locator('a.attachment-file')).toContainText('bericht.pdf')
+  await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
+
+  await page.getByRole('link', { name: 'Export', exact: true }).click()
+  const download = await downloadVia(page, 'Vollständigen Export herunterladen')
+  expect(download.suggestedFilename()).toMatch(/-export-\d{4}-\d{2}-\d{2}\.zip$/)
+  const verified = await verifyExportArchive(new Uint8Array(readFileSync((await download.path())!)))
+  expect(verified.manifest.history).toBe(true)
+  expect(verified.manifest.missing_attachments).toEqual([])
+  expect(verified.manifest.attachments.map((a) => a.path).sort()).toEqual([
+    'markdown/_attachments/bericht.pdf',
+    'markdown/_attachments/punkt.png',
+  ])
+  expect(verified.data.documents.map((d) => d.title)).toEqual(['Mit Anhängen'])
+  expect(verified.data.history!.changes.length).toBeGreaterThan(0)
+  await expect(page.getByTestId('export-result')).toContainText('1 Seite und 2 Anhänge')
+
+  // Offline and without the PDF's content on this device: exported, but reported as missing.
+  const pdf = verified.manifest.attachments.find((a) => a.path.endsWith('bericht.pdf'))!
+  await forgetContent(page, pdf.id)
+  await takeServerDown(page)
+  await page.context().setOffline(true)
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')))
+  const offline = await verifyExportArchive(
+    new Uint8Array(
+      readFileSync((await (await downloadVia(page, 'Vollständigen Export herunterladen')).path())!),
+    ),
+  )
+  expect(offline.manifest.history).toBe(false)
+  expect(offline.manifest.missing_attachments.map((a) => a.name)).toEqual(['bericht.pdf'])
+  await expect(page.getByTestId('export-missing')).toContainText('bericht.pdf')
 })

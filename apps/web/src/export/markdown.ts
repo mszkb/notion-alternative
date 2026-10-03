@@ -16,13 +16,15 @@ export interface ExportOptions {
 }
 
 /** Contents of the workspace's current attachments, from this device or downloaded (and kept). */
-async function loadAttachmentContents(
+export async function loadAttachmentContents(
   store: LocalStore,
   ids: string[],
   download: ExportOptions['download'],
+  onProgress?: (done: number, total: number) => void,
 ): Promise<Map<string, Uint8Array>> {
   const contents = new Map<string, Uint8Array>()
-  for (const id of ids) {
+  for (const [index, id] of ids.entries()) {
+    onProgress?.(index, ids.length)
     let data = (await store.attachmentContent(id))?.data
     if (!data && download) {
       try {

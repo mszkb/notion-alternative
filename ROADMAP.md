@@ -96,7 +96,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 
 - [x] Markdown-Export
 - [x] JSON-Export
-- [ ] ZIP-Export (inkl. Anhänge)
+- [x] ZIP-Export (inkl. Anhänge)
 - [ ] Import in frische Installation
 - [ ] Round-Trip-Importtests
 

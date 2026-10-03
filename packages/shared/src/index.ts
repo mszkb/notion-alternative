@@ -1,6 +1,7 @@
 export * from './auth'
 export * from './content'
 export * from './device'
+export * from './export-archive'
 export * from './export-json'
 export * from './export-markdown'
 export * from './ids'

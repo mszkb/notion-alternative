@@ -2,6 +2,20 @@
 
 Der Export ist in der Seitenleiste unter **Export** erreichbar. Er entsteht aus den Daten auf diesem Gerät und funktioniert deshalb auch ohne Server oder Internet.
 
+## Vollständig (ZIP)
+
+Empfohlen für Backups. Das ZIP enthält:
+
+| Pfad | Inhalt |
+| --- | --- |
+| `manifest.json` | Exportzeitpunkt, `schema_version`, Workspace, ob der Verlauf enthalten ist, Größe und SHA-256 jeder Datei, Zuordnung Anhang → Pfad, `missing_attachments` |
+| `workspace.json` | JSON-Export (siehe unten) |
+| `markdown/` | Markdown-Export (siehe unten), Anhänge in `markdown/_attachments/` |
+
+Anhänge, deren Inhalt weder auf dem Gerät liegt noch gerade vom Server geladen werden kann (z. B. offline), fehlen nicht still: Die Exportseite listet sie nach dem Export auf, und sie stehen im Manifest unter `missing_attachments`.
+
+Prüfen lässt sich ein Export z. B. mit `unzip export.zip -d export && cd export && sha256sum markdown/Seite.md` gegen den Eintrag im Manifest.
+
 ## Markdown (ZIP)
 
 - Eine `.md`-Datei pro Seite. Unterseiten liegen in einem Ordner mit dem Namen der Seite (`Projekte.md` und `Projekte/Alpha.md`).

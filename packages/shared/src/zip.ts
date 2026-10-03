@@ -39,6 +39,21 @@ const UTF8_FLAG = 0x0800
 const MAX_32 = 0xffffffff
 
 export function createZip(entries: ZipEntry[]): Uint8Array {
+  const parts = createZipParts(entries)
+  const result = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
+  let position = 0
+  for (const part of parts) {
+    result.set(part, position)
+    position += part.length
+  }
+  return result
+}
+
+/**
+ * The archive as a list of byte ranges that reference the entry data without copying it;
+ * `new Blob(parts)` builds the file without holding it twice in memory.
+ */
+export function createZipParts(entries: ZipEntry[]): Uint8Array[] {
   if (entries.length > 0xffff) throw new Error('Too many entries for a ZIP archive')
   const encoder = new TextEncoder()
   const locals: Uint8Array[] = []
@@ -52,7 +67,7 @@ export function createZip(entries: ZipEntry[]): Uint8Array {
     const { time, date } = dosDateTime(entry.modified ?? new Date())
     if (data.length > MAX_32 || offset > MAX_32) throw new Error('ZIP archive too large')
 
-    const local = new Uint8Array(30 + name.length + data.length)
+    const local = new Uint8Array(30 + name.length)
     const lv = new DataView(local.buffer)
     lv.setUint32(0, 0x04034b50, true)
     lv.setUint16(4, 20, true) // version needed
@@ -66,8 +81,7 @@ export function createZip(entries: ZipEntry[]): Uint8Array {
     lv.setUint16(26, name.length, true)
     lv.setUint16(28, 0, true)
     local.set(name, 30)
-    local.set(data, 30 + name.length)
-    locals.push(local)
+    locals.push(local, data)
 
     const central = new Uint8Array(46 + name.length)
     const cv = new DataView(central.buffer)
@@ -86,7 +100,7 @@ export function createZip(entries: ZipEntry[]): Uint8Array {
     central.set(name, 46)
     centrals.push(central)
 
-    offset += local.length
+    offset += local.length + data.length
   }
 
   const centralSize = centrals.reduce((sum, c) => sum + c.length, 0)
@@ -99,13 +113,7 @@ export function createZip(entries: ZipEntry[]): Uint8Array {
   ev.setUint32(12, centralSize, true)
   ev.setUint32(16, offset, true)
 
-  const result = new Uint8Array(offset + centralSize + end.length)
-  let position = 0
-  for (const part of [...locals, ...centrals, end]) {
-    result.set(part, position)
-    position += part.length
-  }
-  return result
+  return [...locals, ...centrals, end]
 }
 
 export interface ZipFile {

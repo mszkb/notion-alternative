@@ -27,3 +27,10 @@ Prinzip „Export first“: Der vollständige Workspace muss in offenen Formaten
 - Dateinamen werden aus Titeln abgeleitet und bei Kollisionen eindeutig gemacht; Links müssen danach aufgelöst werden.
 - Jede Änderung am Datenmodell erfordert eine neue `schema_version` und eine Import-Migration.
 - Testfälle: T-EXP-01, T-EXP-02 (Round-Trip).
+
+## Umsetzung (Phase 6)
+
+- Exporte entstehen clientseitig aus der lokalen Datenbank (offline möglich); Verlauf und auf dem Gerät fehlende Anhänge holt der Client vom Server, wenn er erreichbar ist (`GET /api/sync/log`, Anhang-Download).
+- ZIP-Aufbau: `manifest.json`, `workspace.json` (JSON-Export), `markdown/` (Markdown-Export, Anhänge in `markdown/_attachments/`). Das Manifest enthält zusätzlich `format`, die Zuordnung Anhang-ID → Pfad und `missing_attachments` für Anhänge, deren Inhalt beim Export nicht verfügbar war.
+- ZIP ohne Bibliothek: eigener Writer/Reader in `packages/shared/src/zip.ts` (Einträge unkomprimiert, UTF-8-Namen, kein ZIP64, also bis 4 GB). Komprimierung lohnt bei Text kaum gegen den Aufwand, Bilder sind bereits komprimiert. Damit keine neue Abhängigkeit nach ADR 0007.
+- JSON-Schema: zod `jsonExportSchema` in `packages/shared`, generiert nach `docs/architecture/export.schema.json`.
