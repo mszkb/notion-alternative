@@ -23,7 +23,7 @@ describe('migrations', () => {
     await db.destroy()
   })
 
-  it('T-MIG-01: later migrations keep existing users and sessions', async () => {
+  it('T-MIG-01: later migrations keep existing users, sessions and workspaces', async () => {
     const db = createDatabase(':memory:')
     const migrator = new Migrator({ db, provider: { getMigrations: async () => migrations } })
     await migrator.migrateTo('0001_initial')
@@ -38,7 +38,15 @@ describe('migrations', () => {
       .values({ id: 's1', user_id: 'u1', created_at: 'now', expires_at: '2999-01-01' })
       .execute()
 
+    await old
+      .insertInto('workspaces')
+      .values({ id: 'w1', name: 'Personal', owner_id: 'u1', created_at: 'now' })
+      .execute()
+
     await migrateToLatest(db)
+    expect(await db.selectFrom('workspaces').select(['id', 'compacted_seq']).execute()).toEqual([
+      { id: 'w1', compacted_seq: 0 },
+    ])
     const session = await db.selectFrom('sessions').selectAll().executeTakeFirstOrThrow()
     expect(session).toMatchObject({ id: 's1', user_id: 'u1', device_id: null })
     expect(await db.selectFrom('users').select('email').execute()).toEqual([

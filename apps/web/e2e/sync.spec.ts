@@ -33,3 +33,18 @@ test.describe('sync push', () => {
     await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
   })
 })
+
+test('manual full re-sync keeps pages and unsynced work', async ({ signedIn: page }) => {
+  await newPage(page, 'Bleibt erhalten')
+  await page.keyboard.type('Text')
+  await waitForSaved(page)
+  await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
+
+  await page.getByRole('link', { name: 'Konto' }).click()
+  await page.getByRole('button', { name: 'Neu synchronisieren' }).click()
+  await expect(page.getByTestId('resync-done')).toBeVisible({ timeout: 10_000 })
+
+  await page.goBack()
+  await expect(page.getByRole('tree')).toContainText('Bleibt erhalten')
+  await expect(blockInput(page, 0)).toHaveText('Text')
+})

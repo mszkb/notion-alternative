@@ -22,3 +22,24 @@ export async function listChangesSince(
     .limit(limit)
     .execute()
 }
+
+/**
+ * Removes change-log entries up to `throughSeq` (log compaction). Not scheduled in the MVP
+ * (ADR 0002); used to test the re-sync path (T-MD-05). Pulls from an older cursor get 410.
+ */
+export async function compactChangeLog(db: Db, workspaceId: string, throughSeq: number) {
+  await db.transaction().execute(async (trx) => {
+    await trx
+      .deleteFrom('changes')
+      .where('workspace_id', '=', workspaceId)
+      .where('seq', '<=', throughSeq)
+      .execute()
+    await trx
+      .updateTable('workspaces')
+      .set((eb) => ({
+        compacted_seq: eb.fn('max', [eb.ref('compacted_seq'), eb.val(throughSeq)]),
+      }))
+      .where('id', '=', workspaceId)
+      .execute()
+  })
+}

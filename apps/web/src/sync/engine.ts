@@ -3,8 +3,9 @@ import { api } from '../api'
 import { deviceStatus } from '../device'
 import type { LocalStore } from '../local/store'
 import { connection } from '../session'
-import { type PullFetch, pullWorkspace } from './pull'
+import type { PullFetch } from './pull'
 import { pushQueue, type PushSend } from './push'
+import { type SnapshotFetch, syncWorkspace } from './resync'
 
 export interface SyncState {
   running: boolean
@@ -18,7 +19,7 @@ export const syncState = ref<SyncState>({ running: false, lastSyncAt: null, last
 const MAX_BACKOFF_MS = 5 * 60_000
 
 let current: Promise<void> | null = null
-let again = false
+let again: SyncOptions | null = null
 let failures = 0
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -29,9 +30,19 @@ export function backoffDelay(failureCount: number): number {
 export interface SyncTransport {
   push: PushSend
   pull: PullFetch
+  snapshot: SnapshotFetch
 }
 
-const defaultTransport: SyncTransport = { push: api.syncPush, pull: api.syncPull }
+const defaultTransport: SyncTransport = {
+  push: api.syncPush,
+  pull: api.syncPull,
+  snapshot: api.syncSnapshot,
+}
+
+export interface SyncOptions {
+  /** Full re-sync of every workspace from a snapshot (manual "Neu synchronisieren"). */
+  full?: boolean
+}
 
 /**
  * Runs a sync now (push, then pull for every workspace), or once more right after the running
@@ -40,10 +51,11 @@ const defaultTransport: SyncTransport = { push: api.syncPush, pull: api.syncPull
  */
 export function requestSync(
   store: LocalStore,
+  options: SyncOptions = {},
   transport: SyncTransport = defaultTransport,
 ): Promise<void> {
   if (current) {
-    again = true
+    again = { full: !!(again?.full || options.full) }
     return current
   }
   if (connection.value !== 'online' || deviceStatus.value !== 'registered') {
@@ -59,7 +71,7 @@ export function requestSync(
         deviceStatus.value = 'revoked'
       } else {
         for (const workspace of await store.cachedWorkspaces()) {
-          await pullWorkspace(store, workspace.id, transport.pull)
+          await syncWorkspace(store, workspace.id, transport, options.full)
         }
       }
       failures = 0
@@ -72,13 +84,17 @@ export function requestSync(
         lastError: error instanceof Error ? error.message : String(error),
       }
       // Retry with exponential backoff; triggers (focus, online, timer) may run it earlier.
-      retryTimer = setTimeout(() => void requestSync(store, transport), backoffDelay(failures))
+      retryTimer = setTimeout(
+        () => void requestSync(store, options, transport),
+        backoffDelay(failures),
+      )
     } finally {
       current = null
     }
     if (again) {
-      again = false
-      await requestSync(store, transport)
+      const next = again
+      again = null
+      await requestSync(store, next, transport)
     }
   })()
   return current
@@ -88,7 +104,7 @@ export function requestSync(
 export function stopSync(): void {
   if (retryTimer) clearTimeout(retryTimer)
   retryTimer = null
-  again = false
+  again = null
   failures = 0
   syncState.value = { running: false, lastSyncAt: null, lastError: null }
 }

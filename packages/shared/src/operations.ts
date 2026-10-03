@@ -1,12 +1,16 @@
 import { z } from 'zod'
 import {
+  type Block,
   blockAttrsSchema,
   blockTypeSchema,
   BLOCK_CONTENT_MAX_LENGTH,
+  type Document,
+  type DocumentTag,
   documentTitleSchema,
   type OperationEntity,
   type OperationKind,
   operationSchema,
+  type Tag,
   tagNameSchema,
 } from './content'
 
@@ -152,4 +156,16 @@ export interface SyncPullResponse {
   /** Highest `seq` delivered (or the given cursor if none); the next request starts here. */
   cursor: number
   hasMore: boolean
+}
+
+/** `GET /api/sync/snapshot`: the complete workspace including tombstones (re-sync). */
+export const syncSnapshotQuerySchema = z.object({ workspaceId: z.uuid() })
+
+export interface SyncSnapshotResponse {
+  documents: Document[]
+  blocks: Block[]
+  tags: Tag[]
+  documentTags: DocumentTag[]
+  /** Change-log position the snapshot reflects; pulling continues from here. */
+  cursor: number
 }

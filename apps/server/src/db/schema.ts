@@ -22,6 +22,8 @@ export interface WorkspacesTable {
   name: string
   owner_id: string
   created_at: string
+  /** Highest change `seq` removed by log compaction (0 = complete log). */
+  compacted_seq: number
 }
 
 export interface DevicesTable {

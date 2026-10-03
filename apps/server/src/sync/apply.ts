@@ -366,7 +366,13 @@ async function nextSeq(db: Db, workspaceId: string): Promise<number> {
     .select((eb) => eb.fn.max('seq').as('max'))
     .where('workspace_id', '=', workspaceId)
     .executeTakeFirst()
-  return Number(row?.max ?? 0) + 1
+  const floor = await db
+    .selectFrom('workspaces')
+    .select('compacted_seq')
+    .where('id', '=', workspaceId)
+    .executeTakeFirstOrThrow()
+  // After compaction the log may be empty; numbering continues above the removed part.
+  return Math.max(Number(row?.max ?? 0), floor.compacted_seq) + 1
 }
 
 /**

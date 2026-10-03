@@ -3,7 +3,9 @@ import { onMounted, ref, watch } from 'vue'
 import { type Device, PASSWORD_MIN_LENGTH } from '@notion-alt/shared'
 import { ApiError, api } from '../api'
 import { deviceStatus } from '../device'
+import { refreshWorkspaces, requireStore } from '../local/context'
 import { connection, currentUser } from '../session'
+import { requestSync, syncState } from '../sync/engine'
 
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -72,6 +74,25 @@ async function removeDevice(device: Device) {
     await loadDevices()
   } catch {
     deviceError.value = 'Gerät konnte nicht entfernt werden.'
+  }
+}
+
+// ------------------------------------------------------------------ re-sync
+
+const resyncing = ref(false)
+const resyncDone = ref(false)
+
+/** Loads every workspace again from a server snapshot; the unsynced queue is pushed first. */
+async function resync() {
+  resyncing.value = true
+  resyncDone.value = false
+  try {
+    const store = requireStore()
+    await refreshWorkspaces(store)
+    await requestSync(store, { full: true })
+    resyncDone.value = !syncState.value.lastError
+  } finally {
+    resyncing.value = false
   }
 }
 
@@ -192,6 +213,23 @@ async function changePassword() {
       </li>
     </ul>
     <p v-if="deviceError" class="error" role="alert">{{ deviceError }}</p>
+
+    <h2>Synchronisierung</h2>
+    <p class="muted">
+      Lädt alle Workspaces vollständig neu vom Server. Noch nicht synchronisierte Änderungen auf
+      diesem Gerät werden zuerst gesendet und bleiben erhalten.
+    </p>
+    <button
+      type="button"
+      :disabled="connection !== 'online' || deviceStatus === 'revoked' || resyncing"
+      @click="resync"
+    >
+      {{ resyncing ? 'Synchronisiert…' : 'Neu synchronisieren' }}
+    </button>
+    <p v-if="resyncDone" class="muted" data-testid="resync-done">Vollständig synchronisiert.</p>
+    <p v-if="!resyncing && syncState.lastError" class="error">
+      Synchronisierung fehlgeschlagen: {{ syncState.lastError }}
+    </p>
   </main>
 </template>
 

@@ -9,6 +9,7 @@ import type {
   SyncPullResponse,
   SyncPushInput,
   SyncPushResult,
+  SyncSnapshotResponse,
   User,
   Workspace,
 } from '@notion-alt/shared'
@@ -70,6 +71,11 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
           cursor: String(cursor),
           limit: String(limit),
         })}`,
+      ),
+    syncSnapshot: (workspaceId: string) =>
+      request<SyncSnapshotResponse>(
+        'GET',
+        `/sync/snapshot?${new URLSearchParams({ workspaceId })}`,
       ),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>

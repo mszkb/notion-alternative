@@ -19,6 +19,7 @@ import {
   type OperationKind,
   sortKeyBetween,
   type SyncPushResult,
+  type SyncSnapshotResponse,
   type Tag,
   type TagCreatePayload,
   tagNameSchema,
@@ -682,6 +683,60 @@ export class LocalStore {
     await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
       for (const change of changes) await this.applyRemoteChange(ctx, workspaceId, change)
       await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
+    })
+    this.notify(ctx)
+  }
+
+  /**
+   * Full re-sync: replaces the workspace's local state with the server snapshot and stores its
+   * cursor, in one transaction. Entities with queued operations keep their local state, so
+   * nothing unsynced is lost; their push takes the normal (conflict) path.
+   */
+  async replaceWithSnapshot(workspaceId: string, snapshot: SyncSnapshotResponse): Promise<void> {
+    const ctx: WriteContext = { touched: new Map() }
+    await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
+      const pending = new Set((await this.db.operations.toArray()).map((op) => op.entityId))
+      const keep = <T extends { id: string }>(items: T[]) => items.filter((i) => !pending.has(i.id))
+      const drop = <T extends { id: string }>(items: T[]) =>
+        items.filter((i) => !pending.has(i.id)).map((i) => i.id)
+
+      const localDocuments = await this.db.documents
+        .where('workspaceId')
+        .equals(workspaceId)
+        .toArray()
+      const documentIds = [...new Set([...localDocuments, ...snapshot.documents].map((d) => d.id))]
+      const localBlocks = await this.db.blocks.where('documentId').anyOf(documentIds).toArray()
+      await this.db.documents.bulkDelete(drop(localDocuments))
+      await this.db.blocks.bulkDelete(drop(localBlocks))
+      await this.db.tags.bulkDelete(
+        drop(await this.db.tags.where('workspaceId').equals(workspaceId).toArray()),
+      )
+      await this.db.documentTags.bulkDelete(
+        drop(await this.db.documentTags.where('workspaceId').equals(workspaceId).toArray()),
+      )
+      await this.db.documents.bulkPut(keep(snapshot.documents))
+      await this.db.blocks.bulkPut(keep(snapshot.blocks))
+      await this.db.tags.bulkPut(keep(snapshot.tags))
+      await this.db.documentTags.bulkPut(keep(snapshot.documentTags))
+
+      // Derived link index: rebuild for the whole workspace.
+      await this.db.links.where('workspaceId').equals(workspaceId).delete()
+      const documents = new Map(
+        (await this.db.documents.where('workspaceId').equals(workspaceId).toArray()).map((d) => [
+          d.id,
+          d,
+        ]),
+      )
+      for (const block of await this.db.blocks
+        .where('documentId')
+        .anyOf([...documents.keys()])
+        .toArray()) {
+        if (!block.deletedAt) await this.updateLinks(block, documents.get(block.documentId)!)
+      }
+      for (const id of new Set([...documentIds, ...documents.keys()])) {
+        this.mark(ctx, workspaceId, id)
+      }
+      await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: snapshot.cursor })
     })
     this.notify(ctx)
   }

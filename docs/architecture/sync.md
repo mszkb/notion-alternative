@@ -74,6 +74,12 @@ Umsetzung: `apps/server/src/sync/` (Migration `0003_sync`). Payload-Schemas je E
 - `delete` setzt `deletedAt` (Tombstone), siehe Löschungen. Links (Backlinks) werden nachgeführt, und die Suche indiziert betroffene Dokumente über `onChange` neu.
 - Der Editor übernimmt entfernte Änderungen auch in einem fokussierten Block, solange dort keine ungespeicherte Eingabe läuft; die Cursorposition bleibt erhalten.
 
+### Vollständiger Re-Sync
+
+- `GET /api/sync/snapshot?workspaceId=…` liefert alle Dokumente, Blöcke, Tags und Tag-Zuordnungen des Workspaces **inklusive Tombstones** sowie den Cursor, zu dem der Stand gehört (gelesen in einer Transaktion). Im MVP ungeteilt; bei sehr großen Workspaces später paginieren oder streamen.
+- `workspaces.compacted_seq` merkt sich, bis zu welcher `seq` das Log kompaktiert wurde (Migration `0004`). `pull` mit älterem Cursor antwortet `410 cursor_expired`. Eine Kompaktierung läuft im MVP nicht; `compactChangeLog` (`apps/server/src/sync/changes.ts`) dient als Testhaken und spätere Grundlage. Die Nummerierung setzt nach einer Kompaktierung oberhalb von `compacted_seq` fort.
+- Der Client (`syncWorkspace`) lädt einen Snapshot statt der Deltas, wenn das Gerät den Workspace noch nie synchronisiert hat (Cursor 0, neues Gerät), wenn `pull` `410` liefert oder wenn der Nutzer „Neu synchronisieren“ (Kontoseite) wählt. Die Queue wird vorher gepusht. `LocalStore.replaceWithSnapshot` ersetzt den lokalen Stand des Workspaces in **einer** Transaktion, baut den Link-Index neu auf und setzt den Cursor; Entitäten mit ungesyncten Operationen behalten ihren lokalen Stand, die Queue bleibt unverändert (T-MD-05). Danach folgt ein normaler Pull.
+
 ### Löschungen (Tombstones)
 
 - `delete` setzt `deleted_at` und erhöht die Revision; die Zeile bleibt (keine Kompaktierung im MVP).
