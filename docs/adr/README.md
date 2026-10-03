@@ -19,3 +19,5 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0011](0011-https-for-mobile-devices.md) | HTTPS für Smartphones und weitere Geräte | Proposed |
 | [0012](0012-attachments.md) | Dateianhänge | Accepted |
 | [0013](0013-version-history.md) | Versionsverlauf | Accepted |
+| [0014](0014-sharing-and-permissions.md) | Sharing, Berechtigungen und Kommentare | Proposed |
+| [0015](0015-realtime.md) | Echtzeit-Verteilung von Änderungen | Proposed |
