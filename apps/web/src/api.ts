@@ -3,6 +3,8 @@ import type {
   ChangePasswordInput,
   CreateWorkspaceInput,
   Device,
+  DocumentVersion,
+  DocumentVersionState,
   LoginInput,
   LogoutInput,
   PushSubscriptionInput,
@@ -93,6 +95,16 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
       request<void>('DELETE', '/push/subscriptions', { endpoint }),
     attachmentUsage: (workspaceId: string) =>
       request<AttachmentUsage>('GET', `/attachments/usage?${new URLSearchParams({ workspaceId })}`),
+    documentHistory: (documentId: string, workspaceId: string) =>
+      request<{ versions: DocumentVersion[] }>(
+        'GET',
+        `/documents/${documentId}/history?${new URLSearchParams({ workspaceId })}`,
+      ),
+    documentVersion: (documentId: string, seq: number, workspaceId: string) =>
+      request<DocumentVersionState>(
+        'GET',
+        `/documents/${documentId}/history/${seq}?${new URLSearchParams({ workspaceId })}`,
+      ),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<{ workspace: Workspace }>('POST', '/workspaces', input),

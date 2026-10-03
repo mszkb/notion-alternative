@@ -150,6 +150,12 @@ async function deletePage() {
           {{ document.favorite ? '★' : '☆' }}
         </button>
         <button type="button" class="secondary" @click="addChild">+ Unterseite</button>
+        <RouterLink
+          class="secondary"
+          :to="{ name: 'history', params: { workspaceId, documentId } }"
+        >
+          Verlauf
+        </RouterLink>
         <button type="button" class="secondary danger" @click="deletePage">Löschen</button>
       </div>
     </header>

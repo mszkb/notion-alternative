@@ -196,3 +196,21 @@ export interface SyncSnapshotResponse {
   /** Change-log position the snapshot reflects; pulling continues from here. */
   cursor: number
 }
+
+/** One version of a page: an editing session of one device (ADR 0013). */
+export interface DocumentVersion {
+  /** Last change of the session; identifies the version. */
+  seq: number
+  at: string
+  deviceId: string
+  /** Number of changes in this session. */
+  changes: number
+}
+
+/** Page and blocks as they were at a version (ADR 0013). */
+export interface DocumentVersionState {
+  seq: number
+  document: Pick<Document, 'id' | 'title' | 'parentId' | 'favorite' | 'deletedAt'>
+  /** Active blocks in order. */
+  blocks: Pick<Block, 'id' | 'type' | 'content' | 'attrs' | 'sortKey'>[]
+}

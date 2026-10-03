@@ -18,3 +18,4 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0010](0010-reference-deployment-and-https.md) | Referenz-Deployment und HTTPS | Accepted |
 | [0011](0011-https-for-mobile-devices.md) | HTTPS für Smartphones und weitere Geräte | Proposed |
 | [0012](0012-attachments.md) | Dateianhänge | Accepted |
+| [0013](0013-version-history.md) | Versionsverlauf | Accepted |

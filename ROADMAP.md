@@ -89,7 +89,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Dateianhänge (Bild/Datei, offline anlegbar, [ADR 0012](docs/adr/0012-attachments.md))
 - [x] S3-kompatiblen Object Storage anbinden (optional, ersetzt Datei-Volume; Migration per Befehl)
 - [x] Speicher- und Größenlimits (pro Datei und pro Workspace, Anzeige auf der Kontoseite)
-- [ ] Versionen / Revisionsverlauf
+- [x] Versionen / Revisionsverlauf (aus dem Änderungslog, Diff zur aktuellen Version, [ADR 0013](docs/adr/0013-version-history.md))
 - [ ] Wiederherstellung früherer Versionen
 
 ## Phase 6 – Export/import
