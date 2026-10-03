@@ -8,6 +8,7 @@ import { HttpError } from './errors'
 import { healthRoutes } from './health/routes'
 import { metricsRoutes, setupMetrics } from './metrics/plugin'
 import type { Registry } from './metrics/registry'
+import { syncRoutes } from './sync/routes'
 import { workspaceRoutes } from './workspaces/routes'
 
 declare module 'fastify' {
@@ -66,6 +67,7 @@ export async function buildApp({ db, config, logger = false }: AppOptions) {
       await api.register(authRoutes)
       await api.register(workspaceRoutes)
       await api.register(deviceRoutes)
+      await api.register(syncRoutes)
     },
     { prefix: '/api' },
   )

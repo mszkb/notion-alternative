@@ -5,6 +5,8 @@ import type {
   LoginInput,
   RegisterDeviceInput,
   RegisterInput,
+  SyncPushInput,
+  SyncPushResult,
   User,
   Workspace,
 } from '@notion-alt/shared'
@@ -56,6 +58,8 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
     renameDevice: (id: string, name: string) =>
       request<{ device: Device }>('PATCH', `/devices/${id}`, { name }),
     removeDevice: (id: string) => request<void>('DELETE', `/devices/${id}`),
+    syncPush: (input: SyncPushInput) =>
+      request<{ results: SyncPushResult[] }>('POST', '/sync/push', input),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<{ workspace: Workspace }>('POST', '/workspaces', input),

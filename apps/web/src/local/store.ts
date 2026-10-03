@@ -14,12 +14,13 @@ import {
   type OperationEntity,
   type OperationKind,
   sortKeyBetween,
+  type SyncPushResult,
   type Tag,
   tagNameSchema,
   tagSchema,
   type Workspace,
 } from '@notion-alt/shared'
-import type { LocalDb } from './db'
+import type { LocalDb, QueuedOperation } from './db'
 
 export class LocalStoreError extends Error {
   override name = 'LocalStoreError'
@@ -592,7 +593,52 @@ export class LocalStore {
     return this.db.operations.count()
   }
 
-  /** Replaces the cached workspace list with the server's (read-only cache, not synced). */
+  /** Queued operations the server did not accept (conflict or rejected); they stay queued. */
+  async operationsWithIssues(): Promise<QueuedOperation[]> {
+    return (await this.db.operations.toArray()).filter((op) => op.issue)
+  }
+
+  /** Oldest queued operations after `afterSeq`, in creation order (sync push). */
+  async queuedOperations(afterSeq: number, limit: number): Promise<QueuedOperation[]> {
+    return this.db.operations.where('seq').above(afterSeq).limit(limit).toArray()
+  }
+
+  /**
+   * Applies push results in one transaction: confirmed operations leave the queue and their
+   * entity learns the server revision; conflicts and rejections stay queued and are marked.
+   */
+  async acknowledge(results: SyncPushResult[]): Promise<void> {
+    const tables = {
+      document: this.db.documents,
+      block: this.db.blocks,
+      tag: this.db.tags,
+      document_tag: this.db.documentTags,
+    } as const
+    await this.db.transaction('rw', CONTENT_TABLES, async () => {
+      for (const result of results) {
+        const op = await this.db.operations.where('opId').equals(result.opId).first()
+        if (!op?.seq) continue
+        if (result.status === 'applied' || result.status === 'duplicate') {
+          await this.db.operations.delete(op.seq)
+          const table = tables[op.entity]
+          const entity = await table.get(op.entityId)
+          if (entity && (entity.revision ?? 0) < result.revision) {
+            await table.update(op.entityId, { revision: result.revision })
+          }
+        } else {
+          let issue = { code: 'conflict', message: 'Changed on another device' }
+          if (result.status === 'rejected') issue = { code: result.code, message: result.message }
+          if (result.status === 'conflict') {
+            issue.message = `Changed on another device (revision ${result.currentRevision})`
+          }
+          await this.db.operations.update(op.seq, {
+            issue: { status: result.status, ...issue, at: this.now() },
+          })
+        }
+      }
+    })
+  }
+
   async cacheWorkspaces(workspaces: Workspace[]): Promise<void> {
     await this.db.transaction('rw', this.db.workspaces, async () => {
       await this.db.workspaces.clear()

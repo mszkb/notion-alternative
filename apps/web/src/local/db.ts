@@ -6,9 +6,19 @@ export interface MetaEntry {
   value: unknown
 }
 
+/** Why a queued operation was not accepted by the server yet; it stays queued (no data loss). */
+export interface QueuedOperationIssue {
+  status: 'conflict' | 'rejected'
+  code: string
+  message: string
+  at: string
+}
+
 /** Queued operation; `seq` orders the queue (ADR 0002: push in order of creation). */
 export interface QueuedOperation extends Operation {
   seq?: number
+  /** Set by the last push if the server answered `conflict` or `rejected`. Not indexed. */
+  issue?: QueuedOperationIssue
 }
 
 /** Derived index of page links per block, used for backlinks. Not synchronised. */

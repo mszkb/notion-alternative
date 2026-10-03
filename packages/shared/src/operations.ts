@@ -6,6 +6,7 @@ import {
   documentTitleSchema,
   type OperationEntity,
   type OperationKind,
+  operationSchema,
   tagNameSchema,
 } from './content'
 
@@ -99,3 +100,37 @@ export const changeSchema = z.object({
   appliedAt: z.string(),
 })
 export type Change = z.infer<typeof changeSchema>
+
+export const SYNC_PUSH_MAX_OPERATIONS = 500
+
+/** `POST /api/sync/push`: operations in the order they were created (ADR 0002). */
+export const syncPushInputSchema = z.object({
+  operations: z.array(operationSchema).min(1).max(SYNC_PUSH_MAX_OPERATIONS),
+})
+export type SyncPushInput = z.infer<typeof syncPushInputSchema>
+
+/**
+ * Result per operation. `applied`/`duplicate` carry the entity's new revision; `conflict` means
+ * another device changed the entity first (nothing written); `rejected` is permanent for this op.
+ */
+const confirmed = {
+  opId: z.uuid(),
+  revision: z.number().int().positive(),
+  seq: z.number().int().positive(),
+}
+export const syncPushResultSchema = z.discriminatedUnion('status', [
+  z.object({ ...confirmed, status: z.literal('applied') }),
+  z.object({ ...confirmed, status: z.literal('duplicate') }),
+  z.object({
+    opId: z.uuid(),
+    status: z.literal('conflict'),
+    currentRevision: z.number().int().positive(),
+  }),
+  z.object({
+    opId: z.uuid(),
+    status: z.literal('rejected'),
+    code: z.string(),
+    message: z.string(),
+  }),
+])
+export type SyncPushResult = z.infer<typeof syncPushResultSchema>

@@ -18,6 +18,7 @@ import {
 } from '../local/context'
 import type { SearchHit } from '../local/search'
 import { connection, currentUser, refreshSession } from '../session'
+import { requestSync, syncState } from '../sync/engine'
 
 const route = useRoute()
 const router = useRouter()
@@ -44,6 +45,9 @@ const recent = computed(() =>
 )
 const tags = useLiveQuery(() => store.listTags(workspaceId.value), [], workspaceId)
 const pending = useLiveQuery(() => store.pendingOperationCount(), 0)
+const withIssues = useLiveQuery(() => store.operationsWithIssues(), [])
+const conflicts = computed(() => withIssues.value.filter((op) => op.issue?.status === 'conflict'))
+const rejected = computed(() => withIssues.value.filter((op) => op.issue?.status === 'rejected'))
 
 watch(workspaceId, (id) => rememberWorkspace(id), { immediate: true })
 
@@ -101,11 +105,22 @@ async function createPage() {
 
 async function recheck() {
   try {
-    if ((await refreshSession()) === 'online') await refreshWorkspaces(store)
+    if ((await refreshSession()) === 'online') {
+      await refreshWorkspaces(store)
+      void requestSync(store)
+    }
   } catch {
     connection.value = 'offline'
   }
 }
+
+// Push local changes shortly after they were made (debounced); the queue keeps them meanwhile.
+const SYNC_AFTER_CHANGE_MS = 1500
+let changeTimer: ReturnType<typeof setTimeout> | null = null
+const stopChangeListener = store.onChange(() => {
+  if (changeTimer) clearTimeout(changeTimer)
+  changeTimer = setTimeout(() => void requestSync(store), SYNC_AFTER_CHANGE_MS)
+})
 
 let interval: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
@@ -120,6 +135,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('offline', markOffline)
   window.removeEventListener('focus', recheck)
   if (interval) clearInterval(interval)
+  if (changeTimer) clearTimeout(changeTimer)
+  stopChangeListener()
 })
 
 function markOffline() {
@@ -282,6 +299,18 @@ watch(
         </p>
         <p class="muted" data-testid="pending">
           {{ pending }} lokale Änderung{{ pending === 1 ? '' : 'en' }} noch nicht synchronisiert
+        </p>
+        <p v-if="conflicts.length" class="error" data-testid="sync-conflicts">
+          {{ conflicts.length }} Änderung{{ conflicts.length === 1 ? '' : 'en' }} mit Konflikt: auf
+          einem anderen Gerät geändert. Sie bleiben lokal erhalten, bis die Konfliktauflösung
+          verfügbar ist.
+        </p>
+        <p v-if="rejected.length" class="error" data-testid="sync-rejected">
+          {{ rejected.length }} Änderung{{ rejected.length === 1 ? '' : 'en' }} vom Server abgelehnt
+          ({{ rejected[0]?.issue?.message }}). Sie bleiben lokal erhalten.
+        </p>
+        <p v-if="syncState.lastError && connection === 'online'" class="muted">
+          Synchronisierung fehlgeschlagen, neuer Versuch folgt.
         </p>
         <p class="muted">
           {{ currentUser?.email }} ·

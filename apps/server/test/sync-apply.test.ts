@@ -137,10 +137,14 @@ describe('applyOperation', () => {
     expect(await apply(reused)).toMatchObject({ status: 'rejected', code: 'op_id_reused' })
   })
 
-  it('reports an outdated base revision as conflict without writing', async () => {
+  it('reports a change by another device since the base revision as conflict', async () => {
+    const phone = randomUUID()
+    await insertDevice(db, userId, phone, 'Phone', new Date().toISOString())
     const doc = randomUUID()
     await apply(createDoc(doc))
-    await apply(op('document', 'update', doc, { title: 'A' }, 1))
+    // The phone saw revision 1 and changed the title.
+    await apply(op('document', 'update', doc, { title: 'A' }, 1, { deviceId: phone }))
+    // This device also edited on top of revision 1: conflict, nothing written.
     expect(await apply(op('document', 'update', doc, { title: 'B' }, 1))).toEqual({
       status: 'conflict',
       currentRevision: 2,
@@ -152,6 +156,22 @@ describe('applyOperation', () => {
       .executeTakeFirstOrThrow()
     expect(stored).toEqual({ title: 'A', revision: 2 })
     expect(await changes()).toHaveLength(2)
+    expect(await apply(op('document', 'update', doc, { title: 'C' }, 7))).toMatchObject({
+      code: 'invalid_payload',
+    })
+  })
+
+  it("chains a device's own queued operations without conflict", async () => {
+    const doc = randomUUID()
+    // Created and edited offline: every queued op still has base revision null.
+    await apply(createDoc(doc))
+    await apply(op('document', 'update', doc, { title: 'eins' }, null))
+    await apply(op('document', 'update', doc, { title: 'zwei' }, null))
+    expect(await apply(op('document', 'move', doc, { parentId: null, sortKey: 'b' }, 1))).toEqual({
+      status: 'applied',
+      revision: 4,
+      seq: 4,
+    })
   })
 
   it('keeps users, workspaces and devices apart', async () => {

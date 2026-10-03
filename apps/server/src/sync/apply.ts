@@ -28,8 +28,8 @@ export type ApplyResult =
   /** Already applied earlier (same `opId`): the original result, nothing written. */
   | { status: 'duplicate'; revision: number; seq: number }
   /**
-   * `baseRevision` is outdated: nothing is written. Never overwritten silently (principle 6);
-   * block merge and conflict objects (ADR 0003) build on this result.
+   * Another device changed the entity after `baseRevision`: nothing is written. Never
+   * overwritten silently (principle 6); block merge and conflict objects (ADR 0003) build on this.
    */
   | { status: 'conflict'; currentRevision: number }
   | { status: 'rejected'; code: RejectCode; message: string }
@@ -51,10 +51,33 @@ interface Versioned {
 }
 
 /**
+ * Whether another device changed the entity after `baseRevision`. Changes of the operation's own
+ * device do not count: its queued operations build on each other (e.g. create, then update with
+ * the same, still unsynced base) and were made with those changes in view.
+ */
+async function changedByOthers(db: Db, op: Operation, baseRevision: number): Promise<boolean> {
+  const other = await db
+    .selectFrom('changes')
+    .select('seq')
+    .where('workspace_id', '=', op.workspaceId)
+    .where('entity', '=', op.entity)
+    .where('entity_id', '=', op.entityId)
+    .where('revision', '>', baseRevision)
+    .where('device_id', '!=', op.deviceId)
+    .limit(1)
+    .executeTakeFirst()
+  return !!other
+}
+
+/**
  * Checks an operation against the stored entity and returns the revision it will get.
  * Entities of other workspaces are reported as missing, never revealed.
  */
-function nextRevision(op: Operation, existing: Versioned | undefined): number {
+async function nextRevision(
+  db: Db,
+  op: Operation,
+  existing: Versioned | undefined,
+): Promise<number> {
   if (existing && existing.workspace_id !== op.workspaceId) reject('not_found', 'Entity not found')
   if (op.kind === 'create') {
     if (existing) reject('already_exists', 'Entity already exists')
@@ -63,7 +86,9 @@ function nextRevision(op: Operation, existing: Versioned | undefined): number {
   }
   if (!existing) reject('not_found', 'Entity not found')
   if (existing.deleted_at) reject('deleted', 'Entity is deleted')
-  if (op.baseRevision !== existing.revision) {
+  const base = op.baseRevision ?? 0
+  if (base > existing.revision) reject('invalid_payload', 'Base revision is ahead of the server')
+  if (base < existing.revision && (await changedByOthers(db, op, base))) {
     throw new Stop({ status: 'conflict', currentRevision: existing.revision })
   }
   return existing.revision + 1
@@ -95,7 +120,7 @@ async function applyDocument(db: Db, op: Operation, now: string): Promise<number
     .selectAll()
     .where('id', '=', op.entityId)
     .executeTakeFirst()
-  const revision = nextRevision(op, existing)
+  const revision = await nextRevision(db, op, existing)
   switch (op.kind) {
     case 'create': {
       const p = op.payload as DocumentCreatePayload
@@ -157,7 +182,7 @@ async function applyBlock(db: Db, op: Operation, now: string): Promise<number> {
     .selectAll()
     .where('id', '=', op.entityId)
     .executeTakeFirst()
-  const revision = nextRevision(op, existing)
+  const revision = await nextRevision(db, op, existing)
   switch (op.kind) {
     case 'create': {
       const p = op.payload as BlockCreatePayload
@@ -217,7 +242,7 @@ async function applyTag(db: Db, op: Operation, now: string): Promise<number> {
     .selectAll()
     .where('id', '=', op.entityId)
     .executeTakeFirst()
-  const revision = nextRevision(op, existing)
+  const revision = await nextRevision(db, op, existing)
   if (op.kind === 'create') {
     const p = op.payload as TagCreatePayload
     await db
@@ -253,7 +278,7 @@ async function applyDocumentTag(db: Db, op: Operation, now: string): Promise<num
     .selectAll()
     .where('id', '=', op.entityId)
     .executeTakeFirst()
-  const revision = nextRevision(op, existing)
+  const revision = await nextRevision(db, op, existing)
   if (op.kind === 'create') {
     const p = op.payload as DocumentTagCreatePayload
     await requireDocumentIn(db, op.workspaceId, p.documentId, 'Document')

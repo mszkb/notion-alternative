@@ -3,6 +3,7 @@ import { ref, shallowRef } from 'vue'
 import { api } from '../api'
 import { deviceStatus, registerDevice } from '../device'
 import { connection } from '../session'
+import { stopSync } from '../sync/engine'
 import { LocalDb, localDbName } from './db'
 import { ensurePersistentStorage, type PersistenceStatus } from './persistence'
 import { WorkspaceSearch } from './search'
@@ -61,6 +62,7 @@ export function closeLocalStore(): void {
   localStore.value = null
   workspaces.value = []
   deviceStatus.value = 'unknown'
+  stopSync()
   opening = null
   openUserId = null
   generation = null
