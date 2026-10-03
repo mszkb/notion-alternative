@@ -76,6 +76,7 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 | `ALLOW_REGISTRATION` | `false` | Weitere Registrierungen nach dem ersten Konto erlauben |
 | `COOKIE_SECURE` | `false` | Session-Cookie nur über HTTPS senden |
 | `LOG_LEVEL` | `info` | `fatal` … `trace`, `silent` |
+| `METRICS_ENABLED` | `false` | Prometheus-Metriken unter `/api/metrics` im Backend bereitstellen |
 
 Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`): siehe `apps/server/src/config.ts`.
 
@@ -84,6 +85,22 @@ Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`): sie
 - `GET /healthz` – nginx läuft
 - `GET /api/health` – Backend-Prozess läuft (Liveness)
 - `GET /api/ready` – Datenbank erreichbar (Readiness)
+
+## Metriken
+
+Mit `METRICS_ENABLED=true` liefert das Backend unter `GET /api/metrics` Metriken im Prometheus-Textformat:
+
+- `http_requests_total` und `http_request_duration_seconds` je Methode, Routen-Template (z. B. `/api/workspaces/:id`) und Status
+- Prozess: `process_resident_memory_bytes`, `process_heap_used_bytes`, `process_uptime_seconds`, `nodejs_eventloop_lag_seconds`
+- `sqlite_file_size_bytes` für Datenbank- und WAL-Datei
+
+Labels enthalten keine personenbezogenen Daten, IDs oder konkreten Pfade. nginx (`frontend`) beantwortet `/api/metrics` immer mit `404`; der Endpunkt ist nur im Backend-Container bzw. im internen Docker-Netz erreichbar. Einmalig abrufen:
+
+```sh
+docker compose exec backend node -e "fetch('http://127.0.0.1:3000/api/metrics').then(r => r.text()).then(console.log)"
+```
+
+Einen Prometheus-Server betreibt das Projekt bewusst nicht (genau zwei Container, ADR 0006); ein vorhandener Prometheus kann das Backend über ein gemeinsames Docker-Netz abfragen.
 
 ## Migrationen
 

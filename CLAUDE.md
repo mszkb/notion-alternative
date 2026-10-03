@@ -8,7 +8,7 @@ Self-hosted, **local-first / offline-first** Wissens- und Dokumentenplattform (N
 
 ## Status
 
-Phase 0 abgeschlossen, Phase 1 (Foundation) weitgehend umgesetzt: Monorepo, Server mit Auth und Workspaces, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Noch offen aus Phase 1: Metriken, Login-Rate-Limiting, Passwort ändern. Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+Phase 0 abgeschlossen, Phase 1 (Foundation) weitgehend umgesetzt: Monorepo, Server mit Auth und Workspaces, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Noch offen aus Phase 1: Login-Rate-Limiting, Passwort ändern. Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
 
 Entschieden (`Accepted`):
 

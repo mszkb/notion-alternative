@@ -5,12 +5,15 @@ import type { Config } from './config'
 import type { Db } from './db/database'
 import { HttpError } from './errors'
 import { healthRoutes } from './health/routes'
+import { metricsRoutes, setupMetrics } from './metrics/plugin'
+import type { Registry } from './metrics/registry'
 import { workspaceRoutes } from './workspaces/routes'
 
 declare module 'fastify' {
   interface FastifyInstance {
     db: Db
     config: Config
+    metrics: Registry
   }
 }
 
@@ -32,6 +35,7 @@ export async function buildApp({ db, config, logger = false }: AppOptions) {
   app.decorate('config', config)
   app.decorateRequest('user', null)
   await app.register(cookie)
+  setupMetrics(app, config.databasePath)
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof HttpError) {
@@ -56,6 +60,7 @@ export async function buildApp({ db, config, logger = false }: AppOptions) {
   await app.register(
     async (api) => {
       await api.register(healthRoutes)
+      if (config.metricsEnabled) await api.register(metricsRoutes)
       await api.register(authRoutes)
       await api.register(workspaceRoutes)
     },

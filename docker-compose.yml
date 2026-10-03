@@ -8,6 +8,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      METRICS_ENABLED: ${METRICS_ENABLED:-false}
     volumes:
       - data:/data
 

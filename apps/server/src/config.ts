@@ -15,6 +15,7 @@ const envSchema = z.object({
   ALLOW_REGISTRATION: booleanFromEnv.default(false),
   COOKIE_SECURE: booleanFromEnv.default(false),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  METRICS_ENABLED: booleanFromEnv.default(false),
 })
 
 export interface Config {
@@ -25,6 +26,7 @@ export interface Config {
   allowRegistration: boolean
   cookieSecure: boolean
   sessionTtlDays: number
+  metricsEnabled: boolean
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -37,5 +39,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     allowRegistration: parsed.ALLOW_REGISTRATION,
     cookieSecure: parsed.COOKIE_SECURE,
     sessionTtlDays: parsed.SESSION_TTL_DAYS,
+    metricsEnabled: parsed.METRICS_ENABLED,
   }
 }

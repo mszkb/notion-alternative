@@ -42,7 +42,7 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 - [x] Images auch für `linux/arm64` (CI-Build, Raspberry Pi gemessen)
 - [x] Datenbank (SQLite) & Migrationen
 - [x] Observability: strukturierte Logs, Healthchecks
-- [ ] Observability: Metriken
+- [x] Observability: Metriken
 - [ ] Login-Rate-Limiting, Passwort ändern
 
 ## Phase 2 – Local editor
