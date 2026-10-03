@@ -644,7 +644,12 @@ export class LocalStore {
           let issue = { code: 'conflict', message: 'Changed on another device' }
           if (result.status === 'rejected') issue = { code: result.code, message: result.message }
           if (result.status === 'conflict') {
-            issue.message = `Changed on another device (revision ${result.currentRevision})`
+            const what = {
+              changed: 'Changed on another device',
+              deleted: 'Deleted on another device',
+              parent_deleted: 'Its page was deleted on another device',
+            }[result.reason]
+            issue = { code: result.reason, message: `${what} (revision ${result.currentRevision})` }
           }
           await this.db.operations.update(op.seq, {
             issue: { status: result.status, ...issue, at: this.now() },
@@ -693,6 +698,15 @@ export class LocalStore {
       return
     }
     if ((await this.db.operations.where('entityId').equals(change.entityId).count()) > 0) return
+    // A page deleted elsewhere stays while this device has unsynced edits in it (T-DEL-02):
+    // their push becomes a visible conflict instead of disappearing with the page.
+    if (change.entity === 'document' && change.kind === 'delete') {
+      const blockIds = await this.db.blocks
+        .where('documentId')
+        .equals(change.entityId)
+        .primaryKeys()
+      if ((await this.db.operations.where('entityId').anyOf(blockIds).count()) > 0) return
+    }
     const invalid = validateOperationPayload(change.entity, change.kind, change.payload)
     if (invalid) {
       console.warn('Skipping invalid change', change.seq, invalid)

@@ -23,6 +23,9 @@ export type RejectCode =
   | 'already_exists'
   | 'deleted'
 
+/** `changed`/`deleted`: the entity itself; `parent_deleted`: the document it belongs to. */
+export type ConflictReason = 'changed' | 'deleted' | 'parent_deleted'
+
 export type ApplyResult =
   | { status: 'applied'; revision: number; seq: number }
   /** Already applied earlier (same `opId`): the original result, nothing written. */
@@ -31,7 +34,7 @@ export type ApplyResult =
    * Another device changed the entity after `baseRevision`: nothing is written. Never
    * overwritten silently (principle 6); block merge and conflict objects (ADR 0003) build on this.
    */
-  | { status: 'conflict'; currentRevision: number }
+  | { status: 'conflict'; currentRevision: number; reason: ConflictReason }
   | { status: 'rejected'; code: RejectCode; message: string }
 
 class Stop extends Error {
@@ -48,6 +51,24 @@ interface Versioned {
   workspace_id: string
   revision: number
   deleted_at: string | null
+}
+
+function conflict(currentRevision: number, reason: ConflictReason): never {
+  throw new Stop({ status: 'conflict', currentRevision, reason })
+}
+
+/** Change-log entry that deleted the entity, if any. */
+async function deletion(db: Db, op: Operation) {
+  return db
+    .selectFrom('changes')
+    .select(['seq', 'device_id', 'revision'])
+    .where('workspace_id', '=', op.workspaceId)
+    .where('entity', '=', op.entity)
+    .where('entity_id', '=', op.entityId)
+    .where('kind', '=', 'delete')
+    .orderBy('seq', 'desc')
+    .limit(1)
+    .executeTakeFirst()
 }
 
 /**
@@ -85,11 +106,20 @@ async function nextRevision(
     return 1
   }
   if (!existing) reject('not_found', 'Entity not found')
-  if (existing.deleted_at) reject('deleted', 'Entity is deleted')
+  if (existing.deleted_at) {
+    const deleted = await deletion(db, op)
+    // Deleting again has the same effect: answer like the original deletion.
+    if (op.kind === 'delete' && deleted) {
+      throw new Stop({ status: 'duplicate', revision: existing.revision, seq: deleted.seq })
+    }
+    // Edited on this device while another one deleted it (T-DEL-02): visible, never lost.
+    if (deleted && deleted.device_id !== op.deviceId) conflict(existing.revision, 'deleted')
+    reject('deleted', 'Entity is deleted')
+  }
   const base = op.baseRevision ?? 0
   if (base > existing.revision) reject('invalid_payload', 'Base revision is ahead of the server')
   if (base < existing.revision && (await changedByOthers(db, op, base))) {
-    throw new Stop({ status: 'conflict', currentRevision: existing.revision })
+    conflict(existing.revision, 'changed')
   }
   return existing.revision + 1
 }
@@ -97,7 +127,7 @@ async function nextRevision(
 async function requireDocumentIn(db: Db, workspaceId: string, id: string, what: string) {
   const document = await db
     .selectFrom('documents')
-    .select(['id', 'parent_id'])
+    .select(['id', 'parent_id', 'revision', 'deleted_at'])
     .where('id', '=', id)
     .where('workspace_id', '=', workspaceId)
     .executeTakeFirst()
@@ -176,17 +206,30 @@ async function applyDocument(db: Db, op: Operation, now: string): Promise<number
   }
 }
 
+/**
+ * Content of a page that another device deleted must not vanish into the tombstone: changes to
+ * its blocks or tags become a conflict (T-DEL-02). Deleting them along is fine.
+ */
+async function assertDocumentAlive(db: Db, op: Operation, documentId: string) {
+  if (op.kind === 'delete') return
+  const document = await requireDocumentIn(db, op.workspaceId, documentId, 'Document')
+  if (document.deleted_at) conflict(document.revision, 'parent_deleted')
+}
+
 async function applyBlock(db: Db, op: Operation, now: string): Promise<number> {
   const existing = await db
     .selectFrom('blocks')
     .selectAll()
     .where('id', '=', op.entityId)
     .executeTakeFirst()
+  if (existing && existing.workspace_id === op.workspaceId) {
+    await assertDocumentAlive(db, op, existing.document_id)
+  }
   const revision = await nextRevision(db, op, existing)
   switch (op.kind) {
     case 'create': {
       const p = op.payload as BlockCreatePayload
-      await requireDocumentIn(db, op.workspaceId, p.documentId, 'Document')
+      await assertDocumentAlive(db, op, p.documentId)
       await db
         .insertInto('blocks')
         .values({
@@ -281,7 +324,7 @@ async function applyDocumentTag(db: Db, op: Operation, now: string): Promise<num
   const revision = await nextRevision(db, op, existing)
   if (op.kind === 'create') {
     const p = op.payload as DocumentTagCreatePayload
-    await requireDocumentIn(db, op.workspaceId, p.documentId, 'Document')
+    await assertDocumentAlive(db, op, p.documentId)
     const tag = await db
       .selectFrom('tags')
       .select('id')

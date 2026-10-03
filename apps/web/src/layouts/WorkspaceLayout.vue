@@ -302,8 +302,8 @@ watch(
         </p>
         <p v-if="conflicts.length" class="error" data-testid="sync-conflicts">
           {{ conflicts.length }} Änderung{{ conflicts.length === 1 ? '' : 'en' }} mit Konflikt: auf
-          einem anderen Gerät geändert. Sie bleiben lokal erhalten, bis die Konfliktauflösung
-          verfügbar ist.
+          einem anderen Gerät geändert oder gelöscht. Sie bleiben lokal erhalten, bis die
+          Konfliktauflösung verfügbar ist.
         </p>
         <p v-if="rejected.length" class="error" data-testid="sync-rejected">
           {{ rejected.length }} Änderung{{ rejected.length === 1 ? '' : 'en' }} vom Server abgelehnt

@@ -71,8 +71,16 @@ Umsetzung: `apps/server/src/sync/` (Migration `0003_sync`). Payload-Schemas je E
 - Es entstehen **keine** neuen Queue-Einträge.
 - Eigene Changes (gleiche `op_id` in der Queue oder eigene `device_id`) bestätigen nur: Der Queue-Eintrag wird entfernt (falls die Push-Antwort verloren ging) und die Revision gespeichert.
 - Hat die Entität noch ungesyncte lokale Operationen, bleibt sie unverändert. Ihr Push trifft dann auf den Konfliktpfad, statt still überschrieben zu werden.
-- `delete` setzt `deletedAt` (Tombstone), wie lokal auch für den Teilbaum, Tag-Zuordnungen und Blöcke. Links (Backlinks) werden nachgeführt, und die Suche indiziert betroffene Dokumente über `onChange` neu.
+- `delete` setzt `deletedAt` (Tombstone), siehe Löschungen. Links (Backlinks) werden nachgeführt, und die Suche indiziert betroffene Dokumente über `onChange` neu.
 - Der Editor übernimmt entfernte Änderungen auch in einem fokussierten Block, solange dort keine ungespeicherte Eingabe läuft; die Cursorposition bleibt erhalten.
+
+### Löschungen (Tombstones)
+
+- `delete` setzt `deleted_at` und erhöht die Revision; die Zeile bleibt (keine Kompaktierung im MVP).
+- Eine Seite mit Unterseiten erzeugt je Seite eine `delete`-Operation (T-DEL-03). Blöcke und Tag-Zuordnungen einer gelöschten Seite bekommen **keine** eigenen Tombstones: Sie sind über den Tombstone ihrer Seite ausgeblendet und bleiben unverändert, damit eine spätere Wiederherstellung (Phase 5) die Seite vollständig zurückbringt.
+- Ändert ein Gerät eine Entität, die ein **anderes** Gerät gelöscht hat, ist das Ergebnis `conflict` mit `reason: deleted`. Ändert oder ergänzt es Blöcke bzw. Tags einer von einem anderen Gerät gelöschten Seite, ist das Ergebnis `conflict` mit `reason: parent_deleted` (T-DEL-02). Nichts verschwindet still im Tombstone.
+- Erneutes Löschen einer gelöschten Entität antwortet `duplicate` (gleiche Wirkung).
+- Der Pull wendet den Tombstone einer Seite nicht an, solange das Gerät ungesyncte Änderungen an der Seite oder ihren Blöcken hat: Die Seite bleibt mit der Änderung sichtbar, die Seitenleiste zeigt den Konflikt. Die Auflösung (wiederherstellen oder verwerfen) folgt mit dem Konflikt-Issue.
 
 Entitäten anderer Workspaces werden wie fehlende behandelt (keine Offenlegung). Abgelehnte Operationen hinterlassen keinen Eintrag im Log. `listChangesSince` liefert Changes ab einem Cursor, nur für Workspaces des Benutzers. DB-Zeilen werden ausschließlich in `sync/mapping.ts` in camelCase-Objekte übersetzt.
 

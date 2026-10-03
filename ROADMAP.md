@@ -69,7 +69,7 @@ Offen bzw. später: „Lokale Daten löschen“ beim Abmelden (Phase 3, Gerätev
 - [x] Änderungslog mit Revisionen (Server: Entitäten, `changes`, `applyOperation`)
 - [x] Delta-Sync mit Cursor (`GET /api/sync/pull`)
 - [x] Offline-Queue mit idempotenten Operationen (`POST /api/sync/push`)
-- [ ] Tombstones für Löschungen
+- [x] Tombstones für Löschungen (Replikation, Löschen vs. Bearbeiten als Konflikt)
 - [ ] Vollständiger Re-Sync
 - [ ] Sync-Trigger: Start, Fokuswechsel, Push, periodisch
 - [ ] Konfliktanzeige (gemäß ADR 0003)

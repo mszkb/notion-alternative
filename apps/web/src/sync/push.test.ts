@@ -87,7 +87,7 @@ describe('pushQueue', () => {
     const [create, , rename] = await store.pendingOperations()
     const server = fakeServer((op) =>
       op.opId === rename!.opId
-        ? { opId: op.opId, status: 'conflict', currentRevision: 5 }
+        ? { opId: op.opId, status: 'conflict', currentRevision: 5, reason: 'changed' }
         : op.opId === create!.opId
           ? undefined
           : { opId: op.opId, status: 'rejected', code: 'invalid_payload', message: 'nope' },

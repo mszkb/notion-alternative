@@ -176,4 +176,20 @@ describe('pullWorkspace', () => {
     expect(await b.backlinks(target.id)).toEqual([])
     expect(await b.tagsForDocument(parent.id)).toEqual([])
   })
+
+  it('T-DEL-02: a page deleted elsewhere stays while it has unsynced local edits', async () => {
+    const doc = await a.createDocument({ workspaceId: WS, title: 'Strittig' })
+    await sync(a)
+    await sync(b)
+    const [blockOnB] = await b.listBlocks(doc.id)
+    await b.updateBlock(blockOnB!.id, { content: 'B schreibt offline' })
+
+    await a.deleteDocument(doc.id)
+    await sync(a)
+    await pullWorkspace(b, WS, server.pull)
+
+    expect((await b.getDocument(doc.id))?.deletedAt).toBeNull()
+    expect((await b.listBlocks(doc.id))[0]!.content).toBe('B schreibt offline')
+    expect(await b.pendingOperationCount()).toBe(1)
+  })
 })

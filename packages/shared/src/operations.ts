@@ -111,7 +111,8 @@ export type SyncPushInput = z.infer<typeof syncPushInputSchema>
 
 /**
  * Result per operation. `applied`/`duplicate` carry the entity's new revision; `conflict` means
- * another device changed the entity first (nothing written); `rejected` is permanent for this op.
+ * another device changed or deleted the entity (or its document) first, nothing was written;
+ * `rejected` is permanent for this op.
  */
 const confirmed = {
   opId: z.uuid(),
@@ -125,6 +126,7 @@ export const syncPushResultSchema = z.discriminatedUnion('status', [
     opId: z.uuid(),
     status: z.literal('conflict'),
     currentRevision: z.number().int().positive(),
+    reason: z.enum(['changed', 'deleted', 'parent_deleted']),
   }),
   z.object({
     opId: z.uuid(),

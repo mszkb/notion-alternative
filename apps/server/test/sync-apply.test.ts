@@ -148,6 +148,7 @@ describe('applyOperation', () => {
     expect(await apply(op('document', 'update', doc, { title: 'B' }, 1))).toEqual({
       status: 'conflict',
       currentRevision: 2,
+      reason: 'changed',
     })
     const stored = await db
       .selectFrom('documents')
@@ -159,6 +160,55 @@ describe('applyOperation', () => {
     expect(await apply(op('document', 'update', doc, { title: 'C' }, 7))).toMatchObject({
       code: 'invalid_payload',
     })
+  })
+
+  it('T-DEL-02: edits to what another device deleted become conflicts, never vanish', async () => {
+    const phone = randomUUID()
+    await insertDevice(db, userId, phone, 'Phone', new Date().toISOString())
+    const doc = randomUUID()
+    const block = randomUUID()
+    await apply(createDoc(doc))
+    await apply(
+      op('block', 'create', block, {
+        documentId: doc,
+        type: 'paragraph',
+        content: '',
+        attrs: {},
+        sortKey: 'a0',
+      }),
+    )
+    // The phone deletes the page.
+    await apply(op('document', 'delete', doc, {}, 1, { deviceId: phone }))
+
+    // This device edited offline: block in the deleted page, the page itself, a new block.
+    expect(await apply(op('block', 'update', block, { content: 'offline' }, 1))).toEqual({
+      status: 'conflict',
+      currentRevision: 2,
+      reason: 'parent_deleted',
+    })
+    expect(await apply(op('document', 'update', doc, { title: 'x' }, 1))).toEqual({
+      status: 'conflict',
+      currentRevision: 2,
+      reason: 'deleted',
+    })
+    expect(
+      await apply(
+        op('block', 'create', randomUUID(), {
+          documentId: doc,
+          type: 'paragraph',
+          content: 'neu',
+          attrs: {},
+          sortKey: 'a1',
+        }),
+      ),
+    ).toMatchObject({ status: 'conflict', reason: 'parent_deleted' })
+    // Deleting it here as well is the same outcome; deleting its blocks is fine.
+    expect(await apply(op('document', 'delete', doc, {}, 1))).toEqual({
+      status: 'duplicate',
+      revision: 2,
+      seq: 3,
+    })
+    expect(await apply(op('block', 'delete', block, {}, 1))).toMatchObject({ status: 'applied' })
   })
 
   it("chains a device's own queued operations without conflict", async () => {

@@ -34,10 +34,10 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | ID | Szenario | Erwartung | AC | Auto |
 | --- | --- | --- | --- | --- |
 | T-DEL-01 | A löscht Dokument, B synct | Tombstone repliziert, Dokument auf B entfernt | AC-02 | ☑ ⁴ |
-| T-DEL-02 | A löscht, B bearbeitet offline dasselbe Dokument | Konflikt sichtbar, kein stiller Verlust | AC-03 | ☐ |
-| T-DEL-03 | Seite mit Unterseiten löschen | Konsistente Behandlung des Teilbaums | – | ☑ (lokal) ² |
+| T-DEL-02 | A löscht, B bearbeitet offline dasselbe Dokument | Konflikt sichtbar, kein stiller Verlust | AC-03 | ☑ ⁴ |
+| T-DEL-03 | Seite mit Unterseiten löschen | Konsistente Behandlung des Teilbaums | – | ☑ ² ⁴ |
 
-² Lokal: Tombstones für den ganzen Teilbaum (`store.test.ts`, `e2e/editor.spec.ts`). Replikation auf andere Geräte folgt mit Phase 3.
+² Lokal: Tombstones für den ganzen Teilbaum (`store.test.ts`, `e2e/editor.spec.ts`); über zwei Geräte in `apps/web/src/sync/pull.test.ts`. T-DEL-02 zusätzlich serverseitig in `apps/server/test/sync-apply.test.ts`.
 
 ## Export / Import
 
