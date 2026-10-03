@@ -47,6 +47,21 @@ Protokoll und Operationen: [ADR 0002](../adr/0002-sync-protocol.md).
 - `GET /api/devices` listet aktive Geräte, `PATCH /api/devices/:id` benennt um, `DELETE /api/devices/:id` entfernt: `revoked_at` wird gesetzt und alle Sessions des Geräts enden. Erneute Registrierung derselben ID antwortet `403 device_revoked`; der Client zeigt das an, lokale Daten bleiben lesbar und bearbeitbar. Das aktuell benutzte Gerät kann sich nicht selbst entfernen (`409 current_device`, stattdessen abmelden).
 - Sync (Phase 3) lehnt Operationen ab, deren `device_id` kein aktives Gerät des Benutzers ist (`findActiveDevice`), und aktualisiert `last_seen_at` bei jedem Lauf.
 
+### Änderungslog (Server)
+
+Umsetzung: `apps/server/src/sync/` (Migration `0003_sync`). Payload-Schemas je Entität und Art liegen in `packages/shared/src/operations.ts` und gelten für Client und Server; ein Client-Test prüft, dass alle Operationen des `LocalStore` sie erfüllen.
+
+`applyOperation` wendet **eine** Operation in **einer** SQLite-Transaktion an: Entität schreiben und `changes`-Eintrag anlegen, oder nichts davon. Prüfreihenfolge und Ergebnisse:
+
+1. Workspace gehört dem Benutzer, sonst `rejected: workspace_not_found`.
+2. `device_id` ist ein aktives Gerät des Benutzers, sonst `rejected: device_not_active`.
+3. `op_id` schon angewendet → `duplicate` mit ursprünglicher Revision und `seq` (Idempotenz). Dieselbe `op_id` für eine andere Entität → `rejected: op_id_reused`.
+4. Payload passt zum Schema (`rejected: invalid_payload`), Referenzen (`documentId`, `parentId`, `tagId`) liegen im selben Workspace (`rejected: not_found`), kein Zyklus im Seitenbaum.
+5. `create`: Entität darf nicht existieren (`already_exists`), Revision 1. Sonst: Entität muss existieren und aktiv sein (`not_found`, `deleted`), und `base_revision` muss der aktuellen Revision entsprechen. Andernfalls `conflict` mit `currentRevision` – **nichts wird geschrieben** (kein stilles Überschreiben). Block-Merge und Konfliktobjekte ([ADR 0003](../adr/0003-conflict-resolution.md)) setzen auf diesem Ergebnis auf.
+6. Neue Revision = alte + 1; `seq` = höchste `seq` des Workspaces + 1 (lückenlos, da Schreibtransaktionen in SQLite serialisiert sind).
+
+Entitäten anderer Workspaces werden wie fehlende behandelt (keine Offenlegung). Abgelehnte Operationen hinterlassen keinen Eintrag im Log. `listChangesSince` liefert Changes ab einem Cursor, nur für Workspaces des Benutzers. DB-Zeilen werden ausschließlich in `sync/mapping.ts` in camelCase-Objekte übersetzt.
+
 ## Regeln
 
 1. **Operation-ID:** Jede lokale Änderung erhält eine eindeutige Operation-ID und wird **idempotent** zum Server übertragen (Wiederholungen ändern nichts).

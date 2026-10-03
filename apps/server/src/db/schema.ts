@@ -35,9 +35,74 @@ export interface DevicesTable {
   revoked_at: string | null
 }
 
+// ---------------------------------------------------------------- synchronised entities
+
+interface SyncColumns {
+  /** Server-assigned, rises with every applied change of the entity. */
+  revision: number
+  /** Tombstone; `null` = active. */
+  deleted_at: string | null
+}
+
+export interface DocumentsTable extends SyncColumns {
+  id: string
+  workspace_id: string
+  parent_id: string | null
+  title: string
+  sort_key: string
+  /** SQLite has no boolean: 0/1. */
+  favorite: number
+  created_at: string
+  updated_at: string
+}
+
+export interface BlocksTable extends SyncColumns {
+  id: string
+  workspace_id: string
+  document_id: string
+  type: string
+  content: string
+  /** JSON of `BlockAttrs`. */
+  attrs: string
+  sort_key: string
+}
+
+export interface TagsTable extends SyncColumns {
+  id: string
+  workspace_id: string
+  name: string
+}
+
+export interface DocumentTagsTable extends SyncColumns {
+  id: string
+  workspace_id: string
+  document_id: string
+  tag_id: string
+}
+
+/** Change log entry; `seq` is gap-free and monotonic per workspace (the sync cursor). */
+export interface ChangesTable {
+  workspace_id: string
+  seq: number
+  op_id: string
+  device_id: string
+  entity: string
+  entity_id: string
+  kind: string
+  revision: number
+  /** JSON of the operation payload as applied. */
+  payload: string
+  applied_at: string
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
   workspaces: WorkspacesTable
   devices: DevicesTable
+  documents: DocumentsTable
+  blocks: BlocksTable
+  tags: TagsTable
+  document_tags: DocumentTagsTable
+  changes: ChangesTable
 }

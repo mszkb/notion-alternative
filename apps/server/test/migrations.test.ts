@@ -9,11 +9,21 @@ describe('migrations', () => {
     await migrateToLatest(db)
     await migrateToLatest(db)
     const tables = await db.introspection.getTables()
-    expect(tables.map((t) => t.name).sort()).toEqual(['devices', 'sessions', 'users', 'workspaces'])
+    expect(tables.map((t) => t.name).sort()).toEqual([
+      'blocks',
+      'changes',
+      'devices',
+      'document_tags',
+      'documents',
+      'sessions',
+      'tags',
+      'users',
+      'workspaces',
+    ])
     await db.destroy()
   })
 
-  it('T-MIG-01: 0002_devices keeps existing users and sessions', async () => {
+  it('T-MIG-01: later migrations keep existing users and sessions', async () => {
     const db = createDatabase(':memory:')
     const migrator = new Migrator({ db, provider: { getMigrations: async () => migrations } })
     await migrator.migrateTo('0001_initial')

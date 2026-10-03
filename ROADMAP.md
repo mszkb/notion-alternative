@@ -66,7 +66,7 @@ Offen bzw. später: „Lokale Daten löschen“ beim Abmelden (Phase 3, Gerätev
 ## Phase 3 – Sync
 
 - [x] Geräteverwaltung (Device-ID, Registrierung, Umbenennen/Entfernen)
-- [ ] Änderungslog mit Revisionen
+- [x] Änderungslog mit Revisionen (Server: Entitäten, `changes`, `applyOperation`)
 - [ ] Delta-Sync mit Cursor
 - [ ] Offline-Queue mit idempotenten Operationen
 - [ ] Tombstones für Löschungen

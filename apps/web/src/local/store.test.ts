@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { type Block, newId, operationSchema } from '@notion-alt/shared'
+import { type Block, newId, operationSchema, validateOperationPayload } from '@notion-alt/shared'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { LocalDb } from './db'
 import { type BlockState, LocalStore, LocalStoreError, type StoreChange } from './store'
@@ -352,5 +352,36 @@ describe('applyBlockState', () => {
       'zwei',
     ])
     expect((await ops()).slice(count).map((op) => op.kind)).toEqual(['move'])
+  })
+})
+
+describe('operation payloads', () => {
+  it('match the shared schemas the server validates against', async () => {
+    const parent = await store.createDocument({ workspaceId: WS, title: 'Eltern' })
+    const child = await store.createDocument({
+      workspaceId: WS,
+      title: 'Kind',
+      parentId: parent.id,
+    })
+    await store.renameDocument(child.id, 'Kind 2')
+    await store.setFavorite(child.id, true)
+    await store.moveDocument(child.id, null)
+    const [first] = await store.listBlocks(parent.id)
+    await store.updateBlock(first!.id, { content: 'x', type: 'heading', attrs: { level: 2 } })
+    const tail = await store.splitBlock(first!.id, 'x', { content: 'y' })
+    await store.moveBlock(tail.id, { afterId: null })
+    await store.mergeBlocks(first!.id, tail.id, 'xy')
+    const tag = await store.addTag(parent.id, 'Projekt')
+    await store.removeTag(parent.id, tag.id)
+    await store.deleteDocument(parent.id)
+
+    const queue = await ops()
+    expect(new Set(queue.map((op) => `${op.entity}:${op.kind}`)).size).toBeGreaterThanOrEqual(10)
+    for (const op of queue) {
+      expect(
+        validateOperationPayload(op.entity, op.kind, op.payload),
+        JSON.stringify(op),
+      ).toBeNull()
+    }
   })
 })

@@ -1,0 +1,101 @@
+import { z } from 'zod'
+import {
+  blockAttrsSchema,
+  blockTypeSchema,
+  BLOCK_CONTENT_MAX_LENGTH,
+  documentTitleSchema,
+  type OperationEntity,
+  type OperationKind,
+  tagNameSchema,
+} from './content'
+
+/**
+ * Payload of each operation (entity × kind) as written by the client's LocalStore and applied
+ * by the server (ADR 0002). Shared so both sides validate the same shape.
+ */
+
+const sortKeySchema = z.string().min(1).max(200)
+const empty = z.object({}).strict()
+
+const documentCreate = z
+  .object({
+    parentId: z.uuid().nullable(),
+    title: documentTitleSchema,
+    sortKey: sortKeySchema,
+    favorite: z.boolean(),
+    createdAt: z.string().max(40),
+  })
+  .strict()
+const documentUpdate = z
+  .object({ title: documentTitleSchema, favorite: z.boolean() })
+  .partial()
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'empty update')
+const documentMove = z.object({ parentId: z.uuid().nullable(), sortKey: sortKeySchema }).strict()
+
+const blockContent = z.string().max(BLOCK_CONTENT_MAX_LENGTH)
+const blockCreate = z
+  .object({
+    documentId: z.uuid(),
+    type: blockTypeSchema,
+    content: blockContent,
+    attrs: blockAttrsSchema,
+    sortKey: sortKeySchema,
+  })
+  .strict()
+const blockUpdate = z
+  .object({ type: blockTypeSchema, content: blockContent, attrs: blockAttrsSchema })
+  .partial()
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'empty update')
+const blockMove = z.object({ sortKey: sortKeySchema }).strict()
+
+const tagCreate = z.object({ name: tagNameSchema }).strict()
+const documentTagCreate = z.object({ documentId: z.uuid(), tagId: z.uuid() }).strict()
+
+export const operationPayloadSchemas = {
+  document: { create: documentCreate, update: documentUpdate, move: documentMove, delete: empty },
+  block: { create: blockCreate, update: blockUpdate, move: blockMove, delete: empty },
+  tag: { create: tagCreate, update: tagCreate, move: null, delete: empty },
+  document_tag: { create: documentTagCreate, update: null, move: null, delete: empty },
+} as const satisfies Record<OperationEntity, Record<OperationKind, z.ZodType | null>>
+
+export type DocumentCreatePayload = z.infer<typeof documentCreate>
+export type DocumentUpdatePayload = z.infer<typeof documentUpdate>
+export type DocumentMovePayload = z.infer<typeof documentMove>
+export type BlockCreatePayload = z.infer<typeof blockCreate>
+export type BlockUpdatePayload = z.infer<typeof blockUpdate>
+export type BlockMovePayload = z.infer<typeof blockMove>
+export type TagCreatePayload = z.infer<typeof tagCreate>
+export type DocumentTagCreatePayload = z.infer<typeof documentTagCreate>
+
+/** Validates an operation's payload; returns an error message, or null if it is valid. */
+export function validateOperationPayload(
+  entity: OperationEntity,
+  kind: OperationKind,
+  payload: unknown,
+): string | null {
+  const schema: z.ZodType | null = operationPayloadSchemas[entity][kind]
+  if (!schema) return `${kind} is not supported for ${entity}`
+  const result = schema.safeParse(payload)
+  if (result.success) return null
+  return result.error.issues
+    .map((issue) => `${issue.path.join('.') || 'payload'}: ${issue.message}`)
+    .join('; ')
+}
+
+/** Entry of the server's change log as clients will pull it (ADR 0002). */
+export const changeSchema = z.object({
+  /** Gap-free and monotonic per workspace: the sync cursor. */
+  seq: z.number().int().positive(),
+  opId: z.uuid(),
+  deviceId: z.uuid(),
+  entity: z.enum(['document', 'block', 'tag', 'document_tag']),
+  entityId: z.uuid(),
+  kind: z.enum(['create', 'update', 'move', 'delete']),
+  /** Revision of the entity after this change. */
+  revision: z.number().int().positive(),
+  payload: z.record(z.string(), z.unknown()),
+  appliedAt: z.string(),
+})
+export type Change = z.infer<typeof changeSchema>
