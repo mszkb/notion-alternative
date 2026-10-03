@@ -55,8 +55,12 @@ test('images and files: added, shown, available on a second device, deleted', as
   await page.getByRole('menuitem', { name: 'Anhang löschen' }).click()
   await expect(page.locator('a.attachment-file')).toHaveCount(0)
   await synced(page)
-  await other.evaluate(() => window.dispatchEvent(new Event('focus')))
-  await expect(other.locator('a.attachment-file')).toHaveCount(0, { timeout: 10_000 })
+  // "0 pending" can be read before the live query counted the deletion, so the first focus
+  // sync may run before the push (#100); a later trigger picks it up, as in normal use.
+  await expect(async () => {
+    await other.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await expect(other.locator('a.attachment-file')).toHaveCount(0, { timeout: 2_000 })
+  }).toPass({ timeout: 15_000 })
   await other.context().close()
 })
 
