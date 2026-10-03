@@ -599,6 +599,47 @@ export class LocalStore {
       .sort((a, b) => a.name.localeCompare(b.name))
   }
 
+  /**
+   * Active pages of a workspace with their active blocks (in order) and tags, read in one pass
+   * per table instead of per page: building the search index of 10 000 pages took 25 s (#98).
+   */
+  async documentsWithContent(
+    workspaceId: string,
+  ): Promise<{ document: Document; blocks: Block[]; tags: Tag[] }[]> {
+    const documents = await this.listDocuments(workspaceId)
+    const ids = new Set(documents.map((d) => d.id))
+    // One getAll over the whole table (all workspaces, usually one or two) and a filter here:
+    // an indexed anyOf() over thousands of pages or Dexie's filter() walk a cursor, 3× slower.
+    const [blocks, tags, assignments] = await Promise.all([
+      this.db.blocks.toArray(),
+      this.db.tags.where('workspaceId').equals(workspaceId).toArray(),
+      this.db.documentTags.where('workspaceId').equals(workspaceId).toArray(),
+    ])
+    const blocksByDocument = new Map<string, Block[]>()
+    for (const block of blocks) {
+      if (block.deletedAt || !ids.has(block.documentId)) continue
+      const list = blocksByDocument.get(block.documentId)
+      if (list) list.push(block)
+      else blocksByDocument.set(block.documentId, [block])
+    }
+    const tagById = new Map(tags.filter((t) => !t.deletedAt).map((t) => [t.id, t]))
+    const tagsByDocument = new Map<string, Set<Tag>>()
+    for (const assignment of assignments) {
+      const tag = tagById.get(assignment.tagId)
+      if (assignment.deletedAt || !tag) continue
+      const set = tagsByDocument.get(assignment.documentId) ?? new Set<Tag>()
+      set.add(tag)
+      tagsByDocument.set(assignment.documentId, set)
+    }
+    return documents.map((document) => ({
+      document,
+      blocks: (blocksByDocument.get(document.id) ?? []).sort(compareBySortKey),
+      tags: [...(tagsByDocument.get(document.id) ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ),
+    }))
+  }
+
   async documentsForTag(tagId: string): Promise<Document[]> {
     const assignments = await this.db.documentTags.where('tagId').equals(tagId).toArray()
     const ids = [...new Set(assignments.filter((a) => !a.deletedAt).map((a) => a.documentId))]

@@ -88,6 +88,7 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
   const [documents, listMs] = await time(() => store.listDocuments(workspaceId))
   const [, pageMs] = await time(() => store.listBlocks(documents[pages - 1]!.id))
 
+  const [, contentReadMs] = await time(() => store.documentsWithContent(workspaceId))
   const search = new WorkspaceSearch(store, workspaceId)
   const [, indexMs] = await time(() => search.start())
   const heapAfterIndex = heapMb()
@@ -107,6 +108,8 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
     replaceWithSnapshotMs: snapshotMs,
     listDocumentsMs: listMs,
     listBlocksOnePageMs: pageMs,
+    /** Bulk read of all pages, blocks and tags (part of the index build). */
+    contentReadMs,
     searchIndexBuildMs: indexMs,
     searchQueryMs: { p50: queries[25], p95: queries[47], max: queries.at(-1) },
     heapMb: { before: heapBefore, afterIndex: heapAfterIndex },
