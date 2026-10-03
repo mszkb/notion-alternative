@@ -59,7 +59,21 @@ if (process.argv[2] === 'migrate-attachments-to-s3') {
 
 await deleteExpiredSessions(db)
 
-const app = await buildApp({ db, config, logger: { level: config.logLevel } })
+const app = await buildApp({
+  db,
+  config,
+  logger: {
+    level: config.logLevel,
+    serializers: {
+      // Without the query string: search terms are page content and must not end up in logs.
+      req: (request: { method: string; url: string; ip?: string }) => ({
+        method: request.method,
+        url: request.url.split('?')[0],
+        remoteAddress: request.ip,
+      }),
+    },
+  },
+})
 app.log.info({ databasePath: config.databasePath }, 'database ready')
 
 // Deleted attachments keep their file for the retention period; clean up daily.

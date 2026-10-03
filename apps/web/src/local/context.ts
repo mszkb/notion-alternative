@@ -126,6 +126,8 @@ export async function deleteLocalData(userId: string): Promise<void> {
   await Dexie.delete(localDbName(userId))
   try {
     localStorage.removeItem(LAST_WORKSPACE_KEY)
+    // Ids of pages expanded in the tree are traces of the content too.
+    localStorage.removeItem('notion-alt.expanded')
   } catch {
     // Storage unavailable: nothing stored there either.
   }

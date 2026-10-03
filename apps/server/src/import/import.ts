@@ -4,6 +4,7 @@ import type { Db } from '../db/database'
 import type { WorkspacesTable } from '../db/schema'
 import { HttpError } from '../errors'
 import { reindexDocument } from '../search/index'
+import { accountAttachmentUsage } from '../sync/apply'
 
 /** SQLite allows a limited number of bound variables per statement. */
 const CHUNK = 500
@@ -26,8 +27,21 @@ function checkReferences(data: JsonExport) {
     throw new HttpError(400, 'invalid_import', reason)
   }
   if (new Set(ids).size !== ids.length) invalid('Duplicate ids in the export')
+  const parents = new Map(data.documents.map((d) => [d.id, d.parentId]))
   for (const d of data.documents) {
     if (d.parentId && !documents.has(d.parentId)) invalid(`Unknown parent of page ${d.id}`)
+  }
+  // The page tree must be a tree: walking up from any page ends at the root.
+  const rooted = new Set<string>()
+  for (const d of data.documents) {
+    const path = new Set<string>()
+    let current: string | null = d.id
+    while (current && !rooted.has(current)) {
+      if (path.has(current)) invalid(`Cycle in the page tree at page ${current}`)
+      path.add(current)
+      current = parents.get(current) ?? null
+    }
+    for (const id of path) rooted.add(id)
   }
   for (const b of data.blocks) {
     if (!documents.has(b.documentId)) invalid(`Unknown page of block ${b.id}`)
@@ -85,8 +99,11 @@ export async function importWorkspace(
   const attachmentBytes = data.attachments
     .filter((a) => !a.deletedAt)
     .reduce((sum, a) => sum + a.size, 0)
-  if (quotaBytes !== null && attachmentBytes > quotaBytes) {
-    throw new HttpError(413, 'storage_limit', 'Attachments exceed the workspace storage limit')
+  if (
+    quotaBytes !== null &&
+    (await accountAttachmentUsage(db, ownerId)).usedBytes + attachmentBytes > quotaBytes
+  ) {
+    throw new HttpError(413, 'storage_limit', 'Attachments exceed the storage limit')
   }
 
   return db.transaction().execute(async (trx) => {

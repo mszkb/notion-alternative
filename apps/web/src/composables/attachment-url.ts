@@ -1,3 +1,4 @@
+import { INLINE_IMAGE_TYPES } from '@notion-alt/shared'
 import { onScopeDispose, ref, watch, type WatchSource } from 'vue'
 import { downloadAttachment } from '../api'
 import type { LocalStore } from '../local/store'
@@ -9,6 +10,15 @@ import { connection } from '../session'
  * - `deleted`: the attachment was deleted
  */
 export type AttachmentState = 'loading' | 'ready' | 'missing' | 'deleted'
+
+/**
+ * Type of the object URL. Only raster images keep theirs: the MIME type comes from synced or
+ * imported metadata, and a blob URL opened as `text/html` or `image/svg+xml` would run scripts
+ * in the app's origin. Everything else is opaque bytes (downloaded, never rendered).
+ */
+export function blobType(mimeType: string | undefined): string {
+  return mimeType && INLINE_IMAGE_TYPES.includes(mimeType) ? mimeType : 'application/octet-stream'
+}
 
 /**
  * Object URL for an attachment's content: from this device if present, otherwise downloaded
@@ -57,9 +67,7 @@ export function useAttachmentUrl(
       state.value = 'missing'
       return
     }
-    current = URL.createObjectURL(
-      new Blob([content], { type: attachment?.mimeType ?? 'application/octet-stream' }),
-    )
+    current = URL.createObjectURL(new Blob([content], { type: blobType(attachment?.mimeType) }))
     url.value = current
     state.value = 'ready'
   }

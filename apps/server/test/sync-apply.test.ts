@@ -126,6 +126,19 @@ describe('applyOperation', () => {
     expect(log.every((c) => c.deviceId === deviceId)).toBe(true)
   })
 
+  it('refuses moves below a page tree that already contains a cycle instead of looping', async () => {
+    const a = randomUUID()
+    const b = randomUUID()
+    const c = randomUUID()
+    for (const id of [a, b, c]) await apply(createDoc(id))
+    // Corrupt data (never produced by the server): a and b are each other's parent.
+    await db.updateTable('documents').set({ parent_id: b }).where('id', '=', a).execute()
+    await db.updateTable('documents').set({ parent_id: a }).where('id', '=', b).execute()
+    expect(await apply(op('document', 'move', c, { parentId: a, sortKey: 'a1' }, 1))).toMatchObject(
+      { status: 'rejected', code: 'invalid_payload' },
+    )
+  })
+
   it('is idempotent by opId and refuses a reused opId', async () => {
     const doc = randomUUID()
     const create = createDoc(doc)

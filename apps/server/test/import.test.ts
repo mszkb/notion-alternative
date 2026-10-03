@@ -250,6 +250,27 @@ describe('POST /api/import', () => {
     expect(invalid.statusCode).toBe(400)
     expect(invalid.json().error.code).toBe('invalid_import')
 
+    // A page tree with a cycle would make later moves loop forever.
+    const [first, second] = data.documents
+    const cycle = {
+      ...data,
+      documents: data.documents.map((d) =>
+        d.id === first!.id
+          ? { ...d, parentId: second!.id }
+          : d.id === second!.id
+            ? { ...d, parentId: first!.id }
+            : d,
+      ),
+    }
+    const cyclic = await importInto(target, cycle)
+    expect(cyclic.statusCode).toBe(400)
+    expect(cyclic.json().error.message).toMatch(/Cycle/)
+    const self = await importInto(target, {
+      ...data,
+      documents: data.documents.map((d) => (d.id === first!.id ? { ...d, parentId: d.id } : d)),
+    })
+    expect(self.statusCode).toBe(400)
+
     const wrongVersion = await importInto(target, { ...data, schema_version: 2 } as never)
     expect(wrongVersion.statusCode).toBe(400)
 

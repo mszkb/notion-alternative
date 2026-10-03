@@ -112,3 +112,23 @@ describe('AttemptLimiter', () => {
     expect(limiter.retryAfter('k')).toBe(0)
   })
 })
+
+describe('trusted proxy addresses', () => {
+  it('only trusts proxies on private networks', async () => {
+    const { isPrivateAddress } = await import('../src/app')
+    for (const ip of [
+      '127.0.0.1',
+      '10.1.2.3',
+      '172.18.0.2',
+      '192.168.1.5',
+      '::1',
+      '::ffff:172.20.0.4',
+      'fd00::1',
+    ]) {
+      expect(isPrivateAddress(ip), ip).toBe(true)
+    }
+    for (const ip of ['8.8.8.8', '172.32.0.1', '2001:db8::1', '::ffff:1.2.3.4', 'garbage']) {
+      expect(isPrivateAddress(ip), ip).toBe(false)
+    }
+  })
+})

@@ -210,6 +210,54 @@ describe('storage limits (#64)', () => {
     await attachment('e.bin', 'application/octet-stream', kb)
   })
 
+  it('counts deleted files until they are purged and all workspaces of the account', async () => {
+    const kb = Buffer.alloc(1000, 3)
+    const stored = await attachment('a.bin', 'application/octet-stream', kb)
+    expect((await upload(stored, kb)).statusCode).toBe(204)
+    await attachment('b.bin', 'application/octet-stream', kb)
+    // Deleting an uploaded file frees nothing while the file is kept for restores.
+    await push(op('attachment', 'delete', stored, {}, 1))
+    await attachment('c.bin', 'application/octet-stream', kb)
+    await attachment('d.bin', 'application/octet-stream', kb, 'quota_exceeded')
+    await purgeDeletedAttachments(db, app.contentStore, 0, new Date(Date.now() + 1000))
+    await attachment('e.bin', 'application/octet-stream', kb)
+
+    // A second workspace shares the account's quota.
+    const other = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/workspaces',
+        headers: { cookie },
+        payload: { name: 'Zweiter' },
+      })
+    ).json().workspace.id
+    const page = randomUUID()
+    const inOther = (o: Operation) => ({ ...o, workspaceId: other })
+    const [created, refused] = await push(
+      inOther(
+        op('document', 'create', page, {
+          parentId: null,
+          title: 'x',
+          sortKey: 'a0',
+          favorite: false,
+          createdAt: 'x',
+        }),
+      ),
+      inOther(
+        op('attachment', 'create', randomUUID(), {
+          documentId: page,
+          name: 'f.bin',
+          mimeType: 'application/octet-stream',
+          size: kb.length,
+          sha256: sha(kb),
+          createdAt: 'x',
+        }),
+      ),
+    )
+    expect(created.status).toBe('applied')
+    expect(refused.code).toBe('quota_exceeded')
+  })
+
   it('reports usage only for own workspaces', async () => {
     const { cookie: bob } = await register(app, 'bob@example.com')
     const response = await app.inject({

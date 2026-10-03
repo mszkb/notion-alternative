@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Attachment, Block } from '@notion-alt/shared'
+import { type Attachment, type Block, INLINE_IMAGE_TYPES } from '@notion-alt/shared'
 import { computed } from 'vue'
 import { useAttachmentUrl } from '../composables/attachment-url'
 import { useLiveQuery } from '../composables/live-query'
@@ -23,6 +23,12 @@ const { url, state } = useAttachmentUrl(
 )
 
 const name = computed(() => attachment.value?.name ?? props.block.content ?? 'Datei')
+/** Shown as an image only for raster types, whatever the block claims (synced/imported data). */
+const showImage = computed(
+  () =>
+    props.block.type === 'image' &&
+    (!attachment.value || INLINE_IMAGE_TYPES.includes(attachment.value.mimeType)),
+)
 
 /** The server refused the attachment (#64): it stays on this device only. */
 const refused = useLiveQuery(
@@ -49,7 +55,7 @@ const placeholder = computed(() => {
     <p v-if="refusedText" class="error attachment-refused" data-testid="attachment-refused">
       {{ refusedText }}
     </p>
-    <template v-if="block.type === 'image'">
+    <template v-if="showImage">
       <a v-if="url" :href="url" target="_blank" rel="noopener" :title="name">
         <img :src="url" :alt="block.content || name" />
       </a>

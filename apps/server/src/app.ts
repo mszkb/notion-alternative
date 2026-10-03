@@ -28,6 +28,17 @@ declare module 'fastify' {
   }
 }
 
+/** Loopback, private IPv4 ranges, unique-local IPv6 (also IPv4-mapped). */
+export function isPrivateAddress(address: string): boolean {
+  const ip = address.replace(/^::ffff:/i, '')
+  if (ip === '::1' || /^f[cd][0-9a-f]{2}:/i.test(ip)) return true
+  const parts = ip.split('.').map(Number)
+  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255))
+    return false
+  const [a, b] = parts as [number, number]
+  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+}
+
 export interface AppOptions {
   db: Db
   config: Config
@@ -42,8 +53,9 @@ export async function buildApp({ db, config, logger = false, push, contentStore 
   const app = Fastify({
     logger,
     bodyLimit: 1024 * 1024,
-    // Trust exactly one hop: the frontend container (nginx) in front of the backend.
-    trustProxy: (_address, hop) => hop === 0,
+    // Trust exactly one hop, and only a proxy on a private network (the nginx container): a
+    // client reaching the backend directly cannot choose its address via X-Forwarded-For.
+    trustProxy: (address, hop) => hop === 0 && isPrivateAddress(address),
   })
 
   app.decorate('db', db)

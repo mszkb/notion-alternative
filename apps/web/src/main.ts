@@ -1,3 +1,5 @@
+// Must stay the first import (strict CSP without eval, #74).
+import './eval-free'
 import { createApp } from 'vue'
 import App from './App.vue'
 import { setupInstall } from './install'

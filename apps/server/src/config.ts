@@ -37,7 +37,7 @@ const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_FORCE_PATH_STYLE: booleanFromEnv.default(true),
   // Largest JSON body accepted by the import (attachments are uploaded separately).
-  IMPORT_MAX_MB: z.coerce.number().min(1).max(4096).default(200),
+  IMPORT_MAX_MB: z.coerce.number().min(1).max(4096).default(50),
   // Push services the server may send to (subscription endpoints come from clients: no SSRF).
   PUSH_ALLOWED_HOSTS: z
     .string()

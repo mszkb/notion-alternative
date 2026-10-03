@@ -79,8 +79,8 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 | `METRICS_ENABLED` | `false` | Prometheus-Metriken unter `/api/metrics` im Backend bereitstellen |
 | `ATTACHMENT_MAX_MB` | `25` | Maximale Größe eines Anhangs (MB = 1 000 000 Byte) (nginx erlaubt für Uploads bis 30 MB; bei höheren Werten `client_max_body_size` in `apps/web/nginx.conf` mit anheben) |
 | `ATTACHMENT_RETENTION_DAYS` | `30` | So lange bleibt die Datei eines gelöschten Anhangs erhalten |
-| `WORKSPACE_STORAGE_MB` | `2048` | Gesamtgröße der Anhänge pro Workspace (`0` = unbegrenzt). Darüber lehnt der Server neue Anhänge ab; sie bleiben auf dem Gerät und werden dort markiert. Ein späteres Senken des Werts löscht nichts, verhindert nur neue Anhänge. |
-| `IMPORT_MAX_MB` | `200` | Maximale Größe eines Imports (JSON ohne Anhang-Inhalte, die werden einzeln hochgeladen). nginx erlaubt für `/api/import` bis 200 MB; bei höheren Werten `client_max_body_size` in `apps/web/nginx.conf` mit anheben. |
+| `WORKSPACE_STORAGE_MB` | `2048` | Gesamtgröße der Anhänge pro Konto über alle seine Workspaces (`0` = unbegrenzt); gelöschte Anhänge zählen, bis ihre Datei nach `ATTACHMENT_RETENTION_DAYS` entfernt wird. Darüber lehnt der Server neue Anhänge ab; sie bleiben auf dem Gerät und werden dort markiert. Ein späteres Senken des Werts löscht nichts, verhindert nur neue Anhänge. |
+| `IMPORT_MAX_MB` | `50` | Maximale Größe eines Imports (JSON ohne Anhang-Inhalte, die werden einzeln hochgeladen). Es läuft immer nur ein Import gleichzeitig. nginx erlaubt für `/api/import` bis 50 MB; bei höheren Werten `client_max_body_size` in `apps/web/nginx.conf` mit anheben (RAM: grob das Zehnfache der Importgröße einplanen). |
 | `PUSH_SUBJECT` | `mailto:admin@localhost` | Kontakt für Web Push (VAPID); eine echte Adresse eintragen, manche Push-Dienste lehnen Platzhalter ab |
 | `PUSH_ALLOWED_HOSTS` | Google, Mozilla, Apple, Microsoft | Push-Dienste, an die der Server senden darf (kommagetrennt, `*.` für Subdomains) |
 
@@ -107,6 +107,21 @@ Für Installation, Offline-Neustart und Web Push auf Smartphones braucht die App
 - **Eigener Reverse Proxy mit Let's Encrypt** (öffentlich, eigene Domain): Proxy auf `127.0.0.1:8080` zeigen lassen.
 
 In beiden Fällen `COOKIE_SECURE=true` setzen. Für Web Push muss der Server ausgehend die Push-Dienste erreichen (`PUSH_ALLOWED_HOSTS`).
+
+### Echte Client-IP hinter einem TLS-Proxy
+
+Ohne weitere Einstellung sieht das Backend hinter einem TLS-Proxy für alle Clients dieselbe Adresse (die des Proxys); das Login-Rate-Limiting pro IP gilt dann für alle gemeinsam. Damit nginx die echte Adresse weitergibt, den TLS-Proxy `X-Forwarded-For` setzen lassen und in `apps/web/nginx.conf` im `server`-Block ergänzen (Adresse des Proxys aus Sicht des Containers, z. B. das Docker-Gateway):
+
+```nginx
+set_real_ip_from 172.16.0.0/12;
+real_ip_header X-Forwarded-For;
+```
+
+Das Backend vertraut `X-Forwarded-For` nur von einem Proxy aus einem privaten Netz (dem nginx-Container), ein direkt verbundener Client kann seine Adresse also nicht vorgeben.
+
+### Was in Logs landet
+
+Das Backend loggt Anfragen ohne Query-String (Suchbegriffe sind Inhalte). nginx protokolliert im Access-Log die vollständige URL; wer das nicht möchte, setzt in `apps/web/nginx.conf` für `location /api/` `access_log off;` oder ein eigenes `log_format` ohne `$request_uri`.
 
 ## App offline (Service Worker)
 

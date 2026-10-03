@@ -50,3 +50,21 @@ test('deleting local data with unsynced changes needs explicit confirmation', as
   expect(await localDatabases(page)).toEqual([])
   expect(await page.evaluate(() => localStorage.getItem('notion-alt.lastUser'))).toBeNull()
 })
+
+test('local data can be deleted while the server is unreachable', async ({ signedIn: page }) => {
+  await newPage(page, 'Geteiltes Gerät')
+  await waitForSaved(page)
+  await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
+  await openSignOut(page)
+  await page.route('**/api/**', (route) => route.abort('connectionrefused'))
+  const dialog = page.getByRole('region', { name: 'Abmelden' })
+  await dialog.getByLabel('Lokale Daten auf diesem Gerät löschen').check()
+  page.once('dialog', (confirm) => {
+    expect(confirm.message()).toContain('nicht erreichbar')
+    void confirm.accept()
+  })
+  await dialog.getByRole('button', { name: 'Abmelden und lokale Daten löschen' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  expect(await localDatabases(page)).toEqual([])
+  expect(await page.evaluate(() => localStorage.getItem('notion-alt.expanded'))).toBeNull()
+})

@@ -78,7 +78,10 @@ beforeEach(async () => {
   deliveries = []
   answer = 201
   ;({ app } = await createTestApp(
-    { push: { subject: 'mailto:test@example.com', allowedHosts: ['push.test'] } },
+    {
+      allowRegistration: true,
+      push: { subject: 'mailto:test@example.com', allowedHosts: ['push.test'] },
+    },
     {
       push: {
         delayMs: 60_000, // flushed explicitly with settle()
@@ -149,10 +152,13 @@ describe('Web Push', () => {
 
   it('accepts only registered devices and allowed push services; unsubscribe removes', async () => {
     const { cookie } = await register(app, 'alice@example.com')
-    const payload = (endpoint: string) => ({
-      endpoint,
-      keys: { p256dh: 'BAAA', auth: 'AAAA' },
-    })
+    const ecdh = createECDH('prime256v1')
+    ecdh.generateKeys()
+    const keys = {
+      p256dh: ecdh.getPublicKey().toString('base64url'),
+      auth: Buffer.alloc(16, 1).toString('base64url'),
+    }
+    const payload = (endpoint: string) => ({ endpoint, keys })
     const subscribe = (endpoint: string) =>
       app.inject({
         method: 'POST',
@@ -187,5 +193,62 @@ describe('isAllowedEndpoint', () => {
     expect(isAllowedEndpoint('https://user:pw@fcm.googleapis.com/x', hosts)).toBe(false)
     expect(isAllowedEndpoint('http://fcm.googleapis.com/x', hosts)).toBe(false)
     expect(isAllowedEndpoint('https://127.0.0.1/x', hosts)).toBe(false)
+  })
+
+  it('rejects unusable keys and never hands an endpoint to another account', async () => {
+    const { cookie } = await register(app, 'alice@example.com')
+    const alice = await device(cookie)
+    const post = (c: string, keys: object, endpoint = 'https://push.test/other') =>
+      app.inject({
+        method: 'POST',
+        url: '/api/push/subscriptions',
+        headers: { cookie: c },
+        payload: { endpoint, keys },
+      })
+    const auth = Buffer.alloc(16, 2).toString('base64url')
+    // Wrong lengths, and the right length but not a point on the curve.
+    expect((await post(cookie, { p256dh: 'AAAA', auth: 'BBBB' })).statusCode).toBe(400)
+    const offCurve = await post(cookie, { p256dh: `B${'A'.repeat(86)}`, auth })
+    expect(offCurve.json().error.code).toBe('invalid_keys')
+
+    const register2 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'mallory@example.com', password: PASSWORD },
+    })
+    const mallory = sessionCookie(register2)
+    await device(mallory, false)
+    const ecdh = createECDH('prime256v1')
+    ecdh.generateKeys()
+    const takeover = await post(
+      mallory,
+      { p256dh: ecdh.getPublicKey().toString('base64url'), auth },
+      alice.endpoint,
+    )
+    expect(takeover.statusCode).toBe(409)
+    expect(takeover.json().error.code).toBe('endpoint_taken')
+  })
+
+  it('a stored subscription with broken keys does not stop the server or other hints', async () => {
+    const { cookie } = await register(app, 'alice@example.com')
+    workspaceId = (await app.inject({ url: '/api/workspaces', headers: { cookie } })).json()
+      .workspaces[0].id
+    const writer = await device(cookie, false)
+    const healthy = await device(await login())
+    const broken = await device(await login())
+    // Data from before the stricter validation.
+    await app.db
+      .updateTable('push_subscriptions')
+      .set({ p256dh: `B${'A'.repeat(86)}` })
+      .where('endpoint', '=', broken.endpoint)
+      .execute()
+    await app.inject({
+      method: 'POST',
+      url: '/api/sync/push',
+      headers: { cookie: writer.cookie },
+      payload: { operations: [createDoc(writer.id, 'x')] },
+    })
+    await app.pushNotifier.settle()
+    expect(deliveries.map((d) => d.url)).toEqual([healthy.endpoint])
   })
 })

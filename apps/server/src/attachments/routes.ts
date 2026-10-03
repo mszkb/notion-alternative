@@ -96,8 +96,9 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         .header('Content-Disposition', disposition(inline ? 'inline' : 'attachment', row.name))
         .header('X-Content-Type-Options', 'nosniff')
         .header('Content-Security-Policy', "sandbox; default-src 'none'")
-        // The content of an id never changes.
-        .header('Cache-Control', 'private, max-age=31536000, immutable')
+        // Not in the HTTP cache: it would outlive signing out and deleting local data. The app
+        // keeps downloaded contents in IndexedDB anyway.
+        .header('Cache-Control', 'no-store')
         .send(content)
     )
   })

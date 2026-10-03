@@ -15,7 +15,9 @@ import {
   type TagCreatePayload,
   validateOperationPayload,
 } from '@notion-alt/shared'
+import type { SelectQueryBuilder } from 'kysely'
 import type { Db } from '../db/database'
+import type { Database } from '../db/schema'
 import { findActiveDevice } from '../devices/repository'
 import { reindexDocument } from '../search/index'
 import { findWorkspaceForUser } from '../workspaces/repository'
@@ -93,12 +95,37 @@ const NO_LIMITS: AttachmentLimits = {
 }
 
 /** Bytes taken by a workspace's attachments (deleted ones no longer count). */
+/**
+ * Attachment storage of the account owning `workspaceId` (all its workspaces, #74): active
+ * attachments plus deleted ones whose file is still kept for the retention period. Counting per
+ * account and including kept files means neither more workspaces nor delete-and-upload cycles
+ * get around the limit.
+ */
 export async function attachmentUsage(db: Db, workspaceId: string) {
+  const owner = db.selectFrom('workspaces').select('owner_id').where('id', '=', workspaceId)
+  return accountAttachmentUsage(db, owner)
+}
+
+export async function accountAttachmentUsage(
+  db: Db,
+  ownerId: string | SelectQueryBuilder<Database, 'workspaces', { owner_id: string }>,
+) {
   const row = await db
     .selectFrom('attachments')
-    .select((eb) => [eb.fn.sum<number>('size').as('bytes'), eb.fn.countAll<number>().as('count')])
-    .where('workspace_id', '=', workspaceId)
-    .where('deleted_at', 'is', null)
+    .innerJoin('workspaces', 'workspaces.id', 'attachments.workspace_id')
+    .select((eb) => [
+      eb.fn.sum<number>('attachments.size').as('bytes'),
+      eb.fn
+        .sum<number>(eb.case().when('attachments.deleted_at', 'is', null).then(1).else(0).end())
+        .as('count'),
+    ])
+    .where('workspaces.owner_id', '=', ownerId)
+    .where((eb) =>
+      eb.or([
+        eb('attachments.deleted_at', 'is', null),
+        eb('attachments.stored_at', 'is not', null),
+      ]),
+    )
     .executeTakeFirst()
   return { usedBytes: Number(row?.bytes ?? 0), count: Number(row?.count ?? 0) }
 }
@@ -212,11 +239,17 @@ async function requireDocumentIn(db: Db, workspaceId: string, id: string, what: 
   return document
 }
 
-/** A page must not become its own ancestor. */
+/**
+ * A page must not become its own ancestor. Also stops on a cycle that already exists among the
+ * ancestors (never created by the server, but data must not make this loop forever).
+ */
 async function assertNoCycle(db: Db, workspaceId: string, id: string, parentId: string | null) {
+  const seen = new Set<string>()
   let current = parentId
   while (current) {
     if (current === id) reject('invalid_payload', 'A page cannot be moved below itself')
+    if (seen.has(current)) reject('invalid_payload', 'The page tree contains a cycle')
+    seen.add(current)
     current = (await requireDocumentIn(db, workspaceId, current, 'Parent')).parent_id
   }
 }

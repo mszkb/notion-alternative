@@ -70,8 +70,20 @@ async function logout() {
   try {
     await api.logout({ removeDevice: removeDevice.value })
   } catch {
-    error.value = 'Abmelden fehlgeschlagen. Ist der Server erreichbar?'
-    return
+    // On a shared device the local copy must be removable without the server (#74). The
+    // server session stays valid until it expires, so say how to end it.
+    const wipeAnyway =
+      wipeLocal.value &&
+      window.confirm(
+        'Der Server ist nicht erreichbar. Lokale Daten trotzdem löschen?\n\n' +
+          'Die Anmeldung bleibt im Browser gespeichert, bis sie abläuft: Danach in den ' +
+          'Browser-Einstellungen die Website-Daten (Cookies) dieser Seite löschen oder sich ' +
+          'später online erneut abmelden.',
+      )
+    if (!wipeAnyway) {
+      error.value = 'Abmelden fehlgeschlagen. Ist der Server erreichbar?'
+      return
+    }
   }
   // By default local data stays on the device (local-first, ADR 0009); only the cached sign-in
   // is removed. Deleting it is an explicit choice for shared devices.

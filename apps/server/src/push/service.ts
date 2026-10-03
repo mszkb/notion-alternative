@@ -51,8 +51,9 @@ export async function sendPush(
   subject: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<SendResult> {
-  const body = encryptPushMessage(Buffer.from(JSON.stringify(hint)), subscription)
   try {
+    // Inside the try: keys that are not a valid curve point must not crash the process.
+    const body = encryptPushMessage(Buffer.from(JSON.stringify(hint)), subscription)
     const response = await fetchImpl(subscription.endpoint, {
       method: 'POST',
       headers: {
@@ -113,7 +114,9 @@ export class PushNotifier {
     if (this.pending.size > 0 && !this.timer) {
       this.timer = setTimeout(() => {
         this.timer = null
-        this.flushing = this.flush()
+        this.flushing = this.flush().catch(() => {
+          // Hints are best effort (principle 4); a failure must never take the server down.
+        })
       }, this.options.delayMs ?? 2000)
     }
   }
