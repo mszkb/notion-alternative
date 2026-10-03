@@ -29,6 +29,8 @@ export type RejectCode =
   | 'not_found'
   | 'already_exists'
   | 'deleted'
+  | 'too_large'
+  | 'quota_exceeded'
 
 export type ApplyResult =
   | { status: 'applied'; revision: number; seq: number }
@@ -76,6 +78,29 @@ function conflict(currentRevision: number, reason: ConflictReason): never {
 interface ApplyContext {
   /** Set when the operation was merged with another device's change to other fields. */
   merged: boolean
+  limits: AttachmentLimits
+}
+
+/** Operator limits for attachments (#64); no feature locks, only capacity. */
+export interface AttachmentLimits {
+  maxBytes: number
+  workspaceQuotaBytes: number | null
+}
+
+const NO_LIMITS: AttachmentLimits = {
+  maxBytes: Number.POSITIVE_INFINITY,
+  workspaceQuotaBytes: null,
+}
+
+/** Bytes taken by a workspace's attachments (deleted ones no longer count). */
+export async function attachmentUsage(db: Db, workspaceId: string) {
+  const row = await db
+    .selectFrom('attachments')
+    .select((eb) => [eb.fn.sum<number>('size').as('bytes'), eb.fn.countAll<number>().as('count')])
+    .where('workspace_id', '=', workspaceId)
+    .where('deleted_at', 'is', null)
+    .executeTakeFirst()
+  return { usedBytes: Number(row?.bytes ?? 0), count: Number(row?.count ?? 0) }
 }
 
 /** Fields an operation changes; `*` for create/delete (they touch everything). */
@@ -421,6 +446,14 @@ async function applyAttachment(
   if (op.kind === 'create') {
     const p = op.payload as AttachmentCreatePayload
     await assertDocumentAlive(db, op, p.documentId)
+    // Rejected, not dropped: the client keeps the file and shows why (#64).
+    if (p.size > ctx.limits.maxBytes) {
+      reject('too_large', `File exceeds ${ctx.limits.maxBytes} bytes`)
+    }
+    const quota = ctx.limits.workspaceQuotaBytes
+    if (quota !== null && (await attachmentUsage(db, op.workspaceId)).usedBytes + p.size > quota) {
+      reject('quota_exceeded', 'Workspace storage limit reached')
+    }
     await db
       .insertInto('attachments')
       .values({
@@ -647,6 +680,7 @@ export async function applyOperation(
   userId: string,
   op: Operation,
   now: string = new Date().toISOString(),
+  limits: AttachmentLimits = NO_LIMITS,
 ): Promise<ApplyResult> {
   try {
     return await db.transaction().execute(async (trx) => {
@@ -693,7 +727,7 @@ export async function applyOperation(
       const invalid = validateOperationPayload(op.entity, op.kind, op.payload)
       if (invalid) reject('invalid_payload', invalid)
 
-      const ctx: ApplyContext = { merged: false }
+      const ctx: ApplyContext = { merged: false, limits }
       let revision: number
       try {
         revision = await appliers[op.entity](trx, op, now, ctx)

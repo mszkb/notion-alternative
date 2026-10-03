@@ -9,6 +9,7 @@ import { expanded } from '../composables/tree-state'
 import { displayTitle, workspaceKey } from '../composables/workspace'
 import { deviceStatus } from '../device'
 import { dismissIosHint, installApp, installPrompt, showIosHint } from '../install'
+import { refreshAttachmentUsage } from '../limits'
 import {
   persistence,
   refreshWorkspaces,
@@ -147,6 +148,7 @@ async function recheck() {
     if ((await refreshSession()) === 'online') {
       await refreshWorkspaces(store)
       void requestSync(store)
+      void refreshAttachmentUsage(workspaceId.value)
     }
   } catch {
     connection.value = 'offline'

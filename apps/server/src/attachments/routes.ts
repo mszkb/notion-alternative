@@ -1,13 +1,16 @@
 import { createHash } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
-import { INLINE_IMAGE_TYPES } from '@notion-alt/shared'
+import { type AttachmentUsage, INLINE_IMAGE_TYPES } from '@notion-alt/shared'
 import { z } from 'zod'
 import { currentUser, requireAuth } from '../auth/plugin'
 import { HttpError } from '../errors'
 import { parseInput } from '../validation'
+import { attachmentUsage } from '../sync/apply'
+import { findWorkspaceForUser } from '../workspaces/repository'
 import { readContent, storeContent } from './storage'
 
 const paramsSchema = z.object({ id: z.uuid() })
+const usageQuerySchema = z.object({ workspaceId: z.uuid() })
 
 /** RFC 6266 filename for Content-Disposition, safe for any name. */
 function disposition(kind: 'inline' | 'attachment', name: string): string {
@@ -37,6 +40,19 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
     if (!row) throw new HttpError(404, 'not_found', 'Attachment not found')
     return row
   }
+
+  /** Used storage and limits, so clients can check before adding files (#64). */
+  app.get('/attachments/usage', async (request): Promise<AttachmentUsage> => {
+    const { workspaceId } = parseInput(usageQuerySchema, request.query)
+    if (!(await findWorkspaceForUser(db, workspaceId, currentUser(request).id))) {
+      throw new HttpError(404, 'not_found', 'Workspace not found')
+    }
+    return {
+      ...(await attachmentUsage(db, workspaceId)),
+      quotaBytes: config.attachments.workspaceQuotaBytes,
+      maxFileBytes: maxBytes,
+    }
+  })
 
   /** Uploads the content once the metadata was synced; size and SHA-256 must match. */
   app.put('/attachments/:id/content', { bodyLimit: maxBytes }, async (request, reply) => {

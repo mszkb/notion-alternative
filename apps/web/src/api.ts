@@ -1,4 +1,5 @@
 import type {
+  AttachmentUsage,
   ChangePasswordInput,
   CreateWorkspaceInput,
   Device,
@@ -90,6 +91,8 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
       request<void>('POST', '/push/subscriptions', input),
     pushUnsubscribe: (endpoint: string) =>
       request<void>('DELETE', '/push/subscriptions', { endpoint }),
+    attachmentUsage: (workspaceId: string) =>
+      request<AttachmentUsage>('GET', `/attachments/usage?${new URLSearchParams({ workspaceId })}`),
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<{ workspace: Workspace }>('POST', '/workspaces', input),

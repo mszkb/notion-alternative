@@ -50,7 +50,7 @@ async function push(...operations: Operation[]) {
   return response.json().results
 }
 
-async function attachment(name: string, mimeType: string, data: Buffer) {
+async function attachment(name: string, mimeType: string, data: Buffer, expected = 'applied') {
   const id = randomUUID()
   const [result] = await push(
     op('attachment', 'create', id, {
@@ -62,7 +62,7 @@ async function attachment(name: string, mimeType: string, data: Buffer) {
       createdAt: new Date().toISOString(),
     }),
   )
-  expect(result.status).toBe('applied')
+  expect(result.status === 'rejected' ? result.code : result.status).toBe(expected)
   return id
 }
 
@@ -80,7 +80,7 @@ beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), 'attachments-'))
   ;({ app, db } = await createTestApp({
     allowRegistration: true,
-    attachments: { dir, maxBytes: 1024, retentionDays: 30 },
+    attachments: { dir, maxBytes: 1024, retentionDays: 30, workspaceQuotaBytes: 3000 },
   }))
   ;({ cookie } = await register(app, 'alice@example.com'))
   workspaceId = (await app.inject({ url: '/api/workspaces', headers: { cookie } })).json()
@@ -151,8 +151,9 @@ describe('attachments', () => {
     expect((await download(id, bob)).statusCode).toBe(404)
     expect((await upload(id, PNG, bob)).statusCode).toBe(404)
 
+    // Too large is refused already with the metadata, the upload is refused as well.
     const big = Buffer.alloc(2048, 1)
-    const bigId = await attachment('gross.bin', 'application/octet-stream', big)
+    const bigId = await attachment('gross.bin', 'application/octet-stream', big, 'too_large')
     expect((await upload(bigId, big)).statusCode).toBe(413)
   })
 
@@ -183,5 +184,38 @@ describe('attachments', () => {
     ).json()
     expect(snapshot.attachments).toMatchObject([{ id, name: 'foto.png', size: PNG.length }])
     expect(() => contentPath(dir, '../etc', id)).toThrow()
+  })
+})
+
+describe('storage limits (#64)', () => {
+  it('refuses attachments beyond the workspace quota until space is freed', async () => {
+    const kb = Buffer.alloc(1000, 2)
+    const first = await attachment('a.bin', 'application/octet-stream', kb)
+    await attachment('b.bin', 'application/octet-stream', kb)
+    await attachment('c.bin', 'application/octet-stream', kb)
+    await attachment('d.bin', 'application/octet-stream', kb, 'quota_exceeded')
+
+    const usage = await app.inject({
+      url: `/api/attachments/usage?workspaceId=${workspaceId}`,
+      headers: { cookie },
+    })
+    expect(usage.json()).toEqual({
+      usedBytes: 3000,
+      count: 3,
+      quotaBytes: 3000,
+      maxFileBytes: 1024,
+    })
+
+    await push(op('attachment', 'delete', first, {}, 1))
+    await attachment('e.bin', 'application/octet-stream', kb)
+  })
+
+  it('reports usage only for own workspaces', async () => {
+    const { cookie: bob } = await register(app, 'bob@example.com')
+    const response = await app.inject({
+      url: `/api/attachments/usage?workspaceId=${workspaceId}`,
+      headers: { cookie: bob },
+    })
+    expect(response.statusCode).toBe(404)
   })
 })

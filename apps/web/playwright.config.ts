@@ -44,6 +44,8 @@ export default defineConfig({
         REGISTER_MAX_ATTEMPTS_PER_IP: '100000',
         // Fake push service used by the PWA tests.
         PUSH_ALLOWED_HOSTS: 'push.test',
+        // Small per-workspace attachment quota for the limit test (each test has its own account).
+        WORKSPACE_STORAGE_MB: '0.05',
       },
       reuseExistingServer: false,
     },

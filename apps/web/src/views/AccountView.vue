@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { type Device, PASSWORD_MIN_LENGTH } from '@notion-alt/shared'
+import { type AttachmentUsage, type Device, PASSWORD_MIN_LENGTH } from '@notion-alt/shared'
 import { ApiError, api } from '../api'
 import { deviceStatus } from '../device'
-import { persistence, refreshWorkspaces, requireStore } from '../local/context'
+import { persistence, refreshWorkspaces, requireStore, workspaces } from '../local/context'
+import { refreshAttachmentUsage } from '../limits'
 import { formatBytes, type StorageUsage, storageUsage } from '../local/persistence'
 import { connection, currentUser } from '../session'
 import {
@@ -71,8 +72,16 @@ async function toggleNotifications(enable: boolean) {
 // ------------------------------------------------------------------ storage
 
 const usage = ref<StorageUsage | null>(null)
+const serverUsage = ref(new Map<string, AttachmentUsage>())
 onMounted(async () => {
   usage.value = await storageUsage()
+  if (connection.value !== 'online') return
+  const next = new Map<string, AttachmentUsage>()
+  for (const workspace of workspaces.value) {
+    const result = await refreshAttachmentUsage(workspace.id)
+    if (result) next.set(workspace.id, result)
+  }
+  serverUsage.value = next
 })
 // The device registers itself on the online refresh; show it once that happened.
 watch(deviceStatus, loadDevices)
@@ -313,6 +322,24 @@ async function changePassword() {
           : 'Der Browser darf lokale Daten bei Speichermangel löschen; installieren hilft.'
       }}
     </p>
+
+    <template v-if="serverUsage.size">
+      <h2>Anhänge auf dem Server</h2>
+      <ul class="usage" data-testid="server-usage">
+        <li
+          v-for="workspace in workspaces.filter((w) => serverUsage.has(w.id))"
+          :key="workspace.id"
+        >
+          {{ workspace.name }}:
+          {{ formatBytes(serverUsage.get(workspace.id)!.usedBytes) }}
+          <template v-if="serverUsage.get(workspace.id)!.quotaBytes !== null">
+            von {{ formatBytes(serverUsage.get(workspace.id)!.quotaBytes!) }}
+          </template>
+          belegt ({{ serverUsage.get(workspace.id)!.count }} Anhänge, höchstens
+          {{ formatBytes(serverUsage.get(workspace.id)!.maxFileBytes) }} pro Datei)
+        </li>
+      </ul>
+    </template>
 
     <h2>App-Version</h2>
     <p class="muted">

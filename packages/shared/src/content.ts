@@ -194,3 +194,12 @@ export const INLINE_IMAGE_TYPES = [
   'image/webp',
   'image/avif',
 ]
+
+/** `GET /api/attachments/usage`: storage of a workspace and the limits set by the operator. */
+export interface AttachmentUsage {
+  usedBytes: number
+  /** null: no workspace limit configured. */
+  quotaBytes: number | null
+  maxFileBytes: number
+  count: number
+}

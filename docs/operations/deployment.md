@@ -77,8 +77,9 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 | `COOKIE_SECURE` | `false` | Session-Cookie nur über HTTPS senden |
 | `LOG_LEVEL` | `info` | `fatal` … `trace`, `silent` |
 | `METRICS_ENABLED` | `false` | Prometheus-Metriken unter `/api/metrics` im Backend bereitstellen |
-| `ATTACHMENT_MAX_MB` | `25` | Maximale Größe eines Anhangs (nginx erlaubt für Uploads bis 30 MB; bei höheren Werten `client_max_body_size` in `apps/web/nginx.conf` mit anheben) |
+| `ATTACHMENT_MAX_MB` | `25` | Maximale Größe eines Anhangs (MB = 1 000 000 Byte) (nginx erlaubt für Uploads bis 30 MB; bei höheren Werten `client_max_body_size` in `apps/web/nginx.conf` mit anheben) |
 | `ATTACHMENT_RETENTION_DAYS` | `30` | So lange bleibt die Datei eines gelöschten Anhangs erhalten |
+| `WORKSPACE_STORAGE_MB` | `2048` | Gesamtgröße der Anhänge pro Workspace (`0` = unbegrenzt). Darüber lehnt der Server neue Anhänge ab; sie bleiben auf dem Gerät und werden dort markiert. Ein späteres Senken des Werts löscht nichts, verhindert nur neue Anhänge. |
 | `PUSH_SUBJECT` | `mailto:admin@localhost` | Kontakt für Web Push (VAPID); eine echte Adresse eintragen, manche Push-Dienste lehnen Platzhalter ab |
 | `PUSH_ALLOWED_HOSTS` | Google, Mozilla, Apple, Microsoft | Push-Dienste, an die der Server senden darf (kommagetrennt, `*.` für Subdomains) |
 

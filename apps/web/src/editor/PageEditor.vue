@@ -22,6 +22,8 @@ import {
   setCaretOffset,
   textLength,
 } from './caret'
+import { maxFileBytes } from '../limits'
+import { formatBytes } from '../local/persistence'
 import { registerPendingEdits } from '../pending-edits'
 import AttachmentBlock from './AttachmentBlock.vue'
 import { EditHistory } from './history'
@@ -1142,8 +1144,6 @@ async function insertLink(
 
 // ------------------------------------------------------------------ attachments (ADR 0012)
 
-/** Per-file limit on the client; the server enforces its own (ATTACHMENT_MAX_MB). */
-const ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
 const fileInput = ref<HTMLInputElement | null>(null)
 let insertAfterId: string | null = null
 
@@ -1161,13 +1161,15 @@ function onFilesChosen(event: Event) {
 
 /** Adds files as image/file blocks after `afterId` (or at the end); works offline. */
 async function addFiles(files: File[], afterId: string | null) {
-  const tooBig = files.filter((file) => file.size > ATTACHMENT_MAX_BYTES)
+  // Early check with the server's limit (#64); the server enforces it again.
+  const limit = maxFileBytes.value
+  const tooBig = files.filter((file) => file.size > limit)
   if (tooBig.length) {
-    error.value = `Zu groß (max. ${ATTACHMENT_MAX_BYTES / 1024 / 1024} MB): ${tooBig.map((f) => f.name).join(', ')}`
+    error.value = `Zu groß (höchstens ${formatBytes(limit)} pro Datei): ${tooBig.map((f) => f.name).join(', ')}`
   }
   checkpoint()
   let after = afterId ?? blocks.value?.at(-1)?.id ?? null
-  for (const file of files.filter((f) => f.size <= ATTACHMENT_MAX_BYTES)) {
+  for (const file of files.filter((f) => f.size <= limit)) {
     const data = await file.arrayBuffer()
     const added = await track(
       after ?? props.documentId,

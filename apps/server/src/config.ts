@@ -25,6 +25,8 @@ const envSchema = z.object({
   ATTACHMENTS_DIR: z.string().optional(),
   ATTACHMENT_MAX_MB: z.coerce.number().min(1).max(1024).default(25),
   ATTACHMENT_RETENTION_DAYS: z.coerce.number().int().min(0).max(3650).default(30),
+  // Total attachment storage per workspace; 0 = no limit (operator setting, no paywall).
+  WORKSPACE_STORAGE_MB: z.coerce.number().min(0).default(2048),
   // Push services the server may send to (subscription endpoints come from clients: no SSRF).
   PUSH_ALLOWED_HOSTS: z
     .string()
@@ -47,6 +49,8 @@ export interface Config {
     maxBytes: number
     /** Days a deleted attachment's file is kept (restore, conflicts). */
     retentionDays: number
+    /** Total size of a workspace's attachments; null = unlimited. */
+    workspaceQuotaBytes: number | null
   }
   push: {
     subject: string
@@ -74,8 +78,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     metricsEnabled: parsed.METRICS_ENABLED,
     attachments: {
       dir: parsed.ATTACHMENTS_DIR ?? path.join(parsed.DATA_DIR, 'attachments'),
-      maxBytes: Math.round(parsed.ATTACHMENT_MAX_MB * 1024 * 1024),
+      // Decimal megabytes, like the browsers' storage pages and the app's display.
+      maxBytes: Math.round(parsed.ATTACHMENT_MAX_MB * 1_000_000),
       retentionDays: parsed.ATTACHMENT_RETENTION_DAYS,
+      workspaceQuotaBytes:
+        parsed.WORKSPACE_STORAGE_MB > 0
+          ? Math.round(parsed.WORKSPACE_STORAGE_MB * 1_000_000)
+          : null,
     },
     push: {
       subject: parsed.PUSH_SUBJECT,

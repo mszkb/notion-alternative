@@ -35,7 +35,7 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     const now = new Date().toISOString()
     const results: SyncPushResult[] = []
     for (const op of operations) {
-      const result = await applyOperation(db, user.id, op)
+      const result = await applyOperation(db, user.id, op, undefined, app.config.attachments)
       pushed.inc({ status: result.status })
       results.push({ opId: op.opId, ...result } as SyncPushResult)
     }

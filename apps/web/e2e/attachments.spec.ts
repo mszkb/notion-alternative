@@ -85,3 +85,25 @@ test('an image added offline is shown at once and synced later', async ({ page, 
   await imageLoaded(other)
   await other.context().close()
 })
+
+test('a file beyond the storage limit stays on the device and is marked', async ({
+  signedIn: page,
+}) => {
+  await newPage(page, 'Zu viel')
+  await waitForSaved(page)
+  await page.getByTestId('attachment-input').setInputFiles({
+    name: 'gross.bin',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.alloc(60 * 1024, 1),
+  })
+  // Kept locally and downloadable here …
+  await expect(page.locator('a.attachment-file')).toContainText('gross.bin')
+  // … but refused by the server with a clear reason.
+  await expect(page.getByTestId('attachment-refused')).toContainText('Workspace-Speicher voll', {
+    timeout: 10_000,
+  })
+  await expect(page.getByTestId('sync-rejected')).toBeVisible()
+
+  await page.getByRole('link', { name: 'Konto' }).click()
+  await expect(page.getByTestId('server-usage')).toContainText(/0 B\s+von 50,0 KB belegt/)
+})
