@@ -15,7 +15,7 @@ import {
   type TagCreatePayload,
   validateOperationPayload,
 } from '@notion-alt/shared'
-import type { SelectQueryBuilder } from 'kysely'
+import { type SelectQueryBuilder, sql } from 'kysely'
 import type { Db } from '../db/database'
 import type { Database } from '../db/schema'
 import { findActiveDevice } from '../devices/repository'
@@ -762,30 +762,34 @@ export async function applyBatch(
   now: string = new Date().toISOString(),
   limits: AttachmentLimits = NO_LIMITS,
 ): Promise<ApplyResult[]> {
-  const trx = await db.startTransaction().execute()
-  const results: ApplyResult[] = []
-  try {
+  // Kysely's managed transaction always releases the single connection, also when commit or
+  // rollback fail; savepoints are plain SQL inside it.
+  let failure: { error: unknown } | null = null
+  const results = await db.transaction().execute(async (trx) => {
+    const applied: ApplyResult[] = []
     for (const op of operations) {
-      const sp = await trx.savepoint('op').execute()
+      await sql`savepoint op`.execute(trx)
       try {
-        results.push(await applyIn(sp, userId, op, now, limits))
-        await sp.releaseSavepoint('op').execute()
+        applied.push(await applyIn(trx, userId, op, now, limits))
+        await sql`release op`.execute(trx)
       } catch (error) {
-        await sp.rollbackToSavepoint('op').execute()
-        await sp.releaseSavepoint('op').execute()
-        if (!(error instanceof Stop)) throw error
-        results.push(error.result)
+        try {
+          await sql`rollback to op`.execute(trx)
+          await sql`release op`.execute(trx)
+        } catch {
+          // SQLite already rolled back the whole transaction (e.g. disk full): nothing stays.
+          throw error
+        }
+        if (!(error instanceof Stop)) {
+          failure = { error }
+          break
+        }
+        applied.push(error.result)
       }
     }
-  } catch (error) {
-    // Keep what was applied before the error; if even that fails, nothing of the batch stays.
-    await trx
-      .commit()
-      .execute()
-      .catch(() => trx.rollback().execute())
-    throw error
-  }
-  await trx.commit().execute()
+    return applied
+  })
+  if (failure) throw (failure as { error: unknown }).error
   return results
 }
 

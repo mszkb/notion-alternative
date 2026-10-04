@@ -98,10 +98,10 @@ const CONTENT_TABLES = [
 ]
 
 /** Backlink index entry of a block, or null when it links to no page. */
-function linkEntry(block: Block, document: Document): LinkEntry | null {
+function linkEntry(block: Block, workspaceId: string): LinkEntry | null {
   const targets = block.type === 'code' ? [] : extractPageLinks(block.content)
   if (targets.length === 0) return null
-  return { blockId: block.id, documentId: document.id, workspaceId: document.workspaceId, targets }
+  return { blockId: block.id, documentId: block.documentId, workspaceId, targets }
 }
 
 /**
@@ -516,7 +516,7 @@ export class LocalStore {
   }
 
   private async updateLinks(block: Block, document: Document) {
-    const entry = linkEntry(block, document)
+    const entry = linkEntry(block, document.workspaceId)
     if (entry) await this.db.links.put(entry)
     else await this.db.links.delete(block.id)
   }
@@ -1113,10 +1113,9 @@ export class LocalStore {
       const links: LinkEntry[] = []
       const unlinked: string[] = []
       for (const block of blocks) {
-        const targets =
-          block.deletedAt || block.type === 'code' ? [] : extractPageLinks(block.content)
-        if (targets.length === 0) unlinked.push(block.id)
-        else links.push({ blockId: block.id, documentId: block.documentId, workspaceId, targets })
+        const entry = block.deletedAt ? null : linkEntry(block, workspaceId)
+        if (entry) links.push(entry)
+        else unlinked.push(block.id)
       }
       await this.db.links.bulkDelete(unlinked)
       await this.db.links.bulkPut(links)
@@ -1210,7 +1209,10 @@ export class LocalStore {
     this.reportResync(progress)
   }
 
-  /** Full re-sync from a snapshot held completely in memory (one page). */
+  /**
+   * Full re-sync from a snapshot held completely in memory, as one page (tests, imports). Not
+   * atomic: like the paged re-sync, an interruption leaves no cursor and the next sync repeats.
+   */
   async replaceWithSnapshot(workspaceId: string, snapshot: SyncSnapshotResponse): Promise<void> {
     const progress = await this.beginResync(workspaceId)
     await this.applySnapshotPage(workspaceId, snapshot, progress)

@@ -235,6 +235,53 @@ describe('WorkspaceSearch', () => {
       expect(search.index.size).toBe(120)
     })
 
+    it('applies changes made during the start after it, never under it', async () => {
+      const page = await store.createDocument({ workspaceId: WS, title: 'Startwert' })
+      search = new WorkspaceSearch(store, WS)
+      await search.start()
+      await search.saved()
+      search.stop()
+
+      // Hold the read of the saved index until the change and its debounced flush happened.
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => (release = resolve))
+      const read = store.searchIndexCache.bind(store)
+      store.searchIndexCache = async (id: string) => {
+        const cache = await read(id)
+        await gate
+        return cache
+      }
+      search = new WorkspaceSearch(store, WS, 0)
+      const starting = search.start()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      await store.renameDocument(page.id, 'Waehrenddessen')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      release()
+      await starting
+      await search.flush()
+      expect(hits('waehrenddessen')).toEqual([page.id])
+      expect(hits('startwert')).toEqual([])
+    })
+
+    it('keeps updating after a failed update and retries its pages', async () => {
+      const page = await store.createDocument({ workspaceId: WS, title: 'Vorher' })
+      search = new WorkspaceSearch(store, WS)
+      await search.start()
+      const listBlocks = store.listBlocks.bind(store)
+      let fail = true
+      store.listBlocks = async (id: string) => {
+        if (fail) throw new Error('read failed')
+        return listBlocks(id)
+      }
+      await store.renameDocument(page.id, 'Danach')
+      await expect(search.flush()).rejects.toThrow('read failed')
+      fail = false
+      const other = await store.createDocument({ workspaceId: WS, title: 'Weiter' })
+      await search.flush()
+      expect(hits('danach')).toEqual([page.id])
+      expect(hits('weiter')).toEqual([other.id])
+    })
+
     it('marks pages written by a re-sync', async () => {
       search = new WorkspaceSearch(store, WS)
       await search.start()

@@ -47,7 +47,11 @@ const documents = computed(() => {
   return previousDocuments
 })
 const documentsById = computed(() => new Map(documents.value.map((d) => [d.id, d])))
-const childrenByParent = computed(() => groupByParent(documents.value))
+let previousGroups: Map<string | null, Document[]> | undefined
+const childrenByParent = computed(() => {
+  previousGroups = groupByParent(documents.value, previousGroups)
+  return previousGroups
+})
 provide(workspaceKey, { store, workspaceId, documents, documentsById, childrenByParent })
 
 const workspace = computed(() => workspaces.value.find((w) => w.id === workspaceId.value))

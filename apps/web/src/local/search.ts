@@ -147,12 +147,21 @@ export class WorkspaceSearch {
     private readonly delayMs = 150,
   ) {}
 
-  async start(): Promise<void> {
+  /**
+   * Loads or builds the index. Changes arriving meanwhile are queued and applied after it:
+   * flushes wait for the start, so a loaded or built index never overwrites newer entries.
+   */
+  start(): Promise<void> {
     this.unsubscribe = this.store.onChange((change) => {
       if (change.workspaceId !== this.workspaceId) return
       for (const id of change.documentIds) this.pending.add(id)
       this.schedule()
     })
+    this.flushing = this.load()
+    return this.flushing
+  }
+
+  private async load(): Promise<void> {
     // Marks first: whatever changes after this read keeps its mark when the index is saved.
     const marks = await this.store.searchDirtyMarks(this.workspaceId)
     const cache = await this.store.searchIndexCache(this.workspaceId)
@@ -202,18 +211,25 @@ export class WorkspaceSearch {
   flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    this.flushing = this.flushing.then(() => this.applyPending())
+    // A failed earlier run must not block every later one.
+    this.flushing = this.flushing.catch(() => undefined).then(() => this.applyPending())
     return this.flushing
   }
 
   private async applyPending(): Promise<void> {
     const ids = [...this.pending]
     this.pending.clear()
-    if (ids.length > Math.max(RESAVE_AFTER, this.index.size * REBUILD_SHARE)) {
-      await this.rebuild()
-      return
+    try {
+      if (ids.length > Math.max(RESAVE_AFTER, this.index.size * REBUILD_SHARE)) {
+        await this.rebuild()
+        return
+      }
+      for (const id of ids) await this.reindex(id)
+    } catch (error) {
+      // Try these pages again with the next change or search.
+      for (const id of ids) this.pending.add(id)
+      throw error
     }
-    for (const id of ids) await this.reindex(id)
   }
 
   /** Saves the index now; `marks` must have been read before the index took in those pages. */
@@ -264,7 +280,10 @@ export class WorkspaceSearch {
 
   private schedule() {
     if (this.timer) clearTimeout(this.timer)
-    this.timer = setTimeout(() => void this.flush(), this.delayMs)
+    this.timer = setTimeout(
+      () => void this.flush().catch((error) => console.warn('Search index update failed', error)),
+      this.delayMs,
+    )
   }
 
   private async reindex(documentId: string): Promise<void> {

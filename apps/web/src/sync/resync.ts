@@ -72,9 +72,9 @@ async function resyncWorkspace(
       if (!page.next) break
       page = await fetchPage(workspaceId, page.next)
     }
+    await store.finishResync(workspaceId, cursor, progress)
   } catch (error) {
     store.reportResync(progress)
     throw error
   }
-  await store.finishResync(workspaceId, cursor, progress)
 }

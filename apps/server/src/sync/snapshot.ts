@@ -1,6 +1,7 @@
 import type { SyncSnapshotResponse } from '@notion-alt/shared'
 import type { Db } from '../db/database'
 import { findWorkspaceForUser } from '../workspaces/repository'
+import { latestSeq } from './changes'
 import { toAttachment, toBlock, toConflict, toDocument, toDocumentTag, toTag } from './mapping'
 
 /**
@@ -15,8 +16,8 @@ export async function loadSnapshot(
   return db.transaction().execute(async (trx) => {
     const workspace = await findWorkspaceForUser(trx, workspaceId, userId)
     if (!workspace) return null
-    const [documents, blocks, tags, documentTags, attachments, conflicts, last] = await Promise.all(
-      [
+    const [documents, blocks, tags, documentTags, attachments, conflicts, cursor] =
+      await Promise.all([
         trx.selectFrom('documents').selectAll().where('workspace_id', '=', workspaceId).execute(),
         trx.selectFrom('blocks').selectAll().where('workspace_id', '=', workspaceId).execute(),
         trx.selectFrom('tags').selectAll().where('workspace_id', '=', workspaceId).execute(),
@@ -27,13 +28,8 @@ export async function loadSnapshot(
           .execute(),
         trx.selectFrom('attachments').selectAll().where('workspace_id', '=', workspaceId).execute(),
         trx.selectFrom('conflicts').selectAll().where('workspace_id', '=', workspaceId).execute(),
-        trx
-          .selectFrom('changes')
-          .select((eb) => eb.fn.max('seq').as('max'))
-          .where('workspace_id', '=', workspaceId)
-          .executeTakeFirst(),
-      ],
-    )
+        latestSeq(trx, workspaceId, workspace.compacted_seq),
+      ])
     return {
       documents: documents.map(toDocument),
       blocks: blocks.map(toBlock),
@@ -41,7 +37,7 @@ export async function loadSnapshot(
       documentTags: documentTags.map(toDocumentTag),
       attachments: attachments.map(toAttachment),
       conflicts: conflicts.map(toConflict),
-      cursor: Math.max(Number(last?.max ?? 0), workspace.compacted_seq),
+      cursor,
     }
   })
 }
@@ -79,12 +75,7 @@ export async function loadSnapshotPage(
       lastId = id || null
       if (table >= TABLES.length) return null
     } else {
-      const last = await trx
-        .selectFrom('changes')
-        .select((eb) => eb.fn.max('seq').as('max'))
-        .where('workspace_id', '=', workspaceId)
-        .executeTakeFirst()
-      cursor = Math.max(Number(last?.max ?? 0), workspace.compacted_seq)
+      cursor = await latestSeq(trx, workspaceId, workspace.compacted_seq)
       total = 0
       for (const name of TABLES) {
         const row = await trx
