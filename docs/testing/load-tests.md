@@ -8,6 +8,7 @@ Belastbarkeit großer Workspaces ([#77](https://github.com/mszkb/notion-alternat
 | --- | --- | --- |
 | Server | `pnpm --filter @notion-alt/server build && node scripts/loadtest/server-load.mjs` | Seed per Sync-Push (volle Batches à 500 Operationen), mehrere Geräte gleichzeitig (Push + Delta-Pull), vollständiger Pull, Snapshot seitenweise (Re-Sync, #97), Änderungslog (JSON-Export), Serversuche; RAM/CPU des Serverprozesses |
 | Client (Chromium) | `pnpm --filter @notion-alt/web loadtest:browser` | Snapshot seitenweise in die lokale Datenbank schreiben (neues Gerät/Re-Sync), Seitenliste, Blöcke einer Seite, Aufbau, Speichern und Laden des Suchindex (MiniSearch, #98), Suchanfragen, JS-Heap |
+| App (Chromium, [#96](https://github.com/mszkb/notion-alternative/issues/96)) | `LOAD_PAGES=1000 pnpm --filter @notion-alt/web exec playwright test e2e/load-app.spec.ts --project chromium` | Die echte App gegen einen echten Server: Seed über ein zweites Gerät; Erstsync als neues Gerät bis „Synchronisiert um“; Kaltstart aus IndexedDB, bis der Seitenbaum sichtbar ist; Öffnen einer Seite mit `LOAD_BIG_BLOCKS` (2 000) Blöcken; Tippen am Ende dieser Seite. Ohne `LOAD_PAGES` wird der Test übersprungen, auch in der CI. |
 | Client (Node) | `pnpm --filter @notion-alt/web loadtest` | Dasselbe Szenario mit fake-indexeddb. Nur für schnelle Vergleiche: Die IndexedDB-Zeiten sind dort viel zu hoch, weil Index-Cursor quadratisch laufen (10 000 Zeilen per `anyOf`: 51 s statt 0,5 s). |
 
 **Parameter** (Umgebungsvariablen):
@@ -60,6 +61,16 @@ Das Schreiben des Snapshots wird von IndexedDB bestimmt: `bulkPut` der Blöcke s
 - Der erste Start baut den Index auf (10,5 s) und speichert ihn danach im Leerlauf (3,2 s, einmalig).
 - Jeder weitere Start lädt ihn in 0,46 s und indexiert nur die seitdem geänderten Seiten.
 - Gemessen ist der Start im selben Tab. Der Heap nach Aufbau und Laden liegt bei 421 MB, ohne GC gemessen.
+
+### App im Browser (#96)
+
+Gemessen am 2026-10-04 mit `e2e/load-app.spec.ts`, Chromium 141 headless, Vite-Entwicklungsserver; im Production-Build sind die Zeiten eher kürzer.
+
+| Seiten / Blöcke | Seed (Server) | Erstsync neues Gerät | Kaltstart bis Seitenbaum | Seite mit 2 000 Blöcken öffnen | Tippen am Ende dieser Seite |
+| --- | --- | --- | --- | --- | --- |
+| 1 000 / 52 000 | 12,8 s | 37 s | 0,84 s | 0,48 s | 5 ms pro Taste (70 Tasten) |
+
+**Noch nicht gemessen:** Smartphone (iOS/Android). Das geht nur manuell, siehe die Fragen in #96.
 
 ## Gefundene und behobene Engpässe
 
@@ -115,6 +126,9 @@ Zielwerte für den Referenz-Host (VPS oder Raspberry Pi 4) bis zu 10 000 Seiten:
 | Serversuche | < 300 ms |
 | Lokale Suche | < 50 ms |
 | Seitenliste lokal | < 200 ms (gemessen 219 ms bei 10 000 Seiten) |
+| Kaltstart bis Seitenbaum (Vorschlag, #96) | < 2 s |
+| Seite mit 2 000 Blöcken öffnen (Vorschlag, #96) | < 1 s |
+| Tippen (Vorschlag, #96) | < 16 ms pro Taste (ein Frame) |
 | Server-RSS | < 512 MB im Normalbetrieb |
 
 Bei 10 000 Seiten verfehlen nur noch die Dauer des Re-Syncs im Browser und knapp die Seitenliste das Ziel (siehe oben). Der Server-RSS beim Snapshot liegt seit #97 im Ziel. Bis etwa 1 000 Seiten / 50 000 Blöcke bleiben alle Vorgänge außer dem Re-Sync (27 s) im Ziel.
