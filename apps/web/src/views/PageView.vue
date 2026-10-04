@@ -4,11 +4,11 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TagBar from '../components/TagBar.vue'
 import { useLiveQuery } from '../composables/live-query'
-import { displayTitle, useWorkspace } from '../composables/workspace'
+import { displayTitle, NO_CHILDREN, useWorkspace } from '../composables/workspace'
 import PageEditor from '../editor/PageEditor.vue'
 import { registerPendingEdits } from '../pending-edits'
 
-const { store, workspaceId, documents, documentsById } = useWorkspace()
+const { store, workspaceId, documentsById, childrenByParent } = useWorkspace()
 const route = useRoute()
 const router = useRouter()
 
@@ -34,7 +34,7 @@ const ancestors = computed(() => {
   }
   return chain
 })
-const children = computed(() => documents.value.filter((d) => d.parentId === documentId))
+const children = computed(() => childrenByParent.value.get(documentId) ?? NO_CHILDREN)
 const backlinks = useLiveQuery(() => store.backlinks(documentId), [])
 const conflicts = useLiveQuery(
   async () =>

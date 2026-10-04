@@ -73,6 +73,11 @@ export type BlockState = Pick<Block, 'id' | 'type' | 'content' | 'attrs'>
 export interface SnapshotProgress {
   /** Ids of all entities the snapshot contained so far. */
   seen: Set<string>
+  /**
+   * Pages written so far, reported once at the end (or on abort) instead of after every page
+   * (#102): listeners such as the search index then rebuild once instead of 256 times.
+   */
+  touched: Map<string, Set<string>>
 }
 
 interface WriteContext {
@@ -1061,7 +1066,7 @@ export class LocalStore {
    */
   async beginResync(workspaceId: string): Promise<SnapshotProgress> {
     await this.db.meta.delete(LocalStore.cursorKey(workspaceId))
-    return { seen: new Set() }
+    return { seen: new Set(), touched: new Map() }
   }
 
   /**
@@ -1120,7 +1125,21 @@ export class LocalStore {
       await this.persistTouched(ctx)
     })
     for (const id of all) progress.seen.add(id)
-    this.notify(ctx)
+    this.collect(progress, ctx)
+  }
+
+  /** Reports the pages a re-sync wrote so far: at its end, or when it was interrupted. */
+  reportResync(progress: SnapshotProgress): void {
+    this.notify({ touched: progress.touched })
+    progress.touched = new Map()
+  }
+
+  private collect(progress: SnapshotProgress, ctx: WriteContext) {
+    for (const [workspaceId, ids] of ctx.touched) {
+      const set = progress.touched.get(workspaceId) ?? new Set<string>()
+      for (const id of ids) set.add(id)
+      progress.touched.set(workspaceId, set)
+    }
   }
 
   /**
@@ -1187,7 +1206,8 @@ export class LocalStore {
       await this.persistTouched(ctx)
       await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
     })
-    this.notify(ctx)
+    this.collect(progress, ctx)
+    this.reportResync(progress)
   }
 
   /** Full re-sync from a snapshot held completely in memory (one page). */

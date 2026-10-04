@@ -64,12 +64,17 @@ async function resyncWorkspace(
   const progress = await store.beginResync(workspaceId)
   let done = 0
   onProgress?.({ workspaceId, done, total })
-  for (;;) {
-    await store.applySnapshotPage(workspaceId, page, progress)
-    done += count(page)
-    onProgress?.({ workspaceId, done: Math.min(done, total), total })
-    if (!page.next) break
-    page = await fetchPage(workspaceId, page.next)
+  try {
+    for (;;) {
+      await store.applySnapshotPage(workspaceId, page, progress)
+      done += count(page)
+      onProgress?.({ workspaceId, done: Math.min(done, total), total })
+      if (!page.next) break
+      page = await fetchPage(workspaceId, page.next)
+    }
+  } catch (error) {
+    store.reportResync(progress)
+    throw error
   }
   await store.finishResync(workspaceId, cursor, progress)
 }

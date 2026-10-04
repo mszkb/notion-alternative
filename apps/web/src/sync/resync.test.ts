@@ -387,6 +387,28 @@ describe('paged re-sync (#97)', () => {
     await sameState(a, b)
   })
 
+  it('reports the written pages once at the end, or when interrupted (#102)', async () => {
+    const docs = await workspaceWithBlocks(3, 4)
+    const reports: string[][] = []
+    const stop = b.onChange((change) => reports.push(change.documentIds))
+    await syncWorkspace(b, WS, { pull: server.pull, snapshot: pagedSnapshot(4) })
+    expect(reports).toHaveLength(1)
+    expect([...reports[0]!].sort()).toEqual(docs.map((d) => d.id).sort())
+
+    reports.length = 0
+    const broken = pagedSnapshot(4, {
+      beforePage: async (n) => {
+        if (n === 2) throw new TypeError('Failed to fetch')
+      },
+    })
+    await expect(
+      syncWorkspace(b, WS, { pull: server.pull, snapshot: broken }, true),
+    ).rejects.toThrow()
+    expect(reports).toHaveLength(1)
+    expect(reports[0]!.length).toBeGreaterThan(0)
+    stop()
+  })
+
   it('keeps unsynced local edits across pages', async () => {
     const [doc] = await workspaceWithBlocks(2, 3)
     await syncWorkspace(b, WS, { pull: server.pull, snapshot: pagedSnapshot(100) })

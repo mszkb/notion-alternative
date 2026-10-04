@@ -6,7 +6,13 @@ import { api } from '../api'
 import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
 import { expanded } from '../composables/tree-state'
-import { displayTitle, workspaceKey } from '../composables/workspace'
+import {
+  displayTitle,
+  groupByParent,
+  NO_CHILDREN,
+  reuseUnchanged,
+  workspaceKey,
+} from '../composables/workspace'
 import { deviceStatus } from '../device'
 import { dismissIosHint, installApp, installPrompt, showIosHint } from '../install'
 import { refreshAttachmentUsage } from '../limits'
@@ -30,16 +36,22 @@ const router = useRouter()
 const store = requireStore()
 
 const workspaceId = computed(() => String(route.params.workspaceId))
-const documents = useLiveQuery<Document[]>(
+const loadedDocuments = useLiveQuery<Document[]>(
   () => store.listDocuments(workspaceId.value),
   [],
   workspaceId,
 )
+let previousDocuments: Document[] = []
+const documents = computed(() => {
+  previousDocuments = reuseUnchanged(previousDocuments, loadedDocuments.value)
+  return previousDocuments
+})
 const documentsById = computed(() => new Map(documents.value.map((d) => [d.id, d])))
-provide(workspaceKey, { store, workspaceId, documents, documentsById })
+const childrenByParent = computed(() => groupByParent(documents.value))
+provide(workspaceKey, { store, workspaceId, documents, documentsById, childrenByParent })
 
 const workspace = computed(() => workspaces.value.find((w) => w.id === workspaceId.value))
-const roots = computed(() => documents.value.filter((d) => d.parentId === null))
+const roots = computed(() => childrenByParent.value.get(null) ?? NO_CHILDREN)
 const favorites = computed(() =>
   documents.value
     .filter((d) => d.favorite)

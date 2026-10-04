@@ -216,6 +216,25 @@ describe('WorkspaceSearch', () => {
       expect(search.startedFrom).toBe('cache')
     })
 
+    it('rebuilds once and saves when many pages change at once (#102)', async () => {
+      search = new WorkspaceSearch(store, WS)
+      await search.start()
+      await search.saved()
+      const ids: string[] = []
+      for (let i = 0; i < 120; i++) {
+        ids.push((await store.createDocument({ workspaceId: WS, title: `Masse ${i}` })).id)
+      }
+      await search.flush()
+      await search.saved()
+      expect(search.index.size).toBe(120)
+      expect(hits('masse').length).toBe(20)
+      // The rebuild was saved: no marks left, the next start loads it.
+      expect((await store.searchDirtyMarks(WS)).size).toBe(0)
+      await restart()
+      expect(search.startedFrom).toBe('cache')
+      expect(search.index.size).toBe(120)
+    })
+
     it('marks pages written by a re-sync', async () => {
       search = new WorkspaceSearch(store, WS)
       await search.start()

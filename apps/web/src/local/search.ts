@@ -51,6 +51,11 @@ export class SearchIndex {
     return JSON.stringify(this.index)
   }
 
+  /** Takes over the content of another index (a rebuild done on the side). */
+  adopt(other: SearchIndex): void {
+    this.index = other.index
+  }
+
   get size(): number {
     return this.index.documentCount
   }
@@ -115,6 +120,10 @@ function entryFor(document: Document, blocks: Block[], tags: Tag[]): SearchEntry
 const REBUILD_SHARE = 0.25
 /** Save again at start once this many pages were changed since the saved index. */
 const RESAVE_AFTER = 100
+/** Pages added to MiniSearch between two yields to the UI while building (#102). */
+const BUILD_CHUNK = 250
+
+const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 /**
  * Keeps a SearchIndex in step with the local store for one workspace. The index is saved in
@@ -130,6 +139,7 @@ export class WorkspaceSearch {
   private pending = new Set<string>()
   private timer: ReturnType<typeof setTimeout> | null = null
   private saving: Promise<void> | null = null
+  private flushing: Promise<void> = Promise.resolve()
 
   constructor(
     private readonly store: LocalStore,
@@ -156,11 +166,29 @@ export class WorkspaceSearch {
       return
     }
     this.startedFrom = 'build'
-    for (const { document, blocks, tags } of await this.store.documentsWithContent(
-      this.workspaceId,
-    )) {
-      this.index.upsert(entryFor(document, blocks, tags))
+    await this.build(this.index)
+    this.saveLater(marks)
+  }
+
+  /** Builds from one bulk read, yielding to the UI between chunks (#102). */
+  private async build(target: SearchIndex): Promise<void> {
+    const entries = await this.store.documentsWithContent(this.workspaceId)
+    for (let i = 0; i < entries.length; i++) {
+      const { document, blocks, tags } = entries[i]!
+      target.upsert(entryFor(document, blocks, tags))
+      if ((i + 1) % BUILD_CHUNK === 0) await yieldToUi()
     }
+  }
+
+  /**
+   * Many changed pages at once (e.g. a re-sync, #102): one bulk rebuild beside the current
+   * index instead of thousands of single reads, then saved so the next start loads it.
+   */
+  private async rebuild(): Promise<void> {
+    const marks = await this.store.searchDirtyMarks(this.workspaceId)
+    const fresh = new SearchIndex()
+    await this.build(fresh)
+    this.index.adopt(fresh)
     this.saveLater(marks)
   }
 
@@ -170,12 +198,21 @@ export class WorkspaceSearch {
     if (this.timer) clearTimeout(this.timer)
   }
 
-  /** Applies queued updates immediately (used by tests and before searching). */
-  async flush(): Promise<void> {
+  /** Applies queued updates immediately (used by tests and before searching), one at a time. */
+  flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
+    this.flushing = this.flushing.then(() => this.applyPending())
+    return this.flushing
+  }
+
+  private async applyPending(): Promise<void> {
     const ids = [...this.pending]
     this.pending.clear()
+    if (ids.length > Math.max(RESAVE_AFTER, this.index.size * REBUILD_SHARE)) {
+      await this.rebuild()
+      return
+    }
     for (const id of ids) await this.reindex(id)
   }
 

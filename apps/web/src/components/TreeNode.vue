@@ -3,15 +3,15 @@ import type { Document } from '@notion-alt/shared'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { expanded } from '../composables/tree-state'
-import { displayTitle, useWorkspace } from '../composables/workspace'
+import { displayTitle, NO_CHILDREN, useWorkspace } from '../composables/workspace'
 
 const props = defineProps<{ document: Document; depth: number }>()
 
-const { store, workspaceId, documents } = useWorkspace()
+const { store, workspaceId, documents, childrenByParent } = useWorkspace()
 const route = useRoute()
 const router = useRouter()
 
-const children = computed(() => documents.value.filter((d) => d.parentId === props.document.id))
+const children = computed(() => childrenByParent.value.get(props.document.id) ?? NO_CHILDREN)
 const isOpen = computed(() => expanded.has(props.document.id))
 const isActive = computed(() => route.params.documentId === props.document.id)
 const dropZone = ref<'before' | 'inside' | 'after' | null>(null)
