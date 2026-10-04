@@ -72,6 +72,20 @@ Das Schreiben des Snapshots wird von IndexedDB bestimmt: `bulkPut` der Blöcke s
 - **Link-Index beim Re-Sync (Client):**
   - Pro Block lief ein eigener Schreibzugriff, obwohl der Index vorher geleert wurde. Jetzt ist es ein `bulkPut`.
   - Bei 50 000 Blöcken: 27 s statt 34 s.
+- **Commit pro Operation beim Push** ([#95](https://github.com/mszkb/notion-alternative/issues/95)):
+  - Jede Operation lief in einer eigenen Transaktion, mit einem fsync pro Commit. Kysely hat dazu jede Abfrage neu vorbereitet.
+  - Jetzt läuft ein Batch in einer Transaktion mit `SAVEPOINT` je Operation. Vorbereitete Statements werden pro SQL-Text wiederverwendet.
+  - Gemessen mit 2 000 Seiten / 100 000 Blöcken, sonst Standardparameter:
+
+    | | vorher | nachher |
+    | --- | --- | --- |
+    | Seed | 1 353 Ops/s | **3 921 Ops/s** |
+    | Push à 500, p50 / p95 | 364 / 417 ms | **130 / 155 ms** |
+    | 10 Geräte parallel: Push p50 / p95 / max | 167 / 336 / 1 105 ms | **64 / 131 / 363 ms** |
+    | Pull p95 bei 10 Geräten | 296 ms | 111 ms |
+    | Server-RSS beim Seed | – | 179 MB |
+
+  - Der Gewinn auf einem Raspberry Pi mit SD-Karte dürfte größer sein, weil dort ein fsync deutlich teurer ist als im Testcontainer.
 - **Snapshot in einer Antwort** (behoben mit [#97](https://github.com/mszkb/notion-alternative/issues/97)):
   - Server-RSS über 1 GB bei 500 000 Blöcken.
   - Jetzt seitenweise mit festem Cursor: RSS-Spitze 297 MB, im Rahmen des Normalbetriebs.

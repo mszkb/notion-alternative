@@ -741,80 +741,129 @@ export async function applyOperation(
   limits: AttachmentLimits = NO_LIMITS,
 ): Promise<ApplyResult> {
   try {
-    return await db.transaction().execute(async (trx) => {
-      if (!(await findWorkspaceForUser(trx, op.workspaceId, userId))) {
-        reject('workspace_not_found', 'Workspace not found')
-      }
-      if (!(await findActiveDevice(trx, userId, op.deviceId))) {
-        reject('device_not_active', 'Device is not registered or was removed')
-      }
-      const previous = await trx
-        .selectFrom('changes')
-        .select(['workspace_id', 'entity', 'entity_id', 'seq', 'revision'])
-        .where('op_id', '=', op.opId)
-        .executeTakeFirst()
-      if (previous) {
-        const same =
-          previous.workspace_id === op.workspaceId &&
-          previous.entity === op.entity &&
-          previous.entity_id === op.entityId
-        if (!same) reject('op_id_reused', 'Operation id was used for another change')
-        return { status: 'duplicate', revision: previous.revision, seq: previous.seq }
-      }
-      // Resending an operation that became a conflict returns that conflict again.
-      const known = await trx
-        .selectFrom('conflicts')
-        .select(['id', 'reason', 'entity_id', 'workspace_id'])
-        .where('op_id', '=', op.opId)
-        .executeTakeFirst()
-      if (known) {
-        if (known.workspace_id !== op.workspaceId || known.entity_id !== op.entityId) {
-          reject('op_id_reused', 'Operation id was used for another change')
-        }
-        const remote = await remoteState(trx, op)
-        return {
-          status: 'conflict',
-          currentRevision: Number(remote?.revision ?? 1),
-          reason: known.reason as ConflictReason,
-          conflictId: known.id,
-        }
-      }
-      if (op.entity === 'conflict' && op.kind !== 'update') {
-        reject('invalid_payload', 'Conflicts are created by the server and can only be resolved')
-      }
-      const invalid = validateOperationPayload(op.entity, op.kind, op.payload)
-      if (invalid) reject('invalid_payload', invalid)
-
-      const ctx: ApplyContext = { merged: false, limits }
-      let revision: number
-      try {
-        revision = await appliers[op.entity](trx, op, now, ctx)
-      } catch (error) {
-        if (error instanceof ConflictFound) return recordConflict(trx, op, error, now)
-        throw error
-      }
-      const indexed = await indexedDocument(trx, op)
-      if (indexed) await markForReindex(trx, indexed)
-      const seq = await nextSeq(trx, op.workspaceId)
-      await trx
-        .insertInto('changes')
-        .values({
-          workspace_id: op.workspaceId,
-          seq,
-          op_id: op.opId,
-          device_id: op.deviceId,
-          entity: op.entity,
-          entity_id: op.entityId,
-          kind: op.kind,
-          revision,
-          payload: JSON.stringify(op.payload),
-          applied_at: now,
-        })
-        .execute()
-      return { status: ctx.merged ? 'merged' : 'applied', revision, seq }
-    })
+    return await db.transaction().execute((trx) => applyIn(trx, userId, op, now, limits))
   } catch (error) {
     if (error instanceof Stop) return error.result
     throw error
   }
+}
+
+/**
+ * Applies a push batch in order, in one SQLite transaction with a savepoint per operation (#95):
+ * one commit (and fsync) per batch instead of per operation. A rejected operation only rolls
+ * back its savepoint. An unexpected error commits what was applied before it and is rethrown,
+ * as with one transaction per operation (T-OFF-05); a crash before the commit loses the whole
+ * unconfirmed batch, which the client resends idempotently (T-OFF-07).
+ */
+export async function applyBatch(
+  db: Db,
+  userId: string,
+  operations: Operation[],
+  now: string = new Date().toISOString(),
+  limits: AttachmentLimits = NO_LIMITS,
+): Promise<ApplyResult[]> {
+  const trx = await db.startTransaction().execute()
+  const results: ApplyResult[] = []
+  try {
+    for (const op of operations) {
+      const sp = await trx.savepoint('op').execute()
+      try {
+        results.push(await applyIn(sp, userId, op, now, limits))
+        await sp.releaseSavepoint('op').execute()
+      } catch (error) {
+        await sp.rollbackToSavepoint('op').execute()
+        await sp.releaseSavepoint('op').execute()
+        if (!(error instanceof Stop)) throw error
+        results.push(error.result)
+      }
+    }
+  } catch (error) {
+    // Keep what was applied before the error; if even that fails, nothing of the batch stays.
+    await trx
+      .commit()
+      .execute()
+      .catch(() => trx.rollback().execute())
+    throw error
+  }
+  await trx.commit().execute()
+  return results
+}
+
+async function applyIn(
+  trx: Db,
+  userId: string,
+  op: Operation,
+  now: string,
+  limits: AttachmentLimits,
+): Promise<ApplyResult> {
+  if (!(await findWorkspaceForUser(trx, op.workspaceId, userId))) {
+    reject('workspace_not_found', 'Workspace not found')
+  }
+  if (!(await findActiveDevice(trx, userId, op.deviceId))) {
+    reject('device_not_active', 'Device is not registered or was removed')
+  }
+  const previous = await trx
+    .selectFrom('changes')
+    .select(['workspace_id', 'entity', 'entity_id', 'seq', 'revision'])
+    .where('op_id', '=', op.opId)
+    .executeTakeFirst()
+  if (previous) {
+    const same =
+      previous.workspace_id === op.workspaceId &&
+      previous.entity === op.entity &&
+      previous.entity_id === op.entityId
+    if (!same) reject('op_id_reused', 'Operation id was used for another change')
+    return { status: 'duplicate', revision: previous.revision, seq: previous.seq }
+  }
+  // Resending an operation that became a conflict returns that conflict again.
+  const known = await trx
+    .selectFrom('conflicts')
+    .select(['id', 'reason', 'entity_id', 'workspace_id'])
+    .where('op_id', '=', op.opId)
+    .executeTakeFirst()
+  if (known) {
+    if (known.workspace_id !== op.workspaceId || known.entity_id !== op.entityId) {
+      reject('op_id_reused', 'Operation id was used for another change')
+    }
+    const remote = await remoteState(trx, op)
+    return {
+      status: 'conflict',
+      currentRevision: Number(remote?.revision ?? 1),
+      reason: known.reason as ConflictReason,
+      conflictId: known.id,
+    }
+  }
+  if (op.entity === 'conflict' && op.kind !== 'update') {
+    reject('invalid_payload', 'Conflicts are created by the server and can only be resolved')
+  }
+  const invalid = validateOperationPayload(op.entity, op.kind, op.payload)
+  if (invalid) reject('invalid_payload', invalid)
+
+  const ctx: ApplyContext = { merged: false, limits }
+  let revision: number
+  try {
+    revision = await appliers[op.entity](trx, op, now, ctx)
+  } catch (error) {
+    if (error instanceof ConflictFound) return recordConflict(trx, op, error, now)
+    throw error
+  }
+  const indexed = await indexedDocument(trx, op)
+  if (indexed) await markForReindex(trx, indexed)
+  const seq = await nextSeq(trx, op.workspaceId)
+  await trx
+    .insertInto('changes')
+    .values({
+      workspace_id: op.workspaceId,
+      seq,
+      op_id: op.opId,
+      device_id: op.deviceId,
+      entity: op.entity,
+      entity_id: op.entityId,
+      kind: op.kind,
+      revision,
+      payload: JSON.stringify(op.payload),
+      applied_at: now,
+    })
+    .execute()
+  return { status: ctx.merged ? 'merged' : 'applied', revision, seq }
 }
