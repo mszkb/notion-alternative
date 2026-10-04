@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
 import type { Operation } from '@notion-alt/shared'
 import { blocks, expect, PASSWORD, test } from './fixtures'
 
 // App-level load test (#96): first sync of a large workspace on a new device, cold start from
 // IndexedDB, opening a page with many blocks and typing in it. Skipped in normal runs; start
-// with LOAD_PAGES=1000 (see docs/testing/load-tests.md). Optional: LOAD_BIG_BLOCKS (2000), OUT.
+// with LOAD_PAGES=1000 (see docs/testing/load-tests.md). Optional: LOAD_BIG_BLOCKS (2000), OUT,
+// PROFILE_DIR (CPU profiles of cold start and opening the large page, for Chrome DevTools).
 const PAGES = Number(process.env.LOAD_PAGES ?? 0)
 const BIG_BLOCKS = Number(process.env.LOAD_BIG_BLOCKS ?? 2000)
 const BLOCKS_PER_PAGE = 50
@@ -61,21 +63,37 @@ test('#96: large workspace in the app', async ({ page }) => {
         sortKey: `a${String(i).padStart(6, '0')}`,
       })
     }
+    return id
   }
   const seedStart = Date.now()
-  await createPage(BIG_TITLE, BIG_BLOCKS, 'a0')
+  const bigId = await createPage(BIG_TITLE, BIG_BLOCKS, 'a0')
   for (let p = 0; p < PAGES; p++) {
     await createPage(`Seite ${p}`, BLOCKS_PER_PAGE, `b${String(p).padStart(6, '0')}`)
   }
   await flush()
   const seedMs = Date.now() - seedStart
 
-  const timed = async (fn: () => Promise<unknown>) => {
+  const profileDir = process.env.PROFILE_DIR
+  const timed = async (fn: () => Promise<unknown>, profile?: string) => {
+    const cdp = profile && profileDir ? await page.context().newCDPSession(page) : null
+    if (cdp) {
+      await cdp.send('Profiler.enable')
+      await cdp.send('Profiler.start')
+    }
     const started = Date.now()
     await fn()
-    return Date.now() - started
+    const ms = Date.now() - started
+    if (cdp) {
+      const { profile: data } = await cdp.send('Profiler.stop')
+      mkdirSync(profileDir!, { recursive: true })
+      writeFileSync(path.join(profileDir!, `${profile}.cpuprofile`), JSON.stringify(data))
+      await cdp.detach()
+    }
+    return ms
   }
-  const bigLink = page.getByRole('link', { name: BIG_TITLE, exact: true }).first()
+  // A CSS selector, not getByRole: computing roles over 10 000 tree nodes cost Playwright
+  // itself seconds and inflated the measurement.
+  const bigLink = page.locator(`.tree-node a[href$="/p/${bigId}"]`).first()
 
   // New device: login is shared, the app registers the device and re-syncs page by page.
   const firstSyncMs = await timed(async () => {
@@ -90,13 +108,13 @@ test('#96: large workspace in the app', async ({ page }) => {
   const coldStartMs = await timed(async () => {
     await page.reload()
     await expect(bigLink).toBeVisible({ timeout: 60_000 })
-  })
+  }, 'cold-start')
 
   // Opening the large page until its last block is rendered.
   const openBigPageMs = await timed(async () => {
     await bigLink.click()
     await expect(blocks(page)).toHaveCount(BIG_BLOCKS, { timeout: 60_000 })
-  })
+  }, 'open-big-page')
 
   // Typing at the end of the large page: time per key until the text is in the DOM.
   const last = blocks(page)
