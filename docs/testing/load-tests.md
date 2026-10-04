@@ -69,9 +69,15 @@ Gemessen am 2026-10-04 mit `e2e/load-app.spec.ts`, Chromium 141 headless, Vite-E
 | Seiten / Blöcke | Seed (Server) | Erstsync neues Gerät | Kaltstart bis Seitenbaum | Seite mit 2 000 Blöcken öffnen | Tippen am Ende dieser Seite |
 | --- | --- | --- | --- | --- | --- |
 | 1 000 / 52 000 | 12,8 s | 37 s | 0,84 s | 0,48 s | 5 ms pro Taste (70 Tasten) |
-| 10 000 / 502 000 | 2,7 min | **10,7 min** | **31,6 s** | 2,7 s | 21 ms pro Taste |
+| 10 000 / 502 000, vor #102 | 2,7 min | 10,7 min | 31,6 s | 2,7 s | 21 ms pro Taste |
+| 10 000 / 502 000, nach #102 | 2,8 min | **8,7 min** | **3,4 s** | 1,9 s | 14–20 ms pro Taste (zwei Läufe) |
 
-Bei 10 000 Seiten liegen Erstsync, Kaltstart, das Öffnen der großen Seite und das Tippen über den vorgeschlagenen Zielen. Der Erstsync der App braucht doppelt so lange wie der reine Re-Sync im Store (5,4 min). Der Kaltstart wurde direkt nach dem Erstsync gemessen. Ursachen sind noch nicht untersucht ([#102](https://github.com/mszkb/notion-alternative/issues/102)).
+Der Kaltstart wird direkt nach dem Erstsync gemessen. Der Test findet die große Seite per CSS-Selektor; `getByRole` über 10 000 Baumknoten hätte die Messung selbst verlängert. `PROFILE_DIR=…` schreibt CPU-Profile von Kaltstart und Öffnen der großen Seite, die sich in Chrome DevTools öffnen lassen.
+
+Behoben in [#102](https://github.com/mszkb/notion-alternative/issues/102):
+- **Seitenbaum quadratisch:** Jeder Baumknoten filterte die ganze Seitenliste nach seinen Kindern, bei jeder Änderung einer Seite. Bei 10 000 Seiten waren das 100 Mio. Vergleiche. Jetzt gruppiert die Seitenleiste einmal pro Änderung nach Eltern, und unveränderte Seitenobjekte bleiben erhalten. Vue rendert dann nur geänderte Knoten neu.
+- **Re-Sync:** Er meldet die geschriebenen Seiten einmal am Ende (oder beim Abbruch) statt nach jeder der 256 Snapshot-Seiten.
+- **Suchindex:** Sind viele Seiten auf einmal geändert, wird er neu aufgebaut statt Seite für Seite. Dabei gibt er dem UI zwischendurch Zeit und speichert das Ergebnis.
 
 **Noch nicht gemessen:** Smartphone (iOS/Android). Das geht nur manuell, siehe die Fragen in #96.
 
@@ -110,12 +116,11 @@ Bei 10 000 Seiten liegen Erstsync, Kaltstart, das Öffnen der großen Seite und 
 
 ## Grenzen und offene Engpässe
 
-- **App bei 10 000 Seiten ([#102](https://github.com/mszkb/notion-alternative/issues/102)):**
-  - Kaltstart 31,6 s bis zum Seitenbaum, Erstsync 10,7 min statt 5,4 min im Store, Seite mit 2 000 Blöcken öffnen 2,7 s, Tippen 21 ms pro Taste.
-  - Nicht untersucht. Vermutungen:
-    - Nach dem Re-Sync sind alle Seiten für den Suchindex markiert. Der Neuaufbau (10,5 s) und das Speichern (3,2 s) beim nächsten Start blockieren den Hauptthread.
-    - Die Seitenleiste lädt nach jeder Snapshot-Seite alle 10 000 Seiten neu.
-    - Der Suchindex indexiert nach jeder Snapshot-Seite die betroffenen Seiten einzeln.
+- **App bei 10 000 Seiten ([#102](https://github.com/mszkb/notion-alternative/issues/102)), nach den ersten Fixes:**
+  - Kaltstart 3,4 s (Ziel 2 s); vermutlich das Rendern von 10 000 Baumknoten, nicht profiliert.
+  - Seite mit 2 000 Blöcken öffnen: 1,9 s (Ziel 1 s).
+  - Tippen 14–20 ms pro Taste, um das Ziel von 16 ms.
+  - Erstsync 8,7 min statt 5,4 min im Store.
 - **Re-Sync großer Workspaces im Browser:**
   - Bei 500 000 Blöcken dauert das Schreiben in IndexedDB weiterhin rund 5 Minuten, jetzt aber in Abschnitten und mit Fortschrittsanzeige.
   - Die Daten gehen über das Netz einmal als Snapshot (168 MB) und danach als Pull ab dem Cursor.
