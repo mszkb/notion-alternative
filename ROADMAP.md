@@ -111,6 +111,17 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Re-Sync großer Workspaces seitenweise mit Fortschritt ([#97](https://github.com/mszkb/notion-alternative/issues/97))
 - [x] Lokaler Suchindex in IndexedDB gespeichert ([#98](https://github.com/mszkb/notion-alternative/issues/98))
 
+## Ohne Phase – Opt-in-Telemetrie
+
+Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alternative/issues/103)). Gebaut wird erst, wenn [ADR 0016](docs/adr/0016-opt-in-telemetry.md) angenommen ist.
+
+- [ ] ADR: Datenumfang, Empfänger, Einwilligung, Anonymisierung (Vorschlag liegt vor)
+- [ ] Datenkatalog und Datenschutzhinweis ([`docs/privacy/telemetry.md`](docs/privacy/telemetry.md), Entwurf)
+- [ ] Server: Opt-in des Betreibers, Aggregation, Versand, Vorschau
+- [ ] Client: Einwilligung pro Nutzer und lokale Zähler
+- [ ] Empfangsdienst (Collector)
+- [ ] Tests T-TEL-01…07
+
 ## Phase 8 – Collaboration
 
 - [ ] Sharing

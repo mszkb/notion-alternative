@@ -36,6 +36,7 @@ Noch offen in Phase 0: Zielgruppe schärfen.
 | `docs/process/` | Definition of Done, Aufgabenzerlegung für den Roadmap-Agenten |
 | `docs/testing/` | Testmatrix (offline/online, Mehrgeräte, Konflikte, Backups, Migrationen) |
 | `docs/user/` | Anleitungen für Nutzer (z. B. App installieren) |
+| `docs/privacy/` | Datenschutz, z. B. Datenkatalog der Opt-in-Telemetrie |
 
 Bei Fragen zu Scope oder Architektur zuerst dort nachlesen, nicht raten.
 

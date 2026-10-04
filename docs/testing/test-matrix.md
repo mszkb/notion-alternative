@@ -83,6 +83,20 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | T-LOAD-02 | Großer lokaler Bestand im Browser: Re-Sync, Seitenliste, Suchindex, Suche | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
 | T-LOAD-03 | Große Workspaces in der App: Erstsync, Kaltstart, Seite mit 2 000 Blöcken öffnen, Tippen | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
 
+## Telemetrie
+
+Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](https://github.com/mszkb/notion-alternative/issues/109)); noch nicht umgesetzt.
+
+| ID | Szenario | Erwartung | AC | Auto |
+| --- | --- | --- | --- | --- |
+| T-TEL-01 | Frische Instanz, ein Tag simulierte Laufzeit | Keine ausgehende Verbindung (abgefangenes `fetch`), kein Zähler in SQLite oder IndexedDB | – | ☐ |
+| T-TEL-02 | Betreiber stimmt zu, ein Nutzer nicht | Nur Betriebsdaten; keine Nutzungszähler dieses Kontos, weder gepuffert noch gesendet | – | ☐ |
+| T-TEL-03 | Payload mit Markern in Titel, Text, Suchbegriff, Dateiname, E-Mail | Nur Felder aus dem [Datenkatalog](../privacy/telemetry.md); kein Marker, keine UUID im Payload | – | ☐ |
+| T-TEL-04 | Vorschau und Versand | Vorschau gleich gesendetem Payload | – | ☐ |
+| T-TEL-05 | Widerruf durch Nutzer bzw. Betreiber | Lokale und serverseitige Puffer gelöscht | – | ☐ |
+| T-TEL-06 | Offline bzw. Empfänger nicht erreichbar | App und Sync unverändert; Puffer wachsen nicht über 7 Tage hinaus; keine Wiederholung | – | ☐ |
+| T-TEL-07 | Upgrade einer bestehenden Instanz | Telemetrie bleibt aus | – | ☐ |
+
 ⁸ Manuelle Prüfliste in [`docs/user/installation.md`](../user/installation.md#prüfliste-t-pwa-01-manuell). Automatisiert: Installierbarkeit in Chromium (`apps/web/e2e/pwa-offline.spec.ts`), Installations-Button und iOS-Hinweis (`apps/web/e2e/install.spec.ts`).
 
 ⁹ Dexie-Version 1 → 2 mit Inhalten und Queue-Eintrag in `apps/web/src/local/conflicts.test.ts`; die erhaltenen Operationen werden danach normal gepusht. Version 2 → 3 in `apps/web/src/local/attachments.test.ts`, Version 3 → 4 (gespeicherter Suchindex, #98) in `apps/web/src/local/search.test.ts`: Inhalte und Queue bleiben, der erste Start baut den Index auf und speichert ihn. Invalidierung des gespeicherten Index (Änderungen ohne laufende Suche, Änderung während des Speicherns, Re-Sync, beschädigter oder veralteter Cache) ebenda.
