@@ -10,6 +10,14 @@ Notion nervt mit seinem „always on“. Ja, es gibt eine Offline-Funktion, aber
 docker compose up -d --build
 ```
 
+Oder ganz ohne Docker, nur mit Node 22:
+
+```sh
+corepack enable && pnpm install && pnpm build
+pnpm start:backend    # Terminal 1
+pnpm start:frontend   # Terminal 2
+```
+
 Dann `http://127.0.0.1:8080` öffnen und das erste Konto anlegen. Details: [Deployment & Betrieb](docs/operations/deployment.md).
 
 ## Entwicklung

@@ -44,6 +44,7 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 - [x] Observability: strukturierte Logs, Healthchecks
 - [x] Observability: Metriken
 - [x] Login-Rate-Limiting, Passwort ändern
+- [x] Start ohne Docker: Frontend starten, Backend starten – [ADR 0016](docs/adr/0016-start-without-docker.md)
 
 Idee für später: Passwort-Reset durch den Admin per CLI im Backend-Container (kein Mailversand im MVP).
 

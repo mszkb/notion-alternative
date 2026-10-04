@@ -7,7 +7,8 @@ const booleanFromEnv = z
   .transform((value) => value === 'true' || value === '1')
 
 const envSchema = z.object({
-  HOST: z.string().default('0.0.0.0'),
+  // Loopback by default (ADR 0010); the Docker image sets 0.0.0.0 inside the container.
+  HOST: z.string().default('localhost'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   DATA_DIR: z.string().default('./data'),

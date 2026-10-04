@@ -34,7 +34,7 @@ Damit wird auch Teamarbeit einfach, ohne dass das Produkt groß wird: Ein Team b
 
 Minimalismus ist die Positionierung und muss aktiv verteidigt werden. Jede Änderung hält diese Grenzen ein; wer sie überschreiten will, braucht ein ADR mit Begründung.
 
-- **Betrieb:** höchstens 2 Container (`frontend`, `backend`), keine Pflicht-Dienste wie Redis, Postgres oder S3.
+- **Betrieb:** höchstens 2 Prozesse (`frontend`, `backend`), keine Pflicht-Dienste wie Redis, Postgres oder S3. Docker ist optional: Ohne Docker heißt es Frontend starten, Backend starten, loslegen ([ADR 0016](../adr/0016-start-without-docker.md)).
 - **Daten:** eine SQLite-Datei plus Dateiordner. Backup heißt kopieren, Restore heißt zurückkopieren.
 - **Setup:** vom `git clone` bzw. Compose-Datei bis zur ersten Seite in unter 5 Minuten, ohne Pflicht-Konfiguration.
 - **Bedienung:** Seiten, Blöcke, Tags, Favoriten, Backlinks, Suche, Anhänge, Verlauf. Ein neues Feature muss begründen, warum es den Kern nicht verwässert.

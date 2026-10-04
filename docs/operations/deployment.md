@@ -11,6 +11,44 @@ docker compose up -d --build
 
 Die App ist danach auf dem Host unter `http://127.0.0.1:8080` erreichbar. Das erste Konto kann sich direkt registrieren.
 
+### Start ohne Docker
+
+Voraussetzung: Node 22 ([ADR 0016](../adr/0016-start-without-docker.md)).
+
+```sh
+corepack enable
+pnpm install
+pnpm build
+pnpm start:backend    # API auf 127.0.0.1:3000, Daten in apps/server/data/
+pnpm start:frontend   # App auf http://127.0.0.1:8080
+```
+
+Das Frontend (`apps/web/serve.mjs`) übernimmt die Aufgaben des nginx-Containers: App ausliefern, `/api` ans Backend weiterleiten, Sicherheits-Header. Konfiguration über Umgebungsvariablen:
+
+| Variable | Prozess | Standard |
+| --- | --- | --- |
+| `HOST`, `PORT` | Backend | `localhost`, `3000` |
+| `DATA_DIR` und alle weiteren aus [Konfiguration](#konfiguration-env) | Backend | `./data` (relativ zu `apps/server`) |
+| `HOST`, `PORT` | Frontend | `127.0.0.1`, `8080` |
+| `BACKEND_URL` | Frontend | `http://127.0.0.1:3000` |
+
+Die `.env`-Datei liest nur Docker Compose; ohne Docker die Variablen direkt setzen, z. B. `DATA_DIR=/var/lib/notion-alt pnpm start:backend`. Für den Dauerbetrieb einen Prozessmanager verwenden, z. B. je eine systemd-Unit:
+
+```ini
+# /etc/systemd/system/notion-alt-backend.service
+[Service]
+WorkingDirectory=/opt/notion-alternative
+Environment=DATA_DIR=/var/lib/notion-alt
+ExecStart=/usr/bin/node apps/server/dist/index.js
+Restart=on-failure
+User=notion-alt
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Die Frontend-Unit analog mit `ExecStart=/usr/bin/node apps/web/serve.mjs`. Update: `git pull && pnpm install && pnpm build`, dann beide Prozesse neu starten; Migrationen laufen beim Backend-Start. Backup und Restore wie in [`backup.md`](backup.md), nur direkt statt über `docker compose exec`: `DATA_DIR=… node apps/server/dist/index.js backup` bzw. bei gestopptem Backend `DATA_DIR=… node apps/server/dist/index.js restore <backup-ordner>`.
+
 ## Container
 
 | Container | Aufgabe | Daten |
@@ -133,7 +171,7 @@ Nach einem Update zeigt die App „Eine neue Version ist verfügbar – Neu lade
 
 ## Healthchecks
 
-- `GET /healthz` – nginx läuft
+- `GET /healthz` – Frontend (nginx bzw. `serve.mjs`) läuft
 - `GET /api/health` – Backend-Prozess läuft (Liveness)
 - `GET /api/ready` – Datenbank erreichbar (Readiness)
 

@@ -87,6 +87,7 @@ Node 22 und pnpm (`corepack enable`).
 | `pnpm --filter @notion-alt/web test:e2e` | Playwright (startet Server + Vite selbst); lokal ohne Browser-Download: `PW_CHROMIUM_PATH=/pfad/zu/chromium` |
 | `pnpm build` | Server-Bundle und SPA bauen |
 | `docker compose up -d --build` | Produktiv-Stack auf `:8080` |
+| `pnpm start:backend` / `pnpm start:frontend` | Betrieb ohne Docker nach `pnpm build` (ADR 0016), App auf `:8080` |
 
 Struktur: `apps/server` (Fastify), `apps/web` (Vue SPA), `packages/shared` (zod-Schemas/Typen, Markdown-Inline-Parser, Sortierschlüssel für beide).
 
@@ -102,4 +103,5 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
 - Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.
 - Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`findWorkspaceForUser`).
+- `apps/web/serve.mjs` (Frontend ohne Docker) und `apps/web/nginx.conf` haben dieselben Regeln (Cache, Header, Proxy): eine ändern, beide ändern.
 - Betrieb, Konfiguration: `docs/operations/deployment.md`; Backup, Restore, Upgrade: `docs/operations/backup.md`. Ändern sich die Backup-Befehle, beides anpassen: Doku und `scripts/backup-restore-test.sh`.

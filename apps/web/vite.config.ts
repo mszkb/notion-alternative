@@ -21,6 +21,6 @@ export default defineConfig({
   preview: { headers: securityHeaders() },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'serve.test.mjs'],
   },
 })

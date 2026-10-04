@@ -21,3 +21,4 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0013](0013-version-history.md) | Versionsverlauf | Accepted |
 | [0014](0014-sharing-and-permissions.md) | Sharing, Berechtigungen und Kommentare | Proposed |
 | [0015](0015-realtime.md) | Echtzeit-Verteilung von Änderungen | Proposed |
+| [0016](0016-start-without-docker.md) | Start ohne Docker | Accepted |

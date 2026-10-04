@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @notion-alt/server --filter @notion-alt/web dev",
     "build": "pnpm -r build",
+    "start:backend": "pnpm --filter @notion-alt/server start",
+    "start:frontend": "pnpm --filter @notion-alt/web start",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
