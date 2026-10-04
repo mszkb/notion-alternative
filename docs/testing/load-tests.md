@@ -30,17 +30,19 @@ Die Zielgröße aus dem Issue ist `PAGES=10000`, also 10 000 Seiten und 500 000 
 
 ### Server, 10 000 Seiten / 500 000 Blöcke
 
+Gemessen am 2026-10-04 nach #95 (Push-Batch in einer Transaktion) und #97 (seitenweiser Snapshot).
+
 | Szenario | Ergebnis |
 | --- | --- |
-| Seed: 510 000 Operationen in 1 020 Pushes à 500 | **1 128 Ops/s** über den ganzen Lauf; Push à 500: p50 441 ms, p95 508 ms, max 576 ms; RSS ≤ 286 MB; Datenbank 707 MB (mit den Indizes aus `0011`) |
-| 10 Geräte gleichzeitig, je 20 × (Push von 50 Block-Updates + Delta-Pull) | 10 000 × `applied`, **keine Fehler, kein `SQLITE_BUSY`**; Push p50 207 ms, p95 415 ms, max 1,4 s; Pull p50 167 ms, p95 344 ms |
-| Vollständiger Pull (neues Gerät, 520 000 Changes, 1 000 pro Seite) | 3,8 s; 264 MB übertragen; Seite p50 6 ms, max 25 ms |
-| Snapshot (Re-Sync), seitenweise à 2 000 Entitäten (#97) | 3,2 s für 256 Seiten; Seite p50 11 ms, max 39 ms; 168 MB insgesamt; **RSS-Spitze 297 MB** (vorher eine Antwort mit 1,07 GB RSS) |
-| Änderungslog für den JSON-Export | 3,4 s für 520 000 Changes |
-| Serversuche (FTS5, 50 Anfragen) | p50 56 ms, p95 71 ms, max 84 ms |
+| Seed: 510 000 Operationen in 1 020 Pushes à 500 | **3 149 Ops/s** über den ganzen Lauf (vor #95: 1 128); Push à 500: p50 160 ms, p95 189 ms, max 248 ms; RSS ≤ 178 MB; Datenbank 716 MB (mit den Indizes aus `0011`) |
+| 10 Geräte gleichzeitig, je 20 × (Push von 50 Block-Updates + Delta-Pull) | 10 000 × `applied`, **keine Fehler, kein `SQLITE_BUSY`**; Push p50 72 ms, p95 153 ms, max 416 ms (vor #95: p95 415 ms, max 1,4 s); Pull p50 60 ms, p95 131 ms |
+| Vollständiger Pull (neues Gerät, 520 000 Changes, 1 000 pro Seite) | 3,2 s; 264 MB übertragen; Seite p50 5 ms, max 9 ms |
+| Snapshot (Re-Sync), seitenweise à 2 000 Entitäten (#97) | 2,8 s für 256 Seiten; Seite p50 10 ms, max 34 ms; 168 MB insgesamt; **RSS-Spitze 194 MB** (vor #97: eine Antwort mit 1,07 GB RSS) |
+| Änderungslog für den JSON-Export | 3,1 s für 520 000 Changes |
+| Serversuche (FTS5, 50 Anfragen) | p50 51 ms, p95 58 ms, max 68 ms |
 | Lange Seiten: 20 Seiten à 500 Blöcke | 1 199 Ops/s, Push à 500 p50 409 ms (vor #99: 325 Ops/s, p50 1,5 s) |
 
-**SQLite:** Der WAL-Modus und `busy_timeout = 5000` sind gesetzt (`apps/server/src/db/database.ts`). Parallele Pushes serialisieren sich an der Schreibsperre. Die Wartezeit erscheint als längere Antwortzeit (max 1,3 s bei 10 Geräten), nicht als Fehler.
+**SQLite:** Der WAL-Modus und `busy_timeout = 5000` sind gesetzt (`apps/server/src/db/database.ts`). Parallele Pushes serialisieren sich an der Schreibsperre. Die Wartezeit erscheint als längere Antwortzeit (max 416 ms bei 10 Geräten), nicht als Fehler.
 
 ### Client, Chromium
 
@@ -88,7 +90,7 @@ Das Schreiben des Snapshots wird von IndexedDB bestimmt: `bulkPut` der Blöcke s
   - Der Gewinn auf einem Raspberry Pi mit SD-Karte dürfte größer sein, weil dort ein fsync deutlich teurer ist als im Testcontainer.
 - **Snapshot in einer Antwort** (behoben mit [#97](https://github.com/mszkb/notion-alternative/issues/97)):
   - Server-RSS über 1 GB bei 500 000 Blöcken.
-  - Jetzt seitenweise mit festem Cursor: RSS-Spitze 297 MB, im Rahmen des Normalbetriebs.
+  - Jetzt seitenweise mit festem Cursor: RSS-Spitze 297 MB, nach #95 194 MB, im Rahmen des Normalbetriebs.
   - Ohne `limit` antwortet der Server weiter in einem Stück, für ältere, noch zwischengespeicherte Clients.
 - **Aufbau des lokalen Suchindex** (behoben mit [#98](https://github.com/mszkb/notion-alternative/issues/98)): erst Bulk-Lesen (25 s → 10,5 s), dann der gespeicherte Index (Start 0,46 s).
 
