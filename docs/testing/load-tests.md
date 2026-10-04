@@ -69,6 +69,9 @@ Gemessen am 2026-10-04 mit `e2e/load-app.spec.ts`, Chromium 141 headless, Vite-E
 | Seiten / Blöcke | Seed (Server) | Erstsync neues Gerät | Kaltstart bis Seitenbaum | Seite mit 2 000 Blöcken öffnen | Tippen am Ende dieser Seite |
 | --- | --- | --- | --- | --- | --- |
 | 1 000 / 52 000 | 12,8 s | 37 s | 0,84 s | 0,48 s | 5 ms pro Taste (70 Tasten) |
+| 10 000 / 502 000 | 2,7 min | **10,7 min** | **31,6 s** | 2,7 s | 21 ms pro Taste |
+
+Bei 10 000 Seiten liegen Erstsync, Kaltstart, das Öffnen der großen Seite und das Tippen über den vorgeschlagenen Zielen. Der Erstsync der App braucht doppelt so lange wie der reine Re-Sync im Store (5,4 min). Der Kaltstart wurde direkt nach dem Erstsync gemessen. Ursachen sind noch nicht untersucht ([#102](https://github.com/mszkb/notion-alternative/issues/102)).
 
 **Noch nicht gemessen:** Smartphone (iOS/Android). Das geht nur manuell, siehe die Fragen in #96.
 
@@ -107,6 +110,12 @@ Gemessen am 2026-10-04 mit `e2e/load-app.spec.ts`, Chromium 141 headless, Vite-E
 
 ## Grenzen und offene Engpässe
 
+- **App bei 10 000 Seiten ([#102](https://github.com/mszkb/notion-alternative/issues/102)):**
+  - Kaltstart 31,6 s bis zum Seitenbaum, Erstsync 10,7 min statt 5,4 min im Store, Seite mit 2 000 Blöcken öffnen 2,7 s, Tippen 21 ms pro Taste.
+  - Nicht untersucht. Vermutungen:
+    - Nach dem Re-Sync sind alle Seiten für den Suchindex markiert. Der Neuaufbau (10,5 s) und das Speichern (3,2 s) beim nächsten Start blockieren den Hauptthread.
+    - Die Seitenleiste lädt nach jeder Snapshot-Seite alle 10 000 Seiten neu.
+    - Der Suchindex indexiert nach jeder Snapshot-Seite die betroffenen Seiten einzeln.
 - **Re-Sync großer Workspaces im Browser:**
   - Bei 500 000 Blöcken dauert das Schreiben in IndexedDB weiterhin rund 5 Minuten, jetzt aber in Abschnitten und mit Fortschrittsanzeige.
   - Die Daten gehen über das Netz einmal als Snapshot (168 MB) und danach als Pull ab dem Cursor.
