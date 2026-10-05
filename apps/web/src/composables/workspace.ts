@@ -10,6 +10,10 @@ export interface WorkspaceContext {
   documentsById: Readonly<Ref<Map<string, Document>>>
   /** Active documents per parent id (null = top level), in tree order (#102). */
   childrenByParent: Readonly<Ref<Map<string | null, Document[]>>>
+  /** Id of the open page, if any. */
+  activeDocumentId: Readonly<Ref<string | null>>
+  /** Link to a page of this workspace, without resolving a route per tree node (#102). */
+  pageHref: (documentId: string) => string
 }
 
 /** Shared empty child list: a leaf's computed stays the same value across updates. */
