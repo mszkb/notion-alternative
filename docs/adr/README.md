@@ -22,3 +22,4 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0014](0014-sharing-and-permissions.md) | Sharing, Berechtigungen und Kommentare | Proposed |
 | [0015](0015-realtime.md) | Echtzeit-Verteilung von Änderungen | Proposed |
 | [0016](0016-opt-in-telemetry.md) | Opt-in-Telemetrie | Proposed |
+| [0017](0017-content-on-demand.md) | Seiteninhalte bei Bedarf laden | Proposed |
