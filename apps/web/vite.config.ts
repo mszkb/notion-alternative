@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
-import { serviceWorker } from './service-worker.plugin'
+import { serviceWorker } from './service-worker.plugin.ts'
 
 /** `add_header Name "value" always;` lines of the nginx snippet, for `vite preview`. */
 function securityHeaders(): Record<string, string> {
