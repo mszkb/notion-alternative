@@ -6,7 +6,13 @@ import { api } from '../api'
 import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
 import { expanded } from '../composables/tree-state'
-import { displayTitle, workspaceKey } from '../composables/workspace'
+import {
+  displayTitle,
+  groupByParent,
+  NO_CHILDREN,
+  reuseUnchanged,
+  workspaceKey,
+} from '../composables/workspace'
 import { deviceStatus } from '../device'
 import { dismissIosHint, installApp, installPrompt, showIosHint } from '../install'
 import { refreshAttachmentUsage } from '../limits'
@@ -30,16 +36,26 @@ const router = useRouter()
 const store = requireStore()
 
 const workspaceId = computed(() => String(route.params.workspaceId))
-const documents = useLiveQuery<Document[]>(
+const loadedDocuments = useLiveQuery<Document[]>(
   () => store.listDocuments(workspaceId.value),
   [],
   workspaceId,
 )
+let previousDocuments: Document[] = []
+const documents = computed(() => {
+  previousDocuments = reuseUnchanged(previousDocuments, loadedDocuments.value)
+  return previousDocuments
+})
 const documentsById = computed(() => new Map(documents.value.map((d) => [d.id, d])))
-provide(workspaceKey, { store, workspaceId, documents, documentsById })
+let previousGroups: Map<string | null, Document[]> | undefined
+const childrenByParent = computed(() => {
+  previousGroups = groupByParent(documents.value, previousGroups)
+  return previousGroups
+})
+provide(workspaceKey, { store, workspaceId, documents, documentsById, childrenByParent })
 
 const workspace = computed(() => workspaces.value.find((w) => w.id === workspaceId.value))
-const roots = computed(() => documents.value.filter((d) => d.parentId === null))
+const roots = computed(() => childrenByParent.value.get(null) ?? NO_CHILDREN)
 const favorites = computed(() =>
   documents.value
     .filter((d) => d.favorite)
@@ -180,6 +196,11 @@ const timeFormat = new Intl.DateTimeFormat('de-DE', { timeStyle: 'short' })
 /** One line telling whether local data is on the server. */
 const syncLabel = computed(() => {
   if (connection.value !== 'online') return null
+  const resync = syncState.value.resync
+  if (resync) {
+    const percent = resync.total ? Math.floor((resync.done / resync.total) * 100) : 0
+    return `Neu synchronisieren… ${percent} %`
+  }
   if (syncState.value.running) return 'Synchronisiert…'
   if (syncState.value.lastError) return 'Synchronisierung fehlgeschlagen – neuer Versuch folgt'
   if (pending.value > withIssues.value.length) return 'Änderungen ausstehend'

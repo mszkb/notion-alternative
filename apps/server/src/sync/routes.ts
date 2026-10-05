@@ -12,10 +12,10 @@ import { currentUser, requireAuth } from '../auth/plugin'
 import { touchDevice } from '../devices/repository'
 import { HttpError } from '../errors'
 import { parseInput } from '../validation'
-import { applyOperation } from './apply'
+import { applyBatch } from './apply'
 import { latestSeq, listChangesSince } from './changes'
 import { toChange } from './mapping'
-import { loadSnapshot } from './snapshot'
+import { loadSnapshot, loadSnapshotPage } from './snapshot'
 import { findWorkspaceForUser } from '../workspaces/repository'
 import { reindexMarked } from '../search/index'
 
@@ -29,19 +29,19 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
   )
 
   /**
-   * Applies operations strictly in the given order, each in its own transaction, so a failure
-   * in the middle keeps what was applied; resending is safe (`duplicate`, T-OFF-05).
+   * Applies operations strictly in the given order, one transaction per batch with a savepoint
+   * per operation (#95), so a failure in the middle keeps what was applied; resending is safe
+   * (`duplicate`, T-OFF-05).
    */
   app.post('/sync/push', async (request) => {
     const { operations } = parseInput(syncPushInputSchema, request.body)
     const user = currentUser(request)
     const now = new Date().toISOString()
-    const results: SyncPushResult[] = []
-    for (const op of operations) {
-      const result = await applyOperation(db, user.id, op, undefined, app.config.attachments)
+    const applied = await applyBatch(db, user.id, operations, now, app.config.attachments)
+    const results = applied.map((result, i) => {
       pushed.inc({ status: result.status })
-      results.push({ opId: op.opId, ...result } as SyncPushResult)
-    }
+      return { opId: operations[i]!.opId, ...result } as SyncPushResult
+    })
     // Search entries of the changed pages, once per page instead of per operation (#99).
     await reindexMarked(db)
     for (const deviceId of new Set(operations.map((op) => op.deviceId))) {
@@ -106,8 +106,13 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
 
   /** Full re-sync: complete workspace including tombstones and the matching cursor. */
   app.get('/sync/snapshot', async (request) => {
-    const { workspaceId } = parseInput(syncSnapshotQuerySchema, request.query)
-    const snapshot = await loadSnapshot(db, currentUser(request).id, workspaceId)
+    const { workspaceId, limit, after } = parseInput(syncSnapshotQuerySchema, request.query)
+    const userId = currentUser(request).id
+    // Paged (#97) unless an older client asks for everything at once.
+    const snapshot =
+      limit === undefined
+        ? await loadSnapshot(db, userId, workspaceId)
+        : await loadSnapshotPage(db, userId, workspaceId, limit, after)
     if (!snapshot) throw new HttpError(404, 'not_found', 'Workspace not found')
     return snapshot
   })

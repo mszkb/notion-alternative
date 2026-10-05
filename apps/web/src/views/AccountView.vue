@@ -269,6 +269,11 @@ async function changePassword() {
     >
       {{ resyncing ? 'Synchronisiert…' : 'Neu synchronisieren' }}
     </button>
+    <p v-if="syncState.resync" class="muted" data-testid="resync-progress">
+      <progress :value="syncState.resync.done" :max="syncState.resync.total || 1" />
+      {{ syncState.resync.done.toLocaleString('de-DE') }} von
+      {{ syncState.resync.total.toLocaleString('de-DE') }} Einträgen
+    </p>
     <p v-if="resyncDone" class="muted" data-testid="resync-done">Vollständig synchronisiert.</p>
     <p v-if="!resyncing && syncState.lastError" class="error">
       Synchronisierung fehlgeschlagen: {{ syncState.lastError }}

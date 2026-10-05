@@ -207,8 +207,26 @@ export interface SyncPullResponse {
   hasMore: boolean
 }
 
-/** `GET /api/sync/snapshot`: the complete workspace including tombstones (re-sync). */
-export const syncSnapshotQuerySchema = z.object({ workspaceId: z.uuid() })
+/** Largest page of a paged snapshot (#97). */
+export const SNAPSHOT_PAGE_MAX = 5000
+/** Page size the web app requests: small enough for a Raspberry Pi, large enough to be fast. */
+export const SNAPSHOT_PAGE_SIZE = 2000
+
+/**
+ * `GET /api/sync/snapshot`: the complete workspace including tombstones (re-sync). With `limit`
+ * it answers in pages of at most `limit` entities (#97, ADR 0002): the first page fixes the
+ * cursor, each further page is requested with the previous page's `next` as `after`. Without
+ * `limit` the whole workspace comes in one response (clients before #97).
+ */
+export const syncSnapshotQuerySchema = z.object({
+  workspaceId: z.uuid(),
+  limit: z.coerce.number().int().min(1).max(SNAPSHOT_PAGE_MAX).optional(),
+  // `<cursor>.<table>.<last id>`, opaque to the client.
+  after: z
+    .string()
+    .regex(/^\d+\.\d\.[0-9A-Fa-f-]{0,64}$/)
+    .optional(),
+})
 
 export interface SyncSnapshotResponse {
   documents: Document[]
@@ -217,8 +235,16 @@ export interface SyncSnapshotResponse {
   documentTags: DocumentTag[]
   attachments: Attachment[]
   conflicts: Conflict[]
-  /** Change-log position the snapshot reflects; pulling continues from here. */
+  /**
+   * Change-log position the snapshot reflects; pulling continues from here. Paged: fixed by the
+   * first page and repeated on every page. Later pages may contain newer states than the cursor;
+   * the pull from the cursor replays those changes on top, which converges (ADR 0002).
+   */
   cursor: number
+  /** Paged only: `after` for the next page, null on the last page. */
+  next?: string | null
+  /** Paged, first page only: number of entities in the whole snapshot (progress). */
+  total?: number
 }
 
 /** One version of a page: an editing session of one device (ADR 0013). */

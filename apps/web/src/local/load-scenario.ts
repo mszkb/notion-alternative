@@ -1,4 +1,10 @@
-import { newId, type Block, type Document, type SyncSnapshotResponse } from '@notion-alt/shared'
+import {
+  newId,
+  SNAPSHOT_PAGE_SIZE,
+  type Block,
+  type Document,
+  type SyncSnapshotResponse,
+} from '@notion-alt/shared'
 import { LocalDb } from './db'
 import { WorkspaceSearch } from './search'
 import { LocalStore } from './store'
@@ -84,13 +90,31 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
   const heapBefore = heapMb()
   const store = await LocalStore.open(new LocalDb(`load-${workspaceId}`))
 
-  const [, snapshotMs] = await time(() => store.replaceWithSnapshot(workspaceId, data))
+  // Re-sync page by page like the sync engine does (#97).
+  const pageMs: number[] = []
+  const [, snapshotMs] = await time(async () => {
+    const progress = await store.beginResync(workspaceId)
+    const entities = [...data.documents.map((d) => ['documents', d] as const)].concat(
+      data.blocks.map((b) => ['blocks', b] as const) as never,
+    )
+    for (let i = 0; i < entities.length; i += SNAPSHOT_PAGE_SIZE) {
+      const page: SyncSnapshotResponse = { ...data, documents: [], blocks: [] }
+      for (const [key, entity] of entities.slice(i, i + SNAPSHOT_PAGE_SIZE)) {
+        ;(page[key] as unknown[]).push(entity)
+      }
+      pageMs.push((await time(() => store.applySnapshotPage(workspaceId, page, progress)))[1])
+    }
+    await store.finishResync(workspaceId, data.cursor, progress)
+  })
+  pageMs.sort((a, b) => a - b)
   const [documents, listMs] = await time(() => store.listDocuments(workspaceId))
-  const [, pageMs] = await time(() => store.listBlocks(documents[pages - 1]!.id))
+  const [, blocksMs] = await time(() => store.listBlocks(documents[pages - 1]!.id))
 
   const [, contentReadMs] = await time(() => store.documentsWithContent(workspaceId))
   const search = new WorkspaceSearch(store, workspaceId)
   const [, indexMs] = await time(() => search.start())
+  // Saving the index (in idle time in the app); the next start loads it (#98).
+  const [, saveMs] = await time(() => search.saved())
   const heapAfterIndex = heapMb()
 
   const queries: number[] = []
@@ -100,17 +124,28 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
   }
   queries.sort((a, b) => a - b)
   search.stop()
+  // Next start, from the saved index (#98).
+  const cached = new WorkspaceSearch(store, workspaceId)
+  const [, cachedStartMs] = await time(() => cached.start())
+  cached.stop()
 
   return {
     config: { pages, blocksPerPage },
     documents: documents.length,
     indexed: search.index.size,
+    /** Paged re-sync: all pages plus the final step. */
     replaceWithSnapshotMs: snapshotMs,
+    snapshotPageMs: { p50: pageMs[Math.floor(pageMs.length / 2)], max: pageMs.at(-1) },
     listDocumentsMs: listMs,
-    listBlocksOnePageMs: pageMs,
+    listBlocksOnePageMs: blocksMs,
     /** Bulk read of all pages, blocks and tags (part of the index build). */
     contentReadMs,
     searchIndexBuildMs: indexMs,
+    /** Serializing and storing the built index (#98). */
+    searchIndexSaveMs: saveMs,
+    /** Start from the saved index; `startedFrom` must be `cache`. */
+    searchIndexCachedStartMs: cachedStartMs,
+    searchIndexStartedFrom: cached.startedFrom,
     searchQueryMs: { p50: queries[25], p95: queries[47], max: queries.at(-1) },
     heapMb: { before: heapBefore, afterIndex: heapAfterIndex },
   }

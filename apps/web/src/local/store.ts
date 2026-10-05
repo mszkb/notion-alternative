@@ -36,7 +36,8 @@ import {
   validateOperationPayload,
   type Workspace,
 } from '@notion-alt/shared'
-import type { AttachmentContent, LinkEntry, LocalDb, QueuedOperation } from './db'
+import type { Table } from 'dexie'
+import type { AttachmentContent, LinkEntry, LocalDb, QueuedOperation, SearchIndexCache } from './db'
 
 export class LocalStoreError extends Error {
   override name = 'LocalStoreError'
@@ -68,6 +69,17 @@ export type BlockPatch = Partial<Pick<Block, 'type' | 'content' | 'attrs'>>
 /** A block as seen by undo/redo: everything the user can change, in document order. */
 export type BlockState = Pick<Block, 'id' | 'type' | 'content' | 'attrs'>
 
+/** State of a running re-sync between snapshot pages (#97). */
+export interface SnapshotProgress {
+  /** Ids of all entities the snapshot contained so far. */
+  seen: Set<string>
+  /**
+   * Pages written so far, reported once at the end (or on abort) instead of after every page
+   * (#102): listeners such as the search index then rebuild once instead of 256 times.
+   */
+  touched: Map<string, Set<string>>
+}
+
 interface WriteContext {
   touched: Map<string, Set<string>>
 }
@@ -82,13 +94,14 @@ const CONTENT_TABLES = [
   'conflicts',
   'attachments',
   'attachmentContents',
+  'searchDirty',
 ]
 
 /** Backlink index entry of a block, or null when it links to no page. */
-function linkEntry(block: Block, document: Document): LinkEntry | null {
+function linkEntry(block: Block, workspaceId: string): LinkEntry | null {
   const targets = block.type === 'code' ? [] : extractPageLinks(block.content)
   if (targets.length === 0) return null
-  return { blockId: block.id, documentId: document.id, workspaceId: document.workspaceId, targets }
+  return { blockId: block.id, documentId: block.documentId, workspaceId, targets }
 }
 
 /**
@@ -127,7 +140,11 @@ export class LocalStore {
     const ctx: WriteContext = { touched: new Map() }
     // The scope must be an `async` function: Dexie only then tracks native awaits and keeps the
     // transaction alive across them (otherwise it may commit early).
-    const result = await this.db.transaction('rw', CONTENT_TABLES, async () => fn(ctx))
+    const result = await this.db.transaction('rw', CONTENT_TABLES, async () => {
+      const value = await fn(ctx)
+      await this.persistTouched(ctx)
+      return value
+    })
     this.notify(ctx)
     return result
   }
@@ -149,6 +166,14 @@ export class LocalStore {
       attachment: this.db.attachments,
       conflict: this.db.conflicts,
     } as const
+  }
+
+  /** Marks the touched pages for the saved search index, inside the write's transaction (#98). */
+  private async persistTouched(ctx: WriteContext) {
+    const rows = [...ctx.touched].flatMap(([workspaceId, ids]) =>
+      [...ids].map((documentId) => ({ documentId, workspaceId, mark: newId() })),
+    )
+    if (rows.length > 0) await this.db.searchDirty.bulkPut(rows)
   }
 
   private mark(ctx: WriteContext, workspaceId: string, documentId: string) {
@@ -491,7 +516,7 @@ export class LocalStore {
   }
 
   private async updateLinks(block: Block, document: Document) {
-    const entry = linkEntry(block, document)
+    const entry = linkEntry(block, document.workspaceId)
     if (entry) await this.db.links.put(entry)
     else await this.db.links.delete(block.id)
   }
@@ -771,6 +796,35 @@ export class LocalStore {
     })
   }
 
+  // ---------------------------------------------------------------- search index cache
+
+  /** Saved search index of a workspace (#98), if any. */
+  async searchIndexCache(workspaceId: string): Promise<SearchIndexCache | undefined> {
+    return this.db.searchIndexes.get(workspaceId)
+  }
+
+  /** Pages changed since the saved search index, with their current marks. */
+  async searchDirtyMarks(workspaceId: string): Promise<Map<string, string>> {
+    const rows = await this.db.searchDirty.where('workspaceId').equals(workspaceId).toArray()
+    return new Map(rows.map((row) => [row.documentId, row.mark]))
+  }
+
+  /**
+   * Saves the search index. `marks` were read before the index took in those pages; a mark
+   * that changed since stays, so the page is indexed again at the next start.
+   */
+  async saveSearchIndex(cache: SearchIndexCache, marks: Map<string, string>): Promise<void> {
+    await this.db.transaction('rw', ['searchIndexes', 'searchDirty'], async () => {
+      const current = await this.db.searchDirty.bulkGet([...marks.keys()])
+      await this.db.searchDirty.bulkDelete(
+        current
+          .filter((row) => row && marks.get(row.documentId) === row.mark)
+          .map((row) => row!.documentId),
+      )
+      await this.db.searchIndexes.put(cache)
+    })
+  }
+
   // ---------------------------------------------------------------- pull
 
   private static cursorKey(workspaceId: string): string {
@@ -793,6 +847,7 @@ export class LocalStore {
     const ctx: WriteContext = { touched: new Map() }
     await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
       for (const change of changes) await this.applyRemoteChange(ctx, workspaceId, change)
+      await this.persistTouched(ctx)
       await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
     })
     this.notify(ctx)
@@ -1002,19 +1057,174 @@ export class LocalStore {
     return copy.id
   }
 
+  // ---------------------------------------------------------------- re-sync
+
   /**
-   * Full re-sync: replaces the workspace's local state with the server snapshot and stores its
-   * cursor, in one transaction. Entities with queued operations keep their local state, so
-   * nothing unsynced is lost; their push takes the normal (conflict) path.
+   * Starts a full re-sync of a workspace (ADR 0002, #97): forgets the cursor first, so an
+   * interrupted re-sync (tab closed, network gone) repeats as a whole at the next sync instead of
+   * pulling on top of a half-written state. Local content stays readable throughout.
    */
+  async beginResync(workspaceId: string): Promise<SnapshotProgress> {
+    await this.db.meta.delete(LocalStore.cursorKey(workspaceId))
+    return { seen: new Set(), touched: new Map() }
+  }
+
+  /**
+   * Writes one snapshot page in its own transaction. Entities with queued operations keep their
+   * local state, so nothing unsynced is lost; their push takes the normal (conflict) path.
+   * Entities whose synced local state is newer than the server's (server restored from an older
+   * backup, #75) are kept as well and their changes queued again, never dropped.
+   */
+  async applySnapshotPage(
+    workspaceId: string,
+    page: SyncSnapshotResponse,
+    progress: SnapshotProgress,
+  ): Promise<void> {
+    const ctx: WriteContext = { touched: new Map() }
+    const all = [
+      page.documents,
+      page.blocks,
+      page.tags,
+      page.documentTags,
+      page.attachments,
+      page.conflicts,
+    ].flatMap((list) => list.map((entity) => entity.id))
+    await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
+      const pending = new Set(
+        (await this.db.operations.where('entityId').anyOf(all).toArray()).map((op) => op.entityId),
+      )
+      const resent = await this.resendNewer(workspaceId, pending, {
+        documents: page.documents,
+        blocks: page.blocks,
+        tags: page.tags,
+        documentTags: page.documentTags,
+      })
+      for (const id of resent) pending.add(id)
+      const keep = <T extends { id: string }>(items: T[]) => items.filter((i) => !pending.has(i.id))
+      await this.db.documents.bulkPut(keep(page.documents))
+      await this.db.blocks.bulkPut(keep(page.blocks))
+      await this.db.tags.bulkPut(keep(page.tags))
+      await this.db.documentTags.bulkPut(keep(page.documentTags))
+      await this.db.attachments.bulkPut(keep(page.attachments))
+      await this.db.conflicts.bulkPut(keep(page.conflicts))
+
+      // Derived link index of the written blocks, in bulk (per-block writes took minutes, #77).
+      const blocks = keep(page.blocks)
+      const links: LinkEntry[] = []
+      const unlinked: string[] = []
+      for (const block of blocks) {
+        const entry = block.deletedAt ? null : linkEntry(block, workspaceId)
+        if (entry) links.push(entry)
+        else unlinked.push(block.id)
+      }
+      await this.db.links.bulkDelete(unlinked)
+      await this.db.links.bulkPut(links)
+      for (const d of page.documents) this.mark(ctx, workspaceId, d.id)
+      for (const b of page.blocks) this.mark(ctx, workspaceId, b.documentId)
+      await this.persistTouched(ctx)
+    })
+    for (const id of all) progress.seen.add(id)
+    this.collect(progress, ctx)
+  }
+
+  /** Reports the pages a re-sync wrote so far: at its end, or when it was interrupted. */
+  reportResync(progress: SnapshotProgress): void {
+    this.notify({ touched: progress.touched })
+    progress.touched = new Map()
+  }
+
+  private collect(progress: SnapshotProgress, ctx: WriteContext) {
+    for (const [workspaceId, ids] of ctx.touched) {
+      const set = progress.touched.get(workspaceId) ?? new Set<string>()
+      for (const id of ids) set.add(id)
+      progress.touched.set(workspaceId, set)
+    }
+  }
+
+  /**
+   * Ends a re-sync after the last page: local entities the snapshot did not contain are removed,
+   * unless they have queued operations or are active content the server lost (restored from an
+   * older backup, #75), which is queued for creation again. Only then the cursor is stored.
+   */
+  async finishResync(
+    workspaceId: string,
+    cursor: number,
+    progress: SnapshotProgress,
+  ): Promise<void> {
+    const ctx: WriteContext = { touched: new Map() }
+    const { seen } = progress
+    await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
+      const documentIds = (await this.db.documents
+        .where('workspaceId')
+        .equals(workspaceId)
+        .primaryKeys()) as string[]
+      // Only keys are read for the whole workspace; full rows only for what the snapshot lacked.
+      const unseen = async <T>(
+        table: { bulkGet(keys: string[]): Promise<(T | undefined)[]> },
+        keys: string[],
+      ) =>
+        (await table.bulkGet(keys.filter((id) => !seen.has(id)))).filter(
+          (row): row is T => row !== undefined,
+        )
+      const byWorkspace = (table: Table) =>
+        table.where('workspaceId').equals(workspaceId).primaryKeys() as Promise<string[]>
+      const local = {
+        documents: await unseen(this.db.documents, documentIds),
+        blocks: await unseen(
+          this.db.blocks,
+          (await this.db.blocks.where('documentId').anyOf(documentIds).primaryKeys()) as string[],
+        ),
+        tags: await unseen(this.db.tags, await byWorkspace(this.db.tags)),
+        documentTags: await unseen(this.db.documentTags, await byWorkspace(this.db.documentTags)),
+        attachments: await unseen(this.db.attachments, await byWorkspace(this.db.attachments)),
+        conflicts: await unseen(this.db.conflicts, await byWorkspace(this.db.conflicts)),
+      }
+      const pending = new Set(
+        (
+          await this.db.operations
+            .where('entityId')
+            .anyOf(Object.values(local).flatMap((rows) => rows.map((row) => row.id)))
+            .toArray()
+        ).map((op) => op.entityId),
+      )
+      // The server never forgets an entity (tombstones stay), unless it was restored from an
+      // older backup. Content this device knows but the server lost is sent again, not dropped.
+      const lost = await this.recreateLost(workspaceId, pending, local)
+      for (const id of lost) pending.add(id)
+      const drop = <T extends { id: string }>(items: T[]) =>
+        items.filter((i) => !pending.has(i.id)).map((i) => i.id)
+      await this.db.documents.bulkDelete(drop(local.documents))
+      await this.db.blocks.bulkDelete(drop(local.blocks))
+      await this.db.links.bulkDelete(drop(local.blocks))
+      await this.db.tags.bulkDelete(drop(local.tags))
+      await this.db.documentTags.bulkDelete(drop(local.documentTags))
+      await this.db.attachments.bulkDelete(drop(local.attachments))
+      await this.db.conflicts.bulkDelete(drop(local.conflicts))
+      for (const d of local.documents) this.mark(ctx, workspaceId, d.id)
+      for (const b of local.blocks) this.mark(ctx, workspaceId, b.documentId)
+      await this.persistTouched(ctx)
+      await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
+    })
+    this.collect(progress, ctx)
+    this.reportResync(progress)
+  }
+
+  /**
+   * Full re-sync from a snapshot held completely in memory, as one page (tests, imports). Not
+   * atomic: like the paged re-sync, an interruption leaves no cursor and the next sync repeats.
+   */
+  async replaceWithSnapshot(workspaceId: string, snapshot: SyncSnapshotResponse): Promise<void> {
+    const progress = await this.beginResync(workspaceId)
+    await this.applySnapshotPage(workspaceId, snapshot, progress)
+    await this.finishResync(workspaceId, snapshot.cursor, progress)
+  }
+
   /**
    * After a server restore from an older backup (#75): queues `create` operations for active
-   * local entities the snapshot lacks (parents first) and update/move/delete operations for
-   * entities whose synced local state is newer than the snapshot's. Returns the ids kept local.
+   * local entities the snapshot lacks (parents first). Returns the ids kept local.
    */
   private async recreateLost(
     workspaceId: string,
-    snapshot: SyncSnapshotResponse,
     pending: Set<string>,
     local: {
       documents: Document[]
@@ -1024,17 +1234,8 @@ export class LocalStore {
       attachments: Attachment[]
     },
   ): Promise<Set<string>> {
-    const known = new Set(
-      [
-        snapshot.documents,
-        snapshot.blocks,
-        snapshot.tags,
-        snapshot.documentTags,
-        snapshot.attachments,
-      ].flatMap((list) => list.map((entity) => entity.id)),
-    )
     const lost = <T extends { id: string; deletedAt: string | null }>(items: T[]) =>
-      items.filter((i) => !i.deletedAt && !known.has(i.id) && !pending.has(i.id))
+      items.filter((i) => !i.deletedAt && !pending.has(i.id))
     const recreated = new Set<string>()
     const create = async (
       entity: Exclude<OperationEntity, 'conflict'>,
@@ -1094,20 +1295,32 @@ export class LocalStore {
       })
     }
 
-    // Entities the restored server has in an older synced state: send the newer local state
-    // against the server's revision (merged there, or a visible conflict), never drop it.
-    const remote = new Map<string, { revision: number | null; deletedAt: string | null }>(
-      [...snapshot.documents, ...snapshot.blocks, ...snapshot.tags, ...snapshot.documentTags].map(
-        (e) => [e.id, e],
-      ),
-    )
-    const newer = <T extends { id: string; revision: number | null }>(items: T[]) =>
-      items.flatMap((item) => {
-        const server = remote.get(item.id)
-        if (pending.has(item.id) || !server || server.revision === null) return []
+    return recreated
+  }
+
+  /**
+   * Entities the restored server (#75) has in an older synced state than this device: sends the
+   * newer local state against the server's revision (merged there, or a visible conflict) and
+   * keeps it locally, never drops it. Returns the ids kept local.
+   */
+  private async resendNewer(
+    workspaceId: string,
+    pending: Set<string>,
+    snapshot: Pick<SyncSnapshotResponse, 'documents' | 'blocks' | 'tags' | 'documentTags'>,
+  ): Promise<Set<string>> {
+    const recreated = new Set<string>()
+    const ids = (items: { id: string }[]) => items.map((e) => e.id)
+    const newer = <T extends { id: string; revision: number | null }>(
+      rows: (T | undefined)[],
+      remote: T[],
+    ) => {
+      return remote.flatMap((server, i) => {
+        const item = rows[i]
+        if (!item || pending.has(item.id) || server.revision === null) return []
         if (item.revision === null || item.revision <= server.revision) return []
         return [{ item, server: server as T & { deletedAt: string | null } }]
       })
+    }
     const resend = async (
       entity: Exclude<OperationEntity, 'conflict' | 'attachment'>,
       id: string,
@@ -1122,7 +1335,10 @@ export class LocalStore {
       recreated.add(id)
     }
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b)
-    for (const { item: d, server } of newer(local.documents)) {
+    for (const { item: d, server } of newer(
+      await this.db.documents.bulkGet(ids(snapshot.documents)),
+      snapshot.documents,
+    )) {
       const ops: [OperationKind, Record<string, unknown>][] = []
       if (d.deletedAt) {
         if (!server.deletedAt) ops.push(['delete', {}])
@@ -1137,7 +1353,10 @@ export class LocalStore {
       }
       await resend('document', d.id, server.revision!, ops)
     }
-    for (const { item: b, server } of newer(local.blocks)) {
+    for (const { item: b, server } of newer(
+      await this.db.blocks.bulkGet(ids(snapshot.blocks)),
+      snapshot.blocks,
+    )) {
       const ops: [OperationKind, Record<string, unknown>][] = []
       if (b.deletedAt) {
         if (!server.deletedAt) ops.push(['delete', {}])
@@ -1151,7 +1370,10 @@ export class LocalStore {
       }
       await resend('block', b.id, server.revision!, ops)
     }
-    for (const { item: t, server } of newer(local.tags)) {
+    for (const { item: t, server } of newer(
+      await this.db.tags.bulkGet(ids(snapshot.tags)),
+      snapshot.tags,
+    )) {
       await resend(
         'tag',
         t.id,
@@ -1159,7 +1381,10 @@ export class LocalStore {
         t.deletedAt && !server.deletedAt ? [['delete', {}]] : [],
       )
     }
-    for (const { item: a, server } of newer(local.documentTags)) {
+    for (const { item: a, server } of newer(
+      await this.db.documentTags.bulkGet(ids(snapshot.documentTags)),
+      snapshot.documentTags,
+    )) {
       await resend(
         'document_tag',
         a.id,
@@ -1168,80 +1393,6 @@ export class LocalStore {
       )
     }
     return recreated
-  }
-
-  async replaceWithSnapshot(workspaceId: string, snapshot: SyncSnapshotResponse): Promise<void> {
-    const ctx: WriteContext = { touched: new Map() }
-    await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
-      const pending = new Set((await this.db.operations.toArray()).map((op) => op.entityId))
-      const keep = <T extends { id: string }>(items: T[]) => items.filter((i) => !pending.has(i.id))
-      const drop = <T extends { id: string }>(items: T[]) =>
-        items.filter((i) => !pending.has(i.id)).map((i) => i.id)
-
-      const localDocuments = await this.db.documents
-        .where('workspaceId')
-        .equals(workspaceId)
-        .toArray()
-      const documentIds = [...new Set([...localDocuments, ...snapshot.documents].map((d) => d.id))]
-      const localBlocks = await this.db.blocks.where('documentId').anyOf(documentIds).toArray()
-      const localTags = await this.db.tags.where('workspaceId').equals(workspaceId).toArray()
-      const localAssignments = await this.db.documentTags
-        .where('workspaceId')
-        .equals(workspaceId)
-        .toArray()
-      const localAttachments = await this.db.attachments
-        .where('workspaceId')
-        .equals(workspaceId)
-        .toArray()
-      // The server never forgets an entity (tombstones stay), unless it was restored from an
-      // older backup. Content this device knows but the server lost is sent again, not dropped.
-      const lost = await this.recreateLost(workspaceId, snapshot, pending, {
-        documents: localDocuments,
-        blocks: localBlocks,
-        tags: localTags,
-        documentTags: localAssignments,
-        attachments: localAttachments,
-      })
-      for (const id of lost) pending.add(id)
-      await this.db.documents.bulkDelete(drop(localDocuments))
-      await this.db.blocks.bulkDelete(drop(localBlocks))
-      await this.db.tags.bulkDelete(drop(localTags))
-      await this.db.documentTags.bulkDelete(drop(localAssignments))
-      await this.db.documents.bulkPut(keep(snapshot.documents))
-      await this.db.blocks.bulkPut(keep(snapshot.blocks))
-      await this.db.tags.bulkPut(keep(snapshot.tags))
-      await this.db.documentTags.bulkPut(keep(snapshot.documentTags))
-      await this.db.attachments.bulkDelete(drop(localAttachments))
-      await this.db.attachments.bulkPut(keep(snapshot.attachments))
-      await this.db.conflicts.bulkDelete(
-        drop(await this.db.conflicts.where('workspaceId').equals(workspaceId).toArray()),
-      )
-      await this.db.conflicts.bulkPut(keep(snapshot.conflicts))
-
-      // Derived link index: rebuild for the whole workspace.
-      await this.db.links.where('workspaceId').equals(workspaceId).delete()
-      const documents = new Map(
-        (await this.db.documents.where('workspaceId').equals(workspaceId).toArray()).map((d) => [
-          d.id,
-          d,
-        ]),
-      )
-      // One bulk write: per-block writes made a re-sync of a large workspace take minutes (#77).
-      const links: LinkEntry[] = []
-      for (const block of await this.db.blocks
-        .where('documentId')
-        .anyOf([...documents.keys()])
-        .toArray()) {
-        const entry = block.deletedAt ? null : linkEntry(block, documents.get(block.documentId)!)
-        if (entry) links.push(entry)
-      }
-      await this.db.links.bulkPut(links)
-      for (const id of new Set([...documentIds, ...documents.keys()])) {
-        this.mark(ctx, workspaceId, id)
-      }
-      await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: snapshot.cursor })
-    })
-    this.notify(ctx)
   }
 
   private async applyRemoteChange(ctx: WriteContext, workspaceId: string, change: Change) {

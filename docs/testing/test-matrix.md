@@ -34,10 +34,11 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | T-MD-04 | Gleiche Operation doppelt gesendet | Nur einmal angewendet (Idempotenz) | AC-02 | ☑ ³ |
 | T-MD-05 | Gerät lange offline, Log kompaktiert | Vollständiger Re-Sync | AC-02 | ☑ ⁵ |
 | T-MD-06 | Drei Geräte, zufällige Offline-Änderungen, verlorene Antworten | Alle konvergieren zum Serverstand, keine Änderung geht still verloren | AC-02, AC-03 | ☑ ¹¹ |
+| T-MD-07 | Re-Sync seitenweise: Abbruch mitten im Re-Sync, Neustart; Entitäten entstehen oder werden gelöscht zwischen zwei Seiten | Kein Cursor nach Abbruch, Re-Sync wird vollständig wiederholt; Endstand gleich dem Serverstand, nichts doppelt oder fälschlich neu angelegt | AC-02 | ☑ ⁵ |
 
 ⁴ Pull (`GET /api/sync/pull`): zwei lokale Datenbanken gegen ein Änderungslog in `apps/web/src/sync/pull.test.ts` (inkl. Teilbaum, Tags, Backlinks, Abbruch mitten im Paging), zwei Browser-Kontexte in `apps/web/e2e/multi-device.spec.ts`.
 
-⁵ Kompaktierung per `compactChangeLog` simuliert: Server (`apps/server/test/sync-snapshot.test.ts`, `410`), Client (`apps/web/src/sync/resync.test.ts`, ungesyncte Änderungen bleiben erhalten); manueller Re-Sync in `apps/web/e2e/sync.spec.ts`.
+⁵ Kompaktierung per `compactChangeLog` simuliert: Server (`apps/server/test/sync-snapshot.test.ts`, `410`), Client (`apps/web/src/sync/resync.test.ts`, ungesyncte Änderungen bleiben erhalten); manueller Re-Sync in `apps/web/e2e/sync.spec.ts`. Seitenweiser Snapshot (T-MD-07, #97): Server (`apps/server/test/sync-snapshot.test.ts`: jede Entität genau einmal bei verschiedenen Seitengrößen, fester Cursor, Entitäten zwischen zwei Seiten über den Pull), Client (`apps/web/src/sync/resync.test.ts`: Fortschritt, Cursor erst am Ende, Abbruch und Neustart, Entstehen/Löschen zwischen Seiten, ungesyncte und vom Server verlorene Inhalte über Seiten hinweg).
 
 ⁷ `apps/server/test/sync-conflicts.test.ts` (Merge verschiedener Blöcke und Felder, Konfliktobjekt, Idempotenz, Auflösung), `apps/web/src/local/conflicts.test.ts` (Pull, Auflösen offline, Wiederherstellen), `apps/web/e2e/multi-device.spec.ts` (Konfliktansicht mit manuellem Zusammenführen, Löschkonflikt wiederherstellen).
 
@@ -80,10 +81,25 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | --- | --- | --- | --- | --- |
 | T-LOAD-01 | Großer Workspace (10 000 Seiten, 500 000 Blöcke): Seed, 10 Geräte parallel, Pull, Snapshot, Export-Log, Suche | Keine Fehler/`SQLITE_BUSY`, Zeiten und RAM innerhalb der Zielwerte | – | ☑ ¹⁷ |
 | T-LOAD-02 | Großer lokaler Bestand im Browser: Re-Sync, Seitenliste, Suchindex, Suche | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
+| T-LOAD-03 | Große Workspaces in der App: Erstsync, Kaltstart, Seite mit 2 000 Blöcken öffnen, Tippen | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
+
+## Telemetrie
+
+Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](https://github.com/mszkb/notion-alternative/issues/109)); noch nicht umgesetzt.
+
+| ID | Szenario | Erwartung | AC | Auto |
+| --- | --- | --- | --- | --- |
+| T-TEL-01 | Frische Instanz, ein Tag simulierte Laufzeit | Keine ausgehende Verbindung (abgefangenes `fetch`), kein Zähler in SQLite oder IndexedDB | – | ☐ |
+| T-TEL-02 | Betreiber stimmt zu, ein Nutzer nicht | Nur Betriebsdaten; keine Nutzungszähler dieses Kontos, weder gepuffert noch gesendet | – | ☐ |
+| T-TEL-03 | Payload mit Markern in Titel, Text, Suchbegriff, Dateiname, E-Mail | Nur Felder aus dem [Datenkatalog](../privacy/telemetry.md); kein Marker, keine UUID im Payload | – | ☐ |
+| T-TEL-04 | Vorschau und Versand | Vorschau gleich gesendetem Payload | – | ☐ |
+| T-TEL-05 | Widerruf durch Nutzer bzw. Betreiber | Lokale und serverseitige Puffer gelöscht | – | ☐ |
+| T-TEL-06 | Offline bzw. Empfänger nicht erreichbar | App und Sync unverändert; Puffer wachsen nicht über 7 Tage hinaus; keine Wiederholung | – | ☐ |
+| T-TEL-07 | Upgrade einer bestehenden Instanz | Telemetrie bleibt aus | – | ☐ |
 
 ⁸ Manuelle Prüfliste in [`docs/user/installation.md`](../user/installation.md#prüfliste-t-pwa-01-manuell). Automatisiert: Installierbarkeit in Chromium (`apps/web/e2e/pwa-offline.spec.ts`), Installations-Button und iOS-Hinweis (`apps/web/e2e/install.spec.ts`).
 
-⁹ Dexie-Version 1 → 2 mit Inhalten und Queue-Eintrag in `apps/web/src/local/conflicts.test.ts`; die erhaltenen Operationen werden danach normal gepusht.
+⁹ Dexie-Version 1 → 2 mit Inhalten und Queue-Eintrag in `apps/web/src/local/conflicts.test.ts`; die erhaltenen Operationen werden danach normal gepusht. Version 2 → 3 in `apps/web/src/local/attachments.test.ts`, Version 3 → 4 (gespeicherter Suchindex, #98) in `apps/web/src/local/search.test.ts`: Inhalte und Queue bleiben, der erste Start baut den Index auf und speichert ihn. Invalidierung des gespeicherten Index (Änderungen ohne laufende Suche, Änderung während des Speicherns, Re-Sync, beschädigter oder veralteter Cache) ebenda.
 
 ¹⁰ Server: `apps/server/test/push.test.ts` (Versand an andere Geräte, entschlüsselter Payload ohne Inhalte, Bündelung, `410`, Allowlist), `push-crypto.test.ts` (RFC-8291-Testvektor, VAPID). Client: `apps/web/e2e/pwa-push.spec.ts` – Push-Event per Chromium-CDP an den Service Worker löst den Sync aus; Aktivieren nur per Klick (Browser-Subscription in Headless-Chromium gestubbt). Zustellung über einen echten Push-Dienst manuell prüfen.
 
@@ -99,4 +115,4 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 
 ¹⁶ `apps/server/test/backup.test.ts`: Backup im laufenden Betrieb (SQLite-Online-Backup + Anhänge, Manifest mit SHA-256), Restore in leere Umgebung (Inhalte, Anhang-Bytes, Konten, Sitzungen, VAPID-Schlüssel), Schutz vor Überschreiben, beschädigtes Backup; T-MIG-01: Backup einer Datenbank auf Migrationsstand `0007_push` wird restauriert und auf den aktuellen Stand migriert. `scripts/backup-restore-test.sh` (CI-Job `backup`): derselbe Ablauf mit den Befehlen aus [`backup.md`](../operations/backup.md) gegen den Docker-Compose-Stack (`MODE=local` ohne Docker). Clients nach Restore: `apps/web/src/sync/restore.integration.test.ts` (echter Server, Restore eines älteren Backups: Gerät synchronisiert neu und sendet Fehlendes und neuere Stände erneut), `apps/web/src/sync/resync.test.ts`.
 
-¹⁷ Manuell gestartete Skripte, nicht in CI (Laufzeit): `scripts/loadtest/server-load.mjs`, `apps/web/scripts/loadtest-browser.mjs` (Szenario `apps/web/src/local/load-scenario.ts`). Ergebnisse, Zielwerte und offene Grenzen: [`load-tests.md`](load-tests.md). Regression des Suchindex-Engpasses: `apps/server/test/migrations.test.ts` (0009), Link-Index nach Re-Sync: `apps/web/src/sync/resync.test.ts`.
+¹⁷ Manuell gestartete Skripte, nicht in CI (Laufzeit): `scripts/loadtest/server-load.mjs`, `apps/web/scripts/loadtest-browser.mjs` (Szenario `apps/web/src/local/load-scenario.ts`), `apps/web/e2e/load-app.spec.ts` (T-LOAD-03, nur mit `LOAD_PAGES`). Ergebnisse, Zielwerte und offene Grenzen: [`load-tests.md`](load-tests.md). Regression des Suchindex-Engpasses: `apps/server/test/migrations.test.ts` (0009), Link-Index nach Re-Sync: `apps/web/src/sync/resync.test.ts`.

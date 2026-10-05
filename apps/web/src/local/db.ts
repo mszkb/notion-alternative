@@ -47,6 +47,26 @@ export interface LinkEntry {
   targets: string[]
 }
 
+/** Saved local search index of a workspace (#98), MiniSearch `toJSON`. Not synchronised. */
+export interface SearchIndexCache {
+  workspaceId: string
+  /** Index options version; a cache of another format is rebuilt. */
+  format: number
+  documentCount: number
+  json: string
+}
+
+/**
+ * A page whose search entry may be outdated in the saved index (#98). Written in the same
+ * transaction as the content change; `mark` changes with every write, so saving the index only
+ * removes marks that did not change while it was built.
+ */
+export interface SearchDirtyEntry {
+  documentId: string
+  workspaceId: string
+  mark: string
+}
+
 /** Local database of one user account (ADR 0009). */
 export class LocalDb extends Dexie {
   meta!: EntityTable<MetaEntry, 'key'>
@@ -60,6 +80,8 @@ export class LocalDb extends Dexie {
   conflicts!: EntityTable<Conflict, 'id'>
   attachments!: EntityTable<Attachment, 'id'>
   attachmentContents!: EntityTable<AttachmentContent, 'id'>
+  searchIndexes!: EntityTable<SearchIndexCache, 'workspaceId'>
+  searchDirty!: EntityTable<SearchDirtyEntry, 'documentId'>
 
   constructor(name: string) {
     super(name)
@@ -82,6 +104,12 @@ export class LocalDb extends Dexie {
     this.version(3).stores({
       attachments: 'id, workspaceId, documentId',
       attachmentContents: 'id',
+    })
+    // #98: saved search index per workspace and the pages changed since. New tables; without a
+    // saved index the first start builds it as before.
+    this.version(4).stores({
+      searchIndexes: 'workspaceId',
+      searchDirty: 'documentId, workspaceId',
     })
   }
 }

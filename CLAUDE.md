@@ -36,6 +36,7 @@ Noch offen in Phase 0: Zielgruppe schärfen.
 | `docs/process/` | Definition of Done, Aufgabenzerlegung für den Roadmap-Agenten |
 | `docs/testing/` | Testmatrix (offline/online, Mehrgeräte, Konflikte, Backups, Migrationen) |
 | `docs/user/` | Anleitungen für Nutzer (z. B. App installieren) |
+| `docs/privacy/` | Datenschutz, z. B. Datenkatalog der Opt-in-Telemetrie |
 
 Bei Fragen zu Scope oder Architektur zuerst dort nachlesen, nicht raten.
 
@@ -101,5 +102,8 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Service Worker: `apps/web/src/sw/service-worker.ts`, gebaut von `apps/web/service-worker.plugin.ts` (Precache-Liste, Version) – nur im Production-Build. PWA-E2E (`e2e/pwa-*.spec.ts`) laufen im Playwright-Projekt `pwa` gegen `vite preview`. Komponenten mit entprellten Eingaben melden ihren Flush über `registerPendingEdits` an (Update-Neuladen).
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
 - Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.
+- Sync-Push: `applyBatch` (`apps/server/src/sync/apply.ts`) wendet einen Batch in einer Transaktion mit einem Savepoint je Operation an (#95). Prüfungen pro Operation gehören in `applyIn`; ein `reject` verwirft nur den Savepoint dieser Operation.
+- Neue synchronisierte Entitätstabelle: in `TABLES` von `apps/server/src/sync/snapshot.ts` aufnehmen (seitenweiser Snapshot, #97) und per Migration einen Index auf `(workspace_id, id)` anlegen.
+- Lokaler Suchindex (#98): Neue Schreibpfade im `LocalStore` melden betroffene Seiten mit `mark()`. Sonst bleibt der gespeicherte Index veraltet. Ändern sich die Felder oder Optionen des Index, `SEARCH_INDEX_FORMAT` erhöhen.
 - Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`findWorkspaceForUser`).
 - Betrieb, Konfiguration: `docs/operations/deployment.md`; Backup, Restore, Upgrade: `docs/operations/backup.md`. Ändern sich die Backup-Befehle, beides anpassen: Doku und `scripts/backup-restore-test.sh`.

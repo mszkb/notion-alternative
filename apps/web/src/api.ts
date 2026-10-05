@@ -22,6 +22,7 @@ import type {
   User,
   Workspace,
 } from '@notion-alt/shared'
+import { SNAPSHOT_PAGE_SIZE } from '@notion-alt/shared'
 
 export class ApiError extends Error {
   constructor(
@@ -90,10 +91,14 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
           limit: String(limit),
         })}`,
       ),
-    syncSnapshot: (workspaceId: string) =>
+    syncSnapshot: (workspaceId: string, after?: string) =>
       request<SyncSnapshotResponse>(
         'GET',
-        `/sync/snapshot?${new URLSearchParams({ workspaceId })}`,
+        `/sync/snapshot?${new URLSearchParams({
+          workspaceId,
+          limit: String(SNAPSHOT_PAGE_SIZE),
+          ...(after === undefined ? {} : { after }),
+        })}`,
       ),
     search: (workspaceId: string, q: string) =>
       request<{ hits: ServerSearchHit[] }>(

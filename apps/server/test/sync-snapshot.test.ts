@@ -108,6 +108,129 @@ describe('GET /api/sync/snapshot', () => {
   })
 })
 
+describe('paged snapshot (#97)', () => {
+  type Page = {
+    documents: { id: string; deletedAt: string | null }[]
+    blocks: { id: string }[]
+    tags: { id: string }[]
+    documentTags: { id: string }[]
+    attachments: { id: string }[]
+    conflicts: { id: string }[]
+    cursor: number
+    next: string | null
+    total?: number
+  }
+  const page = async (limit: number, after?: string): Promise<Page> => {
+    const query = new URLSearchParams({ workspaceId, limit: String(limit) })
+    if (after !== undefined) query.set('after', after)
+    const response = await get(`/api/sync/snapshot?${query}`)
+    expect(response.statusCode).toBe(200)
+    return response.json()
+  }
+  const ids = (p: Page) =>
+    [p.documents, p.tags, p.documentTags, p.attachments, p.blocks, p.conflicts].flatMap((list) =>
+      list.map((e) => e.id),
+    )
+  const block = (documentId: string, sortKey = 'a0') =>
+    op('block', 'create', randomUUID(), {
+      documentId,
+      type: 'paragraph',
+      content: 'x',
+      attrs: {},
+      sortKey,
+    })
+
+  it('walks every entity exactly once with a fixed cursor', async () => {
+    const doc = randomUUID()
+    const tag = randomUUID()
+    await push(
+      op('document', 'create', doc, docPayload),
+      op('document', 'create', randomUUID(), docPayload),
+      op('tag', 'create', tag, { name: 'Projekt' }),
+      op('document_tag', 'create', randomUUID(), { documentId: doc, tagId: tag }),
+      ...Array.from({ length: 7 }, () => block(doc)),
+    )
+    const whole = (await get(`/api/sync/snapshot?workspaceId=${workspaceId}`)).json()
+
+    for (const limit of [1, 2, 3, 4, 11, 100]) {
+      const first = await page(limit)
+      expect(first.total).toBe(11)
+      expect(first.cursor).toBe(whole.cursor)
+      const seen = ids(first)
+      let current = first
+      while (current.next) {
+        current = await page(limit, current.next)
+        expect(current.cursor).toBe(first.cursor)
+        expect(current.total).toBeUndefined()
+        expect(ids(current).length).toBeLessThanOrEqual(limit)
+        seen.push(...ids(current))
+      }
+      expect(seen).toHaveLength(11)
+      expect(new Set(seen)).toEqual(new Set(ids(whole)))
+    }
+  })
+
+  it('covers entities created or deleted between two pages through the pull', async () => {
+    const doc = randomUUID()
+    await push(
+      op('document', 'create', doc, docPayload),
+      ...Array.from({ length: 4 }, () => block(doc)),
+    )
+    const first = await page(2)
+    // Between the pages: a new page (behind the walk), a new block and a deleted page.
+    const late = randomUUID()
+    const [created] = await push(op('document', 'create', late, docPayload), block(doc, 'b0'))
+    await push(op('document', 'delete', doc, {}, 1))
+    const seen = ids(first)
+    let current = first
+    while (current.next) {
+      current = await page(2, current.next)
+      seen.push(...ids(current))
+    }
+    // The walk passed the page before it was deleted and the new page behind it.
+    expect(first.documents.find((d) => d.id === doc)?.deletedAt).toBeNull()
+    expect(seen).not.toContain(late)
+    // Whatever the pages missed or showed in an older state is in the log after the cursor.
+    const pulled = (
+      await get(`/api/sync/pull?workspaceId=${workspaceId}&cursor=${first.cursor}`)
+    ).json()
+    const later = pulled.changes.map((c: { entityId: string; kind: string }) => [
+      c.entityId,
+      c.kind,
+    ])
+    expect(later).toContainEqual([late, 'create'])
+    expect(later).toContainEqual([doc, 'delete'])
+    expect(pulled.changes[0].seq).toBe(created.seq)
+  })
+
+  it('pages within one table resume after the last id', async () => {
+    const doc = randomUUID()
+    await push(op('document', 'create', doc, docPayload), block(doc), block(doc), block(doc))
+    const first = await page(2)
+    expect(first.documents).toHaveLength(1)
+    expect(first.blocks).toHaveLength(1)
+    expect(first.next).toMatch(new RegExp(`^${first.cursor}\\.4\\.`))
+    const second = await page(2, first.next!)
+    expect(second.blocks).toHaveLength(2)
+    expect(second.blocks[0]!.id > first.blocks[0]!.id).toBe(true)
+  })
+
+  it('rejects malformed tokens and foreign workspaces', async () => {
+    const bad = await get(`/api/sync/snapshot?workspaceId=${workspaceId}&limit=10&after=x`)
+    expect(bad.statusCode).toBe(400)
+    const outOfRange = await get(
+      `/api/sync/snapshot?workspaceId=${workspaceId}&limit=10&after=1.9.`,
+    )
+    expect(outOfRange.statusCode).toBe(404)
+    expect((await get(`/api/sync/snapshot?workspaceId=${workspaceId}&limit=0`)).statusCode).toBe(
+      400,
+    )
+    const { cookie: bob } = await register(app, 'bob@example.com')
+    const foreign = await get(`/api/sync/snapshot?workspaceId=${workspaceId}&limit=10`, bob)
+    expect(foreign.statusCode).toBe(404)
+  })
+})
+
 describe('compacted change log', () => {
   it('answers 410 for cursors older than the log and keeps numbering', async () => {
     await push(...['a', 'b', 'c'].map(() => op('document', 'create', randomUUID(), docPayload)))

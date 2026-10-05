@@ -15,5 +15,29 @@ export function createDatabase(databasePath: string): Db {
   sqlite.pragma('journal_mode = WAL')
   sqlite.pragma('foreign_keys = ON')
   sqlite.pragma('busy_timeout = 5000')
+  cacheStatements(sqlite)
   return new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
+}
+
+/**
+ * Kysely prepares every query anew, which was about 40 % of the SQL time of a push (#95). Reuses
+ * the prepared statement per SQL text. Bounded (least recently used out), because queries with variable `in` lists produce
+ * many distinct texts. Safe because Kysely only runs statements to completion (`all`/`run`) on
+ * this single connection; nothing here streams (`iterate`) or switches statement modes.
+ */
+function cacheStatements(sqlite: SQLite.Database, limit = 500): void {
+  const prepare = sqlite.prepare.bind(sqlite)
+  const cache = new Map<string, SQLite.Statement>()
+  sqlite.prepare = ((source: string) => {
+    let statement = cache.get(source)
+    if (statement) {
+      // Least recently used first: the Map keeps insertion order.
+      cache.delete(source)
+    } else {
+      if (cache.size >= limit) cache.delete(cache.keys().next().value!)
+      statement = prepare(source)
+    }
+    cache.set(source, statement)
+    return statement
+  }) as typeof sqlite.prepare
 }

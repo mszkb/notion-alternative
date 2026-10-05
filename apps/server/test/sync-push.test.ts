@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type { Operation } from '@notion-alt/shared'
+import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { Db } from '../src/db/database'
 import { createTestApp, register, type TestApp } from './helpers'
 
 let app: TestApp
+let db: Db
 let cookie: string
 let workspaceId: string
 let deviceId: string
@@ -23,7 +26,7 @@ async function signUp(email: string) {
 }
 
 beforeEach(async () => {
-  ;({ app } = await createTestApp({ allowRegistration: true, metricsEnabled: true }))
+  ;({ app, db } = await createTestApp({ allowRegistration: true, metricsEnabled: true }))
   ;({ cookie, workspaceId, deviceId } = await signUp('alice@example.com'))
 })
 afterEach(() => app.close())
@@ -87,6 +90,43 @@ describe('POST /api/sync/push', () => {
       'applied',
     ])
     expect(again[2].seq).toBe(3)
+  })
+
+  it('#95: one transaction per batch; a rejected operation only rolls back itself', async () => {
+    const doc = createDoc()
+    const foreign = { ...createDoc(), workspaceId: randomUUID() }
+    const later = createDoc()
+    const results = (await push([doc, foreign, later])).json().results
+    expect(results.map((r: { status: string }) => r.status)).toEqual([
+      'applied',
+      'rejected',
+      'applied',
+    ])
+    expect(results.map((r: { seq?: number }) => r.seq)).toEqual([1, undefined, 2])
+  })
+
+  it('T-OFF-05: an unexpected error mid-batch keeps what was applied before it', async () => {
+    await sql`create trigger boom before insert on documents when new.title = 'boom'
+      begin select raise(abort, 'boom'); end`.execute(db)
+    const first = createDoc()
+    const broken = { ...createDoc(), payload: { ...createDoc().payload, title: 'boom' } }
+    const after = createDoc()
+    expect((await push([first, broken, after])).statusCode).toBe(500)
+    const ids = (await db.selectFrom('documents').select('id').execute()).map((r) => r.id)
+    expect(ids).toContain(first.entityId)
+    expect(ids).not.toContain(broken.entityId)
+    expect(ids).not.toContain(after.entityId)
+    const log = await db.selectFrom('changes').select('op_id').execute()
+    expect(log.map((r) => r.op_id)).toEqual([first.opId])
+
+    // The client resends the batch: the first is a duplicate, the rest applies once fixed.
+    await sql`drop trigger boom`.execute(db)
+    const again = (await push([first, broken, after])).json().results
+    expect(again.map((r: { status: string }) => r.status)).toEqual([
+      'duplicate',
+      'applied',
+      'applied',
+    ])
   })
 
   it('rejects foreign workspaces per operation and requires a session', async () => {

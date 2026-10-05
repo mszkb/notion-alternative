@@ -45,6 +45,12 @@
 - **MiniSearch** (klein, typisiert, Präfix- und Fuzzy-Suche, inkrementelles Hinzufügen/Entfernen).
 - Index im Speicher pro Workspace; Felder: Titel (höher gewichtet), Klartext der Blöcke (Markdown-Syntax entfernt), Tag-Namen. Aufbau beim Öffnen des Workspaces, danach inkrementell bei jeder Änderung.
 - Eine persistente Ablage des Index ist für große Workspaces später möglich (`MiniSearch.toJSON`), im Prototyp nicht nötig.
+- *Ergänzung (#98, 2026-10-03):* Der Index wird in IndexedDB gespeichert (Dexie-Version 4, Tabelle `searchIndexes`, `toJSON`/`loadJSON`).
+  - **Invalidierung:** Jeder Schreibvorgang des `LocalStore` markiert die betroffenen Seiten in derselben Transaktion in `searchDirty`. Das gilt auch für Pull und Re-Sync. Jede Markierung trägt einen eigenen Wert (`mark`).
+  - **Start:** Der Index wird geladen, danach werden nur die markierten Seiten neu indexiert.
+  - **Speichern:** Nur Markierungen, die sich seit dem Lesen nicht geändert haben, werden entfernt. Eine Änderung während des Speicherns wird daher beim nächsten Start nachgezogen. Andere Tabs sind eingeschlossen.
+  - Gespeichert wird nach einem vollständigen Aufbau und wenn beim Start viele Seiten markiert waren, nie während des Bearbeitens: Das Serialisieren eines großen Index blockiert die Seite.
+  - **Neuaufbau:** bei mehr als einem Viertel geänderter Seiten (z. B. nach einem Re-Sync), bei anderem Format (`SEARCH_INDEX_FORMAT`) und bei beschädigtem Cache.
 
 ### Offline-Zugang und Anmeldung
 
