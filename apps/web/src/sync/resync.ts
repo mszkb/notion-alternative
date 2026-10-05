@@ -49,7 +49,7 @@ export async function syncWorkspace(
 
 /**
  * Full re-sync page by page (#97): every page is written in its own transaction, the cursor of
- * the first page is stored only after the last one. The next page is fetched during the write. An interrupted re-sync leaves no cursor, so
+ * the first page is stored only after the last one. An interrupted re-sync leaves no cursor, so
  * the next sync starts it again.
  */
 async function resyncWorkspace(
@@ -66,16 +66,11 @@ async function resyncWorkspace(
   onProgress?.({ workspaceId, done, total })
   try {
     for (;;) {
-      // Fetch the next page while this one is written (#102): network and server time overlap
-      // with IndexedDB instead of adding up over hundreds of pages.
-      const next = page.next ? fetchPage(workspaceId, page.next) : null
-      // A failed fetch is rethrown below; if the write fails first, it must not go unhandled.
-      next?.catch(() => undefined)
       await store.applySnapshotPage(workspaceId, page, progress)
       done += count(page)
       onProgress?.({ workspaceId, done: Math.min(done, total), total })
-      if (!next) break
-      page = await next
+      if (!page.next) break
+      page = await fetchPage(workspaceId, page.next)
     }
     await store.finishResync(workspaceId, cursor, progress)
   } catch (error) {

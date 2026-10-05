@@ -409,41 +409,6 @@ describe('paged re-sync (#97)', () => {
     stop()
   })
 
-  it('fetches the next page while the current one is written (#102)', async () => {
-    await workspaceWithBlocks(3, 4)
-    const events: string[] = []
-    const snapshot = pagedSnapshot(5)
-    let fetched = 0
-    const apply = b.applySnapshotPage.bind(b)
-    let written = 0
-    b.applySnapshotPage = async (...args) => {
-      const n = written++
-      events.push(`write ${n}`)
-      await apply(...args)
-      events.push(`written ${n}`)
-    }
-    const transport = {
-      pull: server.pull,
-      snapshot: async (ws: string, after?: string) => {
-        events.push(`fetch ${fetched++}`)
-        return snapshot(ws, after)
-      },
-    }
-    await syncWorkspace(b, WS, transport)
-    expect(events).toEqual([
-      'fetch 0',
-      'fetch 1',
-      'write 0',
-      'written 0',
-      'fetch 2',
-      'write 1',
-      'written 1',
-      'write 2',
-      'written 2',
-    ])
-    await sameState(a, b)
-  })
-
   it('keeps unsynced local edits across pages', async () => {
     const [doc] = await workspaceWithBlocks(2, 3)
     await syncWorkspace(b, WS, { pull: server.pull, snapshot: pagedSnapshot(100) })
