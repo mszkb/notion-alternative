@@ -8,8 +8,8 @@ import { blocks, expect, PASSWORD, test } from './fixtures'
 // IndexedDB, opening a page with many blocks and typing in it. Skipped in normal runs; start
 // with LOAD_PAGES=1000 (see docs/testing/load-tests.md). Optional: LOAD_BIG_BLOCKS (2000),
 // LOAD_BLOCKS_PER_PAGE (50; fewer makes seed and sync fast when only the page tree matters), OUT,
-// PROFILE_DIR (CPU profiles of cold start, opening the large page and typing, for Chrome
-// DevTools).
+// PROFILE_DIR (CPU profiles of first sync, cold start, opening the large page and typing, for
+// Chrome DevTools).
 const PAGES = Number(process.env.LOAD_PAGES ?? 0)
 const BIG_BLOCKS = Number(process.env.LOAD_BIG_BLOCKS ?? 2000)
 const BLOCKS_PER_PAGE = Number(process.env.LOAD_BLOCKS_PER_PAGE ?? 50)
@@ -118,7 +118,7 @@ test('#96: large workspace in the app', async ({ page }) => {
     await expect(page.getByTestId('sync-status')).toHaveText(/^Synchronisiert um/, {
       timeout: 25 * 60_000,
     })
-  })
+  }, 'first-sync')
   await expect(bigLink).toBeVisible()
 
   // Cold start from IndexedDB until the page tree shows the pages.
