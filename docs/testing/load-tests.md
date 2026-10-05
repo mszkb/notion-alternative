@@ -97,7 +97,7 @@ Behoben in [#102](https://github.com/mszkb/notion-alternative/issues/102):
 - **Re-Sync:** Er meldet die geschriebenen Seiten einmal am Ende (oder beim Abbruch) statt nach jeder der 256 Snapshot-Seiten.
 - **Suchindex:** Sind viele Seiten auf einmal geändert, wird er neu aufgebaut statt Seite für Seite. Dabei gibt er dem UI zwischendurch Zeit und speichert das Ergebnis.
 
-**Noch nicht gemessen:** Smartphone (iOS/Android). Das geht nur manuell, siehe die Fragen in #96.
+**Noch nicht gemessen:** Smartphone (iOS/Android). Abgestimmt in [#96](https://github.com/mszkb/notion-alternative/issues/96): eine einmalige manuelle Messung mit 1 000 Seiten, gegen dieselben Zielwerte.
 
 ## Gefundene und behobene Engpässe
 
@@ -148,7 +148,7 @@ Behoben in [#102](https://github.com/mszkb/notion-alternative/issues/102):
   - Die Zeit geht fast vollständig in das Lesen der 10 000 Seiten aus IndexedDB.
   - Die Seitenleiste lädt die Liste bei jeder Änderung an einer Seite neu (`useLiveQuery`). Für noch größere Workspaces bräuchte es eine Liste im Speicher, die nur geänderte Seiten nachlädt.
 
-Zielwerte für den Referenz-Host (VPS oder Raspberry Pi 4) bis zu 10 000 Seiten:
+Zielwerte für den Referenz-Host (VPS oder Raspberry Pi 4) bis zu 10 000 Seiten. Die Zielwerte der App (#96) sind seit 2026-10-05 abgestimmt:
 
 | Vorgang | Ziel |
 | --- | --- |
@@ -157,9 +157,9 @@ Zielwerte für den Referenz-Host (VPS oder Raspberry Pi 4) bis zu 10 000 Seiten:
 | Serversuche | < 300 ms |
 | Lokale Suche | < 50 ms |
 | Seitenliste lokal | < 200 ms (gemessen 219 ms bei 10 000 Seiten) |
-| Kaltstart bis Seitenbaum (Vorschlag, #96) | < 2 s |
-| Seite mit 2 000 Blöcken öffnen (Vorschlag, #96) | < 1 s |
-| Tippen (Vorschlag, #96) | < 16 ms pro Taste (ein Frame) |
+| Kaltstart bis Seitenbaum (#96) | < 2 s |
+| Seite mit 2 000 Blöcken öffnen (#96) | < 1 s |
+| Tippen (#96) | < 16 ms pro Taste (ein Frame) |
 | Server-RSS | < 512 MB im Normalbetrieb |
 
 Bei 10 000 Seiten verfehlen nur noch die Dauer des Re-Syncs im Browser und knapp die Seitenliste das Ziel (siehe oben); Kaltstart, Öffnen großer Seiten und Tippen liegen im Ziel. Der Server-RSS beim Snapshot liegt seit #97 im Ziel. Bis etwa 1 000 Seiten / 50 000 Blöcke bleiben alle Vorgänge außer dem Re-Sync (27 s) im Ziel.

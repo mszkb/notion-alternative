@@ -1,6 +1,6 @@
 # Telemetrie: Datenkatalog und Datenschutzhinweis
 
-> **Entwurf.** Gilt, sobald [ADR 0016](../adr/0016-opt-in-telemetry.md) angenommen ist. Bis dahin sendet die Software keinerlei Telemetrie, und die Funktion ist nicht eingebaut.
+> **Abgenommen am 2026-10-05 ([#105](https://github.com/mszkb/notion-alternative/issues/105)).** Gilt, sobald [ADR 0016](../adr/0016-opt-in-telemetry.md) angenommen ist. Bis dahin sendet die Software keinerlei Telemetrie, und die Funktion ist nicht eingebaut.
 
 Die Telemetrie ist **aus**, solange nicht beide zustimmen:
 

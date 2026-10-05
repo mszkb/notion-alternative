@@ -115,8 +115,8 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 
 Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alternative/issues/103)). Gebaut wird erst, wenn [ADR 0016](docs/adr/0016-opt-in-telemetry.md) angenommen ist.
 
-- [ ] ADR: Datenumfang, Empfänger, Einwilligung, Anonymisierung (Vorschlag liegt vor)
-- [ ] Datenkatalog und Datenschutzhinweis ([`docs/privacy/telemetry.md`](docs/privacy/telemetry.md), Entwurf)
+- [ ] ADR: Datenumfang, Empfänger, Einwilligung, Anonymisierung (Vorschlag liegt vor, Entscheidung vertagt; Empfehlungen im ADR)
+- [x] Datenkatalog und Datenschutzhinweis ([`docs/privacy/telemetry.md`](docs/privacy/telemetry.md), abgenommen; gilt nach Annahme des ADR)
 - [ ] Server: Opt-in des Betreibers, Aggregation, Versand, Vorschau
 - [ ] Client: Einwilligung pro Nutzer und lokale Zähler
 - [ ] Empfangsdienst (Collector)
