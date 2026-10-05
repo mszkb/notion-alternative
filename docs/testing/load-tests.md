@@ -80,16 +80,18 @@ Gemessen am 2026-10-04 mit `e2e/load-app.spec.ts`, Chromium 141 headless, Vite-E
 | 10 000 / 502 000, vor #102 | 2,7 min | 10,7 min | 31,6 s | 2,7 s | 21 ms pro Taste |
 | 10 000 / 502 000, nach den ersten Fixes aus #102 | 2,8 min | 8,7 min | 3,4 s | 1,9 s | 14–20 ms pro Taste (zwei Läufe) |
 | 10 000 / 502 000, ohne Tracing, Production-Build (2026-10-05) | 3,2 min | 9,8 min | 1,9 / 2,3 s (zwei Läufe) | 0,6 / 0,8 s | 4–5 ms pro Taste |
-| 10 000 / 502 000, nach den Suchmarken (2026-10-05) | 3,3 min | **5,5 min** | **1,9 s** | **0,7 s** | **6 ms pro Taste** |
+| 10 000 / 502 000, nach den Suchmarken (2026-10-05) | 3,3 min | 5,5 min | 1,9 s | 0,7 s | 6 ms pro Taste |
+| 10 000 / 502 000, Seitenbaum mit einfachen Links (2026-10-05) | 3,0 min | **5,2 min** | **1,6 s** | **0,55 s** | **5 ms pro Taste** |
 
 Der Kaltstart wird direkt nach dem Erstsync gemessen. Der Test findet die große Seite per CSS-Selektor; `getByRole` über 10 000 Baumknoten hätte die Messung selbst verlängert.
 
 **Messfehler bis 2026-10-04:** Die ersten drei Zeilen enthalten das Playwright-Tracing (rund 1 s pro Schritt, beim Tippen etwa 14 ms pro Taste) und den Vue-Entwicklungsmodus. Ohne beides liegen Kaltstart, Öffnen der großen Seite und Tippen schon vor jeder weiteren Änderung im Ziel. Der Erstsync dauerte im Production-Build länger als im Entwicklungsserver (9,8 statt 8,7 min); die Ursache ist nicht untersucht, beide Zahlen sind vor der Suchmarken-Korrektur gemessen.
 
-**Wohin die Zeit beim Kaltstart geht** (CPU-Profil, Production-Build, 10 000 Seiten): rund 0,6 s für das Anlegen der 10 000 `TreeNode`-Komponenten (davon ein Teil `RouterLink`), rund 0,4 s Layout und Style, der Rest Lesen aus IndexedDB und GC.
+**Wohin die Zeit beim Kaltstart ging** (CPU-Profil, Production-Build, 10 000 Seiten, vor den einfachen Links): rund 0,6 s für das Anlegen der 10 000 `TreeNode`-Komponenten, davon ein großer Teil `RouterLink`; rund 0,4 s Layout und Style; der Rest Lesen aus IndexedDB und GC.
 
 Behoben in [#102](https://github.com/mszkb/notion-alternative/issues/102):
 - **Suchmarken beim Re-Sync:** Der Server liefert die Snapshot-Seiten nach Id sortiert. Jede Seite mit 2 000 Blöcken berührt deshalb fast jede Seite des Workspace, und für jede wurde eine Suchmarke (`searchDirty`) geschrieben: bei 10 000 Seiten rund 450 000 zusätzliche Zeilen, etwa ein Drittel der Schreibzeit. Jetzt wird eine Seite nur beim ersten Berühren markiert und am Ende, in derselben Transaktion wie der Cursor, für alle geschriebenen Seiten erneut. Ein zwischendurch gespeicherter Suchindex kann so keine Seite ohne Marke zurücklassen.
+- **Seitenbaum mit einfachen Links:** Jeder der 10 000 Baumknoten hatte einen `RouterLink`, der seine Route auflöste und bei jeder Navigation seinen Aktiv-Zustand neu berechnete. Jetzt löst die Seitenleiste den Seitenlink einmal pro Workspace auf; ein Knoten ist ein einfacher Link mit `aria-current`. Klicks mit Strg/Cmd/Umschalt bleiben beim Browser (neuer Tab), wie bei `RouterLink`. Kaltstart mit einer Ebene von 10 000 Seiten und je einem Block (drei Läufe): 2,0–2,2 s → 1,2–1,4 s; Öffnen einer Seite 0,7–0,9 s → 0,5–0,65 s.
 - **Kein Gewinn: Vorabladen der nächsten Snapshot-Seite.** Der Server liefert alle 256 Seiten in rund 3 s; der Erstsync blieb bei 9,7 min. Die Änderung ist wieder entfernt. Der Hauptthread ist beim Erstsync zu 80 % untätig; die Zeit liegt in IndexedDB.
 - **Seitenbaum quadratisch:** Jeder Baumknoten filterte die ganze Seitenliste nach seinen Kindern, bei jeder Änderung einer Seite. Bei 10 000 Seiten waren das 100 Mio. Vergleiche. Jetzt gruppiert die Seitenleiste einmal pro Änderung nach Eltern, und unveränderte Seitenobjekte bleiben erhalten. Vue rendert dann nur geänderte Knoten neu.
 - **Re-Sync:** Er meldet die geschriebenen Seiten einmal am Ende (oder beim Abbruch) statt nach jeder der 256 Snapshot-Seiten.
@@ -133,9 +135,9 @@ Behoben in [#102](https://github.com/mszkb/notion-alternative/issues/102):
 ## Grenzen und offene Engpässe
 
 - **App bei 10 000 Seiten ([#102](https://github.com/mszkb/notion-alternative/issues/102)):**
-  - Kaltstart 1,9 s, knapp im Ziel von 2 s; zwischen den Läufen 1,9–2,3 s. Gut die Hälfte davon ist das Anlegen der 10 000 Baumknoten. Mehr Spielraum gäbe nur ein Seitenbaum, der nicht alle Knoten auf einmal anlegt (virtualisiert oder nachladend). Das würde die Seitenleiste sichtbar ändern und ist nicht umgesetzt.
-  - Seite mit 2 000 Blöcken öffnen (0,7 s) und Tippen (6 ms pro Taste) liegen im Ziel.
-  - Erstsync 5,5 min, bestimmt von IndexedDB (Blöcke, Link-Index, Suchmarken in einer Transaktion pro Seite).
+  - Kaltstart 1,6 s, Seite mit 2 000 Blöcken öffnen 0,55 s, Tippen 5 ms pro Taste: alles im Ziel.
+  - Weiterer Spielraum beim Kaltstart nur mit einem Seitenbaum, der nicht alle Knoten auf einmal anlegt (virtualisiert oder nachladend). Das würde die Seitenleiste sichtbar ändern und ist nicht umgesetzt.
+  - Erstsync 5,2 min, bestimmt von IndexedDB (Blöcke, Link-Index, Suchmarken in einer Transaktion pro Seite).
 - **Re-Sync großer Workspaces im Browser:**
   - Bei 500 000 Blöcken dauert das Schreiben in IndexedDB weiterhin rund 5 Minuten, jetzt aber in Abschnitten und mit Fortschrittsanzeige.
   - Die Daten gehen über das Netz einmal als Snapshot (168 MB) und danach als Pull ab dem Cursor.
@@ -160,4 +162,4 @@ Zielwerte für den Referenz-Host (VPS oder Raspberry Pi 4) bis zu 10 000 Seiten:
 | Tippen (Vorschlag, #96) | < 16 ms pro Taste (ein Frame) |
 | Server-RSS | < 512 MB im Normalbetrieb |
 
-Bei 10 000 Seiten verfehlen nur noch die Dauer des Re-Syncs im Browser und knapp die Seitenliste das Ziel (siehe oben); der Kaltstart liegt knapp darunter. Der Server-RSS beim Snapshot liegt seit #97 im Ziel. Bis etwa 1 000 Seiten / 50 000 Blöcke bleiben alle Vorgänge außer dem Re-Sync (27 s) im Ziel.
+Bei 10 000 Seiten verfehlen nur noch die Dauer des Re-Syncs im Browser und knapp die Seitenliste das Ziel (siehe oben); Kaltstart, Öffnen großer Seiten und Tippen liegen im Ziel. Der Server-RSS beim Snapshot liegt seit #97 im Ziel. Bis etwa 1 000 Seiten / 50 000 Blöcke bleiben alle Vorgänge außer dem Re-Sync (27 s) im Ziel.
