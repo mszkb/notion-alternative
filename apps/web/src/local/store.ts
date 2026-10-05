@@ -1699,6 +1699,18 @@ export class LocalStore {
     return this.db.attachmentContents.get(id)
   }
 
+  /**
+   * Active attachments of all workspaces and whether their content is on this device. Reads
+   * only the keys of the content table, not the contents.
+   */
+  async attachmentsOnDevice(): Promise<{ attachment: Attachment; local: boolean }[]> {
+    const local = new Set(
+      (await this.db.attachmentContents.toCollection().primaryKeys()) as string[],
+    )
+    const attachments = await this.db.attachments.filter((a) => !a.deletedAt).toArray()
+    return attachments.map((attachment) => ({ attachment, local: local.has(attachment.id) }))
+  }
+
   /** Keeps downloaded content for offline use. */
   async cacheAttachmentContent(id: string, data: ArrayBuffer): Promise<void> {
     await this.db.attachmentContents.put({ id, data, uploaded: true })

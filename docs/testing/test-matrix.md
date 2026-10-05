@@ -17,6 +17,7 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | T-OFF-09 | Lokaler Speicher voll | Sichtbare Meldung, Text bleibt erhalten und wird erneut gespeichert | AC-01 | ☑ ¹⁴ |
 | T-OFF-10 | Mehrere Tabs offline | Änderungen aller Tabs bleiben, werden genau einmal gesendet | AC-02 | ☑ ¹⁴ |
 | T-OFF-11 | Smartphone: Flugmodus, Hintergrund, Neustart | Siehe Prüfliste | AC-01, AC-08 | manuell ¹⁵ |
+| T-OFF-12 | Anhänge auf einem zweiten Gerät „alle offline verfügbar machen“, danach ohne Server öffnen | Fortschritt sichtbar; nur Inhalte mit passender Prüfsumme werden gespeichert; Abbruch, Netzverlust und voller Speicher halten an, Geladenes bleibt; Bild und Datei offline verfügbar | AC-01, AC-08 | ☑ ¹⁹ |
 
 ¹ Playwright (`apps/web/e2e/offline.spec.ts`): Server nicht erreichbar (alle `/api`-Requests schlagen fehl) sowie Netzverlust in der geladenen App; T-OFF-02 zusätzlich auf Datenebene (`apps/web/src/local/store.test.ts`). Neuladen bei echtem Netz-Offline (`context.setOffline`) gegen den Production-Build mit Service Worker in `apps/web/e2e/pwa-offline.spec.ts` (Playwright-Projekt `pwa`); dort auch T-OFF-03 mit echtem Netz: wieder online, die Offline-Änderung erreicht ohne Zutun den Server.
 
@@ -119,3 +120,5 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ¹⁷ Manuell gestartete Skripte, nicht in CI (Laufzeit): `scripts/loadtest/server-load.mjs`, `apps/web/scripts/loadtest-browser.mjs` (Szenario `apps/web/src/local/load-scenario.ts`), `apps/web/e2e/load-app.spec.ts` (T-LOAD-03, nur mit `LOAD_PAGES`). Ergebnisse, Zielwerte und offene Grenzen: [`load-tests.md`](load-tests.md). Regression des Suchindex-Engpasses: `apps/server/test/migrations.test.ts` (0009), Link-Index nach Re-Sync: `apps/web/src/sync/resync.test.ts`.
 
 ¹⁸ Server: `apps/server/test/devices.test.ts` (neue ID nach erneuter Anmeldung, Session von vor der Entfernung endet mit `401`). Client: `apps/web/src/local/store.test.ts` (Warteschlange zieht auf die neue ID um, Ablehnungen wegen der Entfernung werden zurückgesetzt, anderer Tab übernimmt die ID), `apps/web/src/device.test.ts`, `apps/web/src/sync/engine.test.ts` (Tab mit veralteter ID sendet erneut). E2E: `apps/web/e2e/devices.spec.ts`.
+
+¹⁹ `apps/web/src/local/offline-attachments.test.ts` (nur fehlende Inhalte, Fortschritt, Prüfsumme, noch nicht hochgeladen, Netzverlust, Abbruch, Speicher voll), E2E `apps/web/e2e/attachments.spec.ts` (zweites Gerät lädt alle Anhänge über die Kontoseite und zeigt sie danach ohne Server).

@@ -32,6 +32,10 @@ Wichtig auf iOS:
 
 In der installierten App erscheinen weder der Button noch der Hinweis.
 
+## Offline verfügbar machen
+
+Seiten liegen vollständig auf jedem Gerät. Bilder und Dateien lädt die App erst, wenn eine Seite sie zeigt, und behält sie dann. Vor einer Reise oder einem Flug: **Konto → Offline verfügbar → „Alle Anhänge offline verfügbar machen“**. Ein Balken zeigt den Fortschritt, „Abbrechen“ hält an; Geladenes bleibt. Anhänge, die ein anderes Gerät noch nicht hochgeladen hat, kommen beim nächsten Mal.
+
 ## Prüfliste T-PWA-01 (manuell)
 
 Für Releases auf einem echten Gerät durchgehen und Ergebnis mit iOS-Version im Release-Protokoll vermerken:

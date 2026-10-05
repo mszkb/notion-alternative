@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { type AttachmentUsage, type Device, PASSWORD_MIN_LENGTH } from '@notion-alt/shared'
 import { ApiError, api } from '../api'
 import { deviceStatus } from '../device'
 import { persistence, refreshWorkspaces, requireStore, workspaces } from '../local/context'
 import { refreshAttachmentUsage } from '../limits'
+import {
+  downloadAllAttachments,
+  type OfflineAttachmentsProgress,
+  type OfflineAttachmentsResult,
+} from '../local/offline-attachments'
 import { formatBytes, type StorageUsage, storageUsage } from '../local/persistence'
 import { connection, currentUser } from '../session'
 import {
@@ -136,6 +141,65 @@ async function resync() {
     resyncDone.value = !syncState.value.lastError
   } finally {
     resyncing.value = false
+  }
+}
+
+// ------------------------------------------------------------------ offline attachments
+
+/** Attachments on this device vs. all (count and bytes); contents load on demand (ADR 0012). */
+const attachmentTotals = ref<{ local: number; total: number; localBytes: number; bytes: number }>()
+const attachmentProgress = ref<OfflineAttachmentsProgress | null>(null)
+const attachmentResult = ref<OfflineAttachmentsResult | null>(null)
+let attachmentAbort: AbortController | null = null
+
+async function loadAttachmentTotals() {
+  const entries = await requireStore().attachmentsOnDevice()
+  const local = entries.filter((e) => e.local)
+  attachmentTotals.value = {
+    local: local.length,
+    total: entries.length,
+    localBytes: local.reduce((sum, e) => sum + e.attachment.size, 0),
+    bytes: entries.reduce((sum, e) => sum + e.attachment.size, 0),
+  }
+}
+onMounted(loadAttachmentTotals)
+
+const STOPPED: Record<NonNullable<OfflineAttachmentsResult['stopped']>, string> = {
+  cancelled: 'Abgebrochen.',
+  offline: 'Verbindung unterbrochen.',
+  quota: 'Speicher voll: Bitte Platz schaffen oder die App installieren.',
+}
+
+const attachmentResultText = computed(() => {
+  const result = attachmentResult.value
+  if (!result) return null
+  const count = (n: number) => n.toLocaleString('de-DE')
+  const parts = [`${count(result.downloaded)} geladen`]
+  if (result.unavailable) {
+    parts.push(
+      `${count(result.unavailable)} noch nicht auf dem Server (das hochladende Gerät war seitdem nicht online)`,
+    )
+  }
+  if (result.failed) {
+    parts.push(`${count(result.failed)} fehlgeschlagen (beim nächsten Mal erneut versucht)`)
+  }
+  const summary = `${parts.join(', ')}.`
+  return result.stopped ? `${STOPPED[result.stopped]} ${summary}` : summary
+})
+
+async function downloadAttachments() {
+  attachmentResult.value = null
+  attachmentAbort = new AbortController()
+  try {
+    attachmentResult.value = await downloadAllAttachments(requireStore(), {
+      onProgress: (progress) => (attachmentProgress.value = progress),
+      signal: attachmentAbort.signal,
+    })
+  } finally {
+    attachmentAbort = null
+    attachmentProgress.value = null
+    await loadAttachmentTotals()
+    usage.value = await storageUsage()
   }
 }
 
@@ -277,6 +341,45 @@ async function changePassword() {
     <p v-if="resyncDone" class="muted" data-testid="resync-done">Vollständig synchronisiert.</p>
     <p v-if="!resyncing && syncState.lastError" class="error">
       Synchronisierung fehlgeschlagen: {{ syncState.lastError }}
+    </p>
+
+    <h2>Offline verfügbar</h2>
+    <p class="muted">
+      Seiten sind vollständig auf diesem Gerät. Anhänge lädt die App, sobald eine Seite sie zeigt;
+      hier lassen sich alle auf einmal laden, z. B. vor einer Reise.
+    </p>
+    <p v-if="attachmentTotals" data-testid="offline-attachments">
+      {{ attachmentTotals.local.toLocaleString('de-DE') }} von
+      {{ attachmentTotals.total.toLocaleString('de-DE') }} Anhängen auf diesem Gerät ({{
+        formatBytes(attachmentTotals.localBytes)
+      }}
+      von {{ formatBytes(attachmentTotals.bytes) }}).
+    </p>
+    <button
+      v-if="!attachmentProgress"
+      type="button"
+      :disabled="
+        connection !== 'online' ||
+        !attachmentTotals ||
+        attachmentTotals.local === attachmentTotals.total
+      "
+      @click="downloadAttachments"
+    >
+      Alle Anhänge offline verfügbar machen
+    </button>
+    <template v-else>
+      <p class="muted" data-testid="offline-attachments-progress">
+        <progress :value="attachmentProgress.bytes" :max="attachmentProgress.totalBytes || 1" />
+        {{ attachmentProgress.done.toLocaleString('de-DE') }} von
+        {{ attachmentProgress.total.toLocaleString('de-DE') }} Anhängen ({{
+          formatBytes(attachmentProgress.bytes)
+        }}
+        von {{ formatBytes(attachmentProgress.totalBytes) }})
+      </p>
+      <button type="button" @click="attachmentAbort?.abort()">Abbrechen</button>
+    </template>
+    <p v-if="attachmentResultText" role="status" data-testid="offline-attachments-result">
+      {{ attachmentResultText }}
     </p>
 
     <h2>Benachrichtigungen</h2>
