@@ -11,6 +11,8 @@ docker compose up -d --build
 
 Die App ist danach auf dem Host unter `http://127.0.0.1:8080` erreichbar. Das erste Konto kann sich direkt registrieren.
 
+Kürzer mit `make up`: legt `.env` aus `.env.example` an, falls sie fehlt, baut und startet den Stack und prüft `/healthz` und `/api/ready`. Weitere Ziele (`down`, `logs`, `ps`, `check` …) zeigt `make`. Ist Port 8080 belegt: `make up PORT=8081`.
+
 ## Container
 
 | Container | Aufgabe | Daten |
