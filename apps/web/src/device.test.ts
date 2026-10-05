@@ -30,10 +30,23 @@ describe('registerDevice', () => {
     deviceStatus.value = 'unknown'
   })
 
+  function identity(id = ID) {
+    const device = {
+      deviceId: id,
+      replaced: 0,
+      async replaceDeviceId() {
+        device.replaced++
+        device.deviceId = `${id}-new`
+        return device.deviceId
+      },
+    }
+    return device
+  }
+
   it('sends the stable id with a default name', async () => {
     let sent: unknown
     const status = await registerDevice(
-      ID,
+      identity(),
       async (input) => {
         sent = input
         return { device: { ...input, createdAt: '', lastSeenAt: '', current: true } }
@@ -44,16 +57,36 @@ describe('registerDevice', () => {
     expect(sent).toEqual({ id: ID, name: 'Firefox auf Linux' })
   })
 
-  it('reports a removed device and ignores network errors', async () => {
+  it('ignores network errors', async () => {
+    const device = identity()
     expect(
-      await registerDevice(ID, async () => {
+      await registerDevice(device, async () => {
         throw new TypeError('Failed to fetch')
       }),
     ).toBe('unknown')
+    expect(device.replaced).toBe(0)
+  })
+
+  it('continues under a new id after the device was removed and signed in again (#46)', async () => {
+    const device = identity()
+    const sent: string[] = []
+    const status = await registerDevice(device, async (input) => {
+      sent.push(input.id)
+      if (input.id === ID) throw new ApiError(403, 'device_revoked', 'removed')
+      return { device: { ...input, createdAt: '', lastSeenAt: '', current: true } }
+    })
+    expect(status).toBe('registered')
+    expect(sent).toEqual([ID, `${ID}-new`])
+    expect(device.replaced).toBe(1)
+  })
+
+  it('stays removed if the new id is refused as well', async () => {
+    const device = identity()
     expect(
-      await registerDevice(ID, async () => {
+      await registerDevice(device, async () => {
         throw new ApiError(403, 'device_revoked', 'removed')
       }),
     ).toBe('revoked')
+    expect(device.replaced).toBe(1)
   })
 })

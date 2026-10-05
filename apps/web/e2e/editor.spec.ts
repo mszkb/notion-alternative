@@ -148,3 +148,31 @@ test('pasted and dropped HTML is inserted as plain text only', async ({ signedIn
   await expect(input.locator('img, b')).toHaveCount(0)
   expect(await page.evaluate(() => (window as { __xss?: number }).__xss)).toBeUndefined()
 })
+
+test('tree links open pages in the app, mark the open page and leave modified clicks to the browser', async ({
+  signedIn: page,
+}) => {
+  await newPage(page, 'Eins')
+  await newPage(page, 'Zwei')
+  const tree = page.getByRole('tree')
+  const eins = tree.getByRole('link', { name: 'Eins' })
+  const zwei = tree.getByRole('link', { name: 'Zwei' })
+  await expect(zwei).toHaveAttribute('aria-current', 'page')
+  await expect(eins).toHaveAttribute('href', /\/p\/[0-9a-f-]{36}$/)
+
+  // A plain click navigates inside the app, without reloading it.
+  await page.evaluate(() => ((window as unknown as { marker: number }).marker = 1))
+  await eins.click()
+  await expect(page.getByLabel('Titel')).toHaveValue('Eins')
+  await expect(eins).toHaveAttribute('aria-current', 'page')
+  await expect(zwei).not.toHaveAttribute('aria-current')
+  expect(await page.evaluate(() => (window as unknown as { marker?: number }).marker)).toBe(1)
+
+  // Ctrl/Cmd+click opens a new tab; this one stays on its page.
+  const opened = page.context().waitForEvent('page')
+  await zwei.click({ modifiers: ['ControlOrMeta'] })
+  const tab = await opened
+  await expect(tab).toHaveURL(new RegExp(`${(await zwei.getAttribute('href'))!}$`))
+  await expect(page.getByLabel('Titel')).toHaveValue('Eins')
+  await tab.close()
+})

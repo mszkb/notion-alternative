@@ -6,15 +6,23 @@ import { blocks, expect, PASSWORD, test } from './fixtures'
 
 // App-level load test (#96): first sync of a large workspace on a new device, cold start from
 // IndexedDB, opening a page with many blocks and typing in it. Skipped in normal runs; start
-// with LOAD_PAGES=1000 (see docs/testing/load-tests.md). Optional: LOAD_BIG_BLOCKS (2000), OUT,
-// PROFILE_DIR (CPU profiles of cold start and opening the large page, for Chrome DevTools).
+// with LOAD_PAGES=1000 (see docs/testing/load-tests.md). Optional: LOAD_BIG_BLOCKS (2000),
+// LOAD_BLOCKS_PER_PAGE (50; fewer makes seed and sync fast when only the page tree matters), OUT,
+// PROFILE_DIR (CPU profiles of first sync, cold start, opening the large page and typing, for
+// Chrome DevTools).
 const PAGES = Number(process.env.LOAD_PAGES ?? 0)
 const BIG_BLOCKS = Number(process.env.LOAD_BIG_BLOCKS ?? 2000)
-const BLOCKS_PER_PAGE = 50
+const BLOCKS_PER_PAGE = Number(process.env.LOAD_BLOCKS_PER_PAGE ?? 50)
 const BIG_TITLE = 'Große Seite'
 
 test.skip(!PAGES, 'set LOAD_PAGES to run the app load test')
 test.setTimeout(30 * 60_000)
+// Trace snapshots walk the whole DOM after every action (10 000 tree nodes, 2 000 blocks) and
+// cost about a second per step inside the measured time.
+test.use({ trace: 'off' })
+// LOAD_PREVIEW=1 measures the production build (vite preview, started by the config) instead of
+// the dev server, whose Vue dev mode validates props and builds dev render contexts per node.
+if (process.env.LOAD_PREVIEW) test.use({ baseURL: 'http://localhost:5181' })
 
 test('#96: large workspace in the app', async ({ page }) => {
   const request = page.request
@@ -80,9 +88,18 @@ test('#96: large workspace in the app', async ({ page }) => {
       await cdp.send('Profiler.enable')
       await cdp.send('Profiler.start')
     }
+    const tracing = profile && process.env.TRACE_DIR
+    if (tracing) await page.context().browser()!.startTracing(page, { screenshots: false })
     const started = Date.now()
     await fn()
     const ms = Date.now() - started
+    if (tracing) {
+      mkdirSync(tracing, { recursive: true })
+      writeFileSync(
+        path.join(tracing, `${profile}.json`),
+        await page.context().browser()!.stopTracing(),
+      )
+    }
     if (cdp) {
       const { profile: data } = await cdp.send('Profiler.stop')
       mkdirSync(profileDir!, { recursive: true })
@@ -101,7 +118,7 @@ test('#96: large workspace in the app', async ({ page }) => {
     await expect(page.getByTestId('sync-status')).toHaveText(/^Synchronisiert um/, {
       timeout: 25 * 60_000,
     })
-  })
+  }, 'first-sync')
   await expect(bigLink).toBeVisible()
 
   // Cold start from IndexedDB until the page tree shows the pages.
@@ -126,7 +143,7 @@ test('#96: large workspace in the app', async ({ page }) => {
   const typeMs = await timed(async () => {
     await page.keyboard.type(text)
     await expect(last).toContainText(text.trim())
-  })
+  }, 'typing')
 
   const result = {
     config: { pages: PAGES, blocksPerPage: BLOCKS_PER_PAGE, bigPageBlocks: BIG_BLOCKS },

@@ -111,22 +111,71 @@ function linkEntry(block: Block, workspaceId: string): LinkEntry | null {
 export class LocalStore {
   private readonly listeners = new Set<ChangeListener>()
 
+  private currentDeviceId: string
+  /** Ids this device had before it was removed from the account and signed in again (#46). */
+  private formerDeviceIds: Set<string>
+
   constructor(
     readonly db: LocalDb,
-    readonly deviceId: string,
+    deviceId: string,
     private readonly now: () => string = () => new Date().toISOString(),
-  ) {}
+    formerDeviceIds: string[] = [],
+  ) {
+    this.currentDeviceId = deviceId
+    this.formerDeviceIds = new Set(formerDeviceIds)
+  }
 
   /** Opens the store and creates the stable device id on first use. */
   static async open(db: LocalDb, now?: () => string): Promise<LocalStore> {
-    const deviceId = await db.transaction('rw', db.meta, async () => {
+    const [deviceId, former] = await db.transaction('rw', db.meta, async () => {
       const existing = await db.meta.get('deviceId')
-      if (typeof existing?.value === 'string') return existing.value
+      const formerIds = await db.meta.get('formerDeviceIds')
+      const former = Array.isArray(formerIds?.value) ? (formerIds.value as string[]) : []
+      if (typeof existing?.value === 'string') return [existing.value, former] as const
       const id = newId()
       await db.meta.put({ key: 'deviceId', value: id })
+      return [id, former] as const
+    })
+    return new LocalStore(db, deviceId, now, [...former])
+  }
+
+  /** Id this device sends with its operations. Changes only through `replaceDeviceId`. */
+  get deviceId(): string {
+    return this.currentDeviceId
+  }
+
+  /** True for changes and conflicts made on this device, also under an earlier id (#46). */
+  isOwnDevice(deviceId: string): boolean {
+    return deviceId === this.currentDeviceId || this.formerDeviceIds.has(deviceId)
+  }
+
+  /**
+   * Continues under a new device id after this device was removed from the account and signed
+   * in again (#46). Queued operations move to the new id, so no unsynced change is lost, and
+   * rejections because of the removal are cleared; they are sent again with the next push. If
+   * another tab already replaced the id, its id is taken over instead of creating a third one.
+   */
+  async replaceDeviceId(): Promise<string> {
+    const old = this.currentDeviceId
+    const next = await this.db.transaction('rw', [this.db.meta, this.db.operations], async () => {
+      const stored = await this.db.meta.get('deviceId')
+      const storedId = typeof stored?.value === 'string' ? stored.value : old
+      const id = storedId !== old ? storedId : newId()
+      const formerIds = await this.db.meta.get('formerDeviceIds')
+      const former = new Set(Array.isArray(formerIds?.value) ? (formerIds.value as string[]) : [])
+      former.add(old)
+      former.delete(id)
+      await this.db.meta.put({ key: 'formerDeviceIds', value: [...former] })
+      await this.db.meta.put({ key: 'deviceId', value: id })
+      await this.db.operations.toCollection().modify((op) => {
+        if (op.deviceId !== id && former.has(op.deviceId)) op.deviceId = id
+        if (op.issue?.code === 'device_not_active') delete op.issue
+      })
+      this.formerDeviceIds = former
       return id
     })
-    return new LocalStore(db, deviceId, now)
+    this.currentDeviceId = next
+    return next
   }
 
   onChange(listener: ChangeListener): () => void {
@@ -169,9 +218,12 @@ export class LocalStore {
   }
 
   /** Marks the touched pages for the saved search index, inside the write's transaction (#98). */
-  private async persistTouched(ctx: WriteContext) {
+  /** Stores search-index marks for the touched pages, except those already in `skip`. */
+  private async persistTouched(ctx: WriteContext, skip?: Map<string, Set<string>>) {
     const rows = [...ctx.touched].flatMap(([workspaceId, ids]) =>
-      [...ids].map((documentId) => ({ documentId, workspaceId, mark: newId() })),
+      [...ids]
+        .filter((documentId) => !skip?.get(workspaceId)?.has(documentId))
+        .map((documentId) => ({ documentId, workspaceId, mark: newId() })),
     )
     if (rows.length > 0) await this.db.searchDirty.bulkPut(rows)
   }
@@ -864,7 +916,7 @@ export class LocalStore {
         deletedAt: null,
       }
       await this.db.conflicts.put(conflict)
-      if (p.local.deviceId === this.deviceId) await this.adoptRemote(conflict)
+      if (this.isOwnDevice(p.local.deviceId)) await this.adoptRemote(conflict)
       if (conflict.documentId) this.mark(ctx, workspaceId, conflict.documentId)
     } else if (change.kind === 'update') {
       const p = change.payload as ConflictUpdatePayload
@@ -1121,7 +1173,9 @@ export class LocalStore {
       await this.db.links.bulkPut(links)
       for (const d of page.documents) this.mark(ctx, workspaceId, d.id)
       for (const b of page.blocks) this.mark(ctx, workspaceId, b.documentId)
-      await this.persistTouched(ctx)
+      // Pages arrive ordered by id, so every page of blocks touches nearly every document
+      // (#102). Only the first touch is stored here; finishResync marks all of them again.
+      await this.persistTouched(ctx, progress.touched)
     })
     for (const id of all) progress.seen.add(id)
     this.collect(progress, ctx)
@@ -1202,10 +1256,12 @@ export class LocalStore {
       await this.db.conflicts.bulkDelete(drop(local.conflicts))
       for (const d of local.documents) this.mark(ctx, workspaceId, d.id)
       for (const b of local.blocks) this.mark(ctx, workspaceId, b.documentId)
-      await this.persistTouched(ctx)
+      this.collect(progress, ctx)
+      // Fresh marks for every page written, together with the cursor: a search index saved
+      // during the re-sync may have consumed a first mark before later pages changed the page.
+      await this.persistTouched(progress)
       await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
     })
-    this.collect(progress, ctx)
     this.reportResync(progress)
   }
 
@@ -1404,7 +1460,7 @@ export class LocalStore {
     const local = await table.get(change.entityId)
     const queued = await this.db.operations.where('opId').equals(change.opId).first()
     if (queued?.seq !== undefined) await this.db.operations.delete(queued.seq)
-    if (queued || change.deviceId === this.deviceId) {
+    if (queued || this.isOwnDevice(change.deviceId)) {
       if (local && (local.revision ?? 0) < change.revision) {
         await table.update(change.entityId, { revision: change.revision })
       }
@@ -1641,6 +1697,18 @@ export class LocalStore {
 
   async attachmentContent(id: string): Promise<AttachmentContent | undefined> {
     return this.db.attachmentContents.get(id)
+  }
+
+  /**
+   * Active attachments of all workspaces and whether their content is on this device. Reads
+   * only the keys of the content table, not the contents.
+   */
+  async attachmentsOnDevice(): Promise<{ attachment: Attachment; local: boolean }[]> {
+    const local = new Set(
+      (await this.db.attachmentContents.toCollection().primaryKeys()) as string[],
+    )
+    const attachments = await this.db.attachments.filter((a) => !a.deletedAt).toArray()
+    return attachments.map((attachment) => ({ attachment, local: local.has(attachment.id) }))
   }
 
   /** Keeps downloaded content for offline use. */

@@ -52,7 +52,30 @@ const childrenByParent = computed(() => {
   previousGroups = groupByParent(documents.value, previousGroups)
   return previousGroups
 })
-provide(workspaceKey, { store, workspaceId, documents, documentsById, childrenByParent })
+const activeDocumentId = computed(() =>
+  typeof route.params.documentId === 'string' ? route.params.documentId : null,
+)
+// Resolved once per workspace; 10 000 tree links each resolving their route took a noticeable
+// part of the cold start (#102).
+const PAGE_ID = '__page__'
+const pageHrefTemplate = computed(
+  () =>
+    router.resolve({
+      name: 'page',
+      params: { workspaceId: workspaceId.value, documentId: PAGE_ID },
+    }).href,
+)
+const pageHref = (documentId: string) =>
+  pageHrefTemplate.value.replace(PAGE_ID, encodeURIComponent(documentId))
+provide(workspaceKey, {
+  store,
+  workspaceId,
+  documents,
+  documentsById,
+  childrenByParent,
+  activeDocumentId,
+  pageHref,
+})
 
 const workspace = computed(() => workspaces.value.find((w) => w.id === workspaceId.value))
 const roots = computed(() => childrenByParent.value.get(null) ?? NO_CHILDREN)
@@ -376,8 +399,8 @@ watch(
           regelmäßig exportieren.
         </p>
         <p v-if="deviceStatus === 'revoked'" class="error" data-testid="device-revoked">
-          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten, werden aber
-          nicht mehr synchronisiert.
+          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten. Nach erneuter
+          Anmeldung synchronisiert es als neues Gerät weiter.
         </p>
         <p v-if="installPrompt" class="status">
           <button type="button" class="link" @click="installApp">App installieren</button>

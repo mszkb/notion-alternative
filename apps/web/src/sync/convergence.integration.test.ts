@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { type ChildProcess, spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import { rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -17,6 +17,7 @@ import { LocalDb } from '../local/db'
 import { LocalStore } from '../local/store'
 import { pushQueue } from './push'
 import { syncWorkspace } from './resync'
+import { spawnServer, waitForServer } from './test-server'
 
 // Protocol-level property test (issue #67, AC-03): random edits on three devices against the
 // real server, random sync order and dropped connections. Invariants: devices converge, no
@@ -27,37 +28,17 @@ const BASE = `http://127.0.0.1:${PORT}`
 const DB_PATH = path.join(tmpdir(), `notion-alt-property-${Date.now()}.sqlite`)
 let server: ChildProcess
 
-async function waitForServer() {
-  for (let i = 0; i < 100; i++) {
-    try {
-      if ((await fetch(`${BASE}/api/ready`)).ok) return
-    } catch {
-      // not up yet
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  throw new Error('server did not start')
-}
-
 beforeAll(async () => {
-  server = spawn('pnpm', ['--filter', '@notion-alt/server', 'exec', 'tsx', 'src/index.ts'], {
-    env: {
-      ...process.env,
-      PORT: String(PORT),
-      HOST: '127.0.0.1',
-      DATABASE_PATH: DB_PATH,
-      LOG_LEVEL: 'silent',
-      ALLOW_REGISTRATION: 'true',
-      LOGIN_MAX_FAILURES_PER_IP: '100000',
-      REGISTER_MAX_ATTEMPTS_PER_IP: '100000',
-    },
-    stdio: 'ignore',
+  server = spawnServer(PORT, DB_PATH, {
+    LOGIN_MAX_FAILURES_PER_IP: '100000',
+    REGISTER_MAX_ATTEMPTS_PER_IP: '100000',
   })
-  await waitForServer()
+  await waitForServer(server, BASE)
 }, 60_000)
 
 afterAll(() => {
-  server?.kill()
+  // The whole process group: pnpm alone would leave tsx and node running.
+  if (server?.pid) process.kill(-server.pid, 'SIGTERM')
   rmSync(DB_PATH, { force: true })
 })
 

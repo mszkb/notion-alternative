@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import type { Document } from '@notion-alt/shared'
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { expanded } from '../composables/tree-state'
 import { displayTitle, NO_CHILDREN, useWorkspace } from '../composables/workspace'
 
 const props = defineProps<{ document: Document; depth: number }>()
 
-const { store, workspaceId, documents, childrenByParent } = useWorkspace()
-const route = useRoute()
+const { store, workspaceId, documents, childrenByParent, activeDocumentId, pageHref } =
+  useWorkspace()
 const router = useRouter()
 
 const children = computed(() => childrenByParent.value.get(props.document.id) ?? NO_CHILDREN)
 const isOpen = computed(() => expanded.has(props.document.id))
-const isActive = computed(() => route.params.documentId === props.document.id)
+const isActive = computed(() => activeDocumentId.value === props.document.id)
 const dropZone = ref<'before' | 'inside' | 'after' | null>(null)
 
 function toggle() {
@@ -31,6 +31,17 @@ async function addChild() {
     name: 'page',
     params: { workspaceId: workspaceId.value, documentId: created.id },
   })
+}
+
+/**
+ * A plain link instead of RouterLink (#102): its per-link route resolution was a noticeable part
+ * of mounting 10 000 nodes. Modified clicks stay with the browser (new tab or window), as there.
+ */
+function open(event: MouseEvent) {
+  if (event.defaultPrevented || event.button !== 0) return
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  event.preventDefault()
+  void router.push(pageHref(props.document.id))
 }
 
 const DRAG_TYPE = 'application/x-notion-alt-page'
@@ -94,12 +105,14 @@ async function onDrop(event: DragEvent) {
       >
         {{ isOpen ? '▾' : '▸' }}
       </button>
-      <RouterLink
+      <a
         class="tree-link"
-        :to="{ name: 'page', params: { workspaceId, documentId: document.id } }"
+        :href="pageHref(document.id)"
+        :aria-current="isActive ? 'page' : undefined"
+        @click="open"
       >
         {{ displayTitle(document) }}
-      </RouterLink>
+      </a>
       <button
         type="button"
         class="icon add"

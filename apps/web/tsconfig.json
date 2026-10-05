@@ -3,7 +3,8 @@
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
-    "jsx": "preserve"
+    "jsx": "preserve",
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src/**/*.ts",

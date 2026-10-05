@@ -110,13 +110,16 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Lasttests ([`load-tests.md`](docs/testing/load-tests.md); offen: Messung auf dem Raspberry Pi)
 - [x] Re-Sync großer Workspaces seitenweise mit Fortschritt ([#97](https://github.com/mszkb/notion-alternative/issues/97))
 - [x] Lokaler Suchindex in IndexedDB gespeichert ([#98](https://github.com/mszkb/notion-alternative/issues/98))
+- [x] App bei 10 000 Seiten im Ziel: Kaltstart, Öffnen, Tippen ([#102](https://github.com/mszkb/notion-alternative/issues/102))
+- [x] Entferntes Gerät synchronisiert nach erneuter Anmeldung als neues Gerät weiter ([#46](https://github.com/mszkb/notion-alternative/issues/46))
+- [ ] Seiteninhalte bei Bedarf laden, „Alles offline verfügbar machen“ in den Einstellungen ([ADR 0017](docs/adr/0017-content-on-demand.md), Proposed, [#112](https://github.com/mszkb/notion-alternative/issues/112))
 
 ## Ohne Phase – Opt-in-Telemetrie
 
 Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alternative/issues/103)). Gebaut wird erst, wenn [ADR 0016](docs/adr/0016-opt-in-telemetry.md) angenommen ist.
 
-- [ ] ADR: Datenumfang, Empfänger, Einwilligung, Anonymisierung (Vorschlag liegt vor)
-- [ ] Datenkatalog und Datenschutzhinweis ([`docs/privacy/telemetry.md`](docs/privacy/telemetry.md), Entwurf)
+- [ ] ADR: Datenumfang, Empfänger, Einwilligung, Anonymisierung (Vorschlag liegt vor, Entscheidung vertagt; Empfehlungen im ADR)
+- [x] Datenkatalog und Datenschutzhinweis ([`docs/privacy/telemetry.md`](docs/privacy/telemetry.md), abgenommen; gilt nach Annahme des ADR)
 - [ ] Server: Opt-in des Betreibers, Aggregation, Versand, Vorschau
 - [ ] Client: Einwilligung pro Nutzer und lokale Zähler
 - [ ] Empfangsdienst (Collector)

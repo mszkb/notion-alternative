@@ -35,7 +35,7 @@ onMounted(async () => {
 })
 
 function deviceName(id: string): string {
-  if (id === store.deviceId) return 'dieses Gerät'
+  if (store.isOwnDevice(id)) return 'dieses Gerät'
   return deviceNames.value.get(id) ?? 'entferntes Gerät'
 }
 

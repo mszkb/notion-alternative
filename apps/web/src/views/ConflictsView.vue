@@ -45,7 +45,7 @@ const ENTITIES: Record<Conflict['entity'], string> = {
   attachment: 'Anhang',
 }
 
-const isMine = (conflict: Conflict) => conflict.local.deviceId === store.deviceId
+const isMine = (conflict: Conflict) => store.isOwnDevice(conflict.local.deviceId)
 const isDeletion = (conflict: Conflict) => conflict.reason !== 'changed'
 
 /** Readable text of one side: block text, page title or a description of the change. */

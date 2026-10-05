@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto'
 import { newId, type Operation, type SyncPushResult } from '@notion-alt/shared'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api'
 import { deviceStatus } from '../device'
 import { LocalDb } from '../local/db'
 import { LocalStore } from '../local/store'
@@ -88,6 +89,34 @@ describe('requestSync', () => {
     expect(t.pushes).toBeLessThanOrEqual(2)
     expect(await store.pendingOperationCount()).toBe(0)
     expect(syncState.value.lastError).toBeNull()
+  })
+
+  it('a tab still queuing under a removed id takes over the new id and sends again (#46)', async () => {
+    // The other tab signed in again after the removal and moved the device to a new id.
+    const otherTab = await LocalStore.open(db)
+    const id = await otherTab.replaceDeviceId()
+    await store.createDocument({ workspaceId: WS, title: 'Mit alter Id' })
+    const t = transport()
+    const sent: string[] = []
+    t.push = async ({ operations }: { operations: Operation[] }) => {
+      sent.push(...operations.map((op) => op.deviceId))
+      return {
+        results: operations.map((op, i): SyncPushResult =>
+          op.deviceId === id
+            ? { opId: op.opId, status: 'applied', revision: 1, seq: i + 1 }
+            : { opId: op.opId, status: 'rejected', code: 'device_not_active', message: 'x' },
+        ),
+      }
+    }
+    t.register = async (input) => {
+      if (input.id !== id) throw new ApiError(403, 'device_revoked', 'removed')
+      return { device: { ...input, createdAt: '', lastSeenAt: '', current: true } }
+    }
+    await requestSync(store, {}, t)
+    expect(store.deviceId).toBe(id)
+    expect(sent.at(-1)).toBe(id)
+    expect(await store.pendingOperationCount()).toBe(0)
+    expect(deviceStatus.value).toBe('registered')
   })
 
   it('serialises runs of different tabs through Web Locks', async () => {

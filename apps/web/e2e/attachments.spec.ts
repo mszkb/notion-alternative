@@ -64,6 +64,47 @@ test('images and files: added, shown, available on a second device, deleted', as
   await other.context().close()
 })
 
+test('all attachments can be made available offline at once, with progress', async ({
+  page,
+  browser,
+}) => {
+  const email = await signIn(page)
+  await newPage(page, 'Für unterwegs')
+  await waitForSaved(page)
+  await page.getByTestId('attachment-input').setInputFiles([
+    { name: 'punkt.png', mimeType: 'image/png', buffer: PNG },
+    { name: 'bericht.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') },
+  ])
+  await imageLoaded(page)
+  await synced(page)
+
+  // The second device has the metadata, but loads contents only on demand (ADR 0012).
+  const other = await secondDevice(browser, email)
+  await expect(other.getByTestId('sync-status')).toHaveText(/^Synchronisiert um/, {
+    timeout: 15_000,
+  })
+  await other.goto('/account')
+  const totals = other.getByTestId('offline-attachments')
+  await expect(totals).toContainText('0 von 2 Anhängen')
+  // Retried until the first device has uploaded both contents.
+  await expect(async () => {
+    await other.getByRole('button', { name: 'Alle Anhänge offline verfügbar machen' }).click()
+    await expect(totals).toContainText('2 von 2 Anhängen', { timeout: 3_000 })
+  }).toPass({ timeout: 15_000 })
+  await expect(other.getByTestId('offline-attachments-result')).toContainText('geladen')
+  await expect(
+    other.getByRole('button', { name: 'Alle Anhänge offline verfügbar machen' }),
+  ).toBeDisabled()
+
+  // Without the server, the page shows its image from this device.
+  await takeServerDown(other)
+  await other.goto('/')
+  await other.getByRole('tree').getByText('Für unterwegs').click()
+  await imageLoaded(other)
+  await expect(other.locator('a.attachment-file')).toContainText('bericht.pdf')
+  await other.context().close()
+})
+
 test('an image added offline is shown at once and synced later', async ({ page, browser }) => {
   const email = await signIn(page)
   await newPage(page, 'Offline-Bild')

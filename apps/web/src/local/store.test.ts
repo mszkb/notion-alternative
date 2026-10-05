@@ -33,6 +33,48 @@ describe('device id', () => {
     const reopened = await LocalStore.open(db)
     expect(reopened.deviceId).toBe(store.deviceId)
   })
+
+  it('moves queued changes to a new id after the device was removed (#46)', async () => {
+    const old = store.deviceId
+    const document = await store.createDocument({ workspaceId: WS, title: 'Offline' })
+    await store.createBlock(document.id, { content: 'Noch nicht gesendet' })
+    const queued = await ops()
+    // The server refused the removed device; another rejection has an unrelated reason.
+    await store.acknowledge([
+      { opId: queued[0]!.opId, status: 'rejected', code: 'device_not_active', message: 'removed' },
+      { opId: queued[1]!.opId, status: 'rejected', code: 'validation', message: 'bad' },
+    ])
+
+    const id = await store.replaceDeviceId()
+    expect(id).not.toBe(old)
+    expect(store.deviceId).toBe(id)
+    const moved = await ops()
+    expect(moved.map((op) => op.opId)).toEqual(queued.map((op) => op.opId))
+    expect(moved.every((op) => op.deviceId === id)).toBe(true)
+    const issues = (await db.operations.orderBy('seq').toArray()).map((op) => op.issue?.code)
+    expect(issues.slice(0, 2)).toEqual([undefined, 'validation'])
+    // New changes use the new id; the old one still counts as this device.
+    await store.renameDocument(document.id, 'Weiter')
+    expect((await ops()).at(-1)!.deviceId).toBe(id)
+    expect(store.isOwnDevice(old)).toBe(true)
+    expect(store.isOwnDevice(newId())).toBe(false)
+
+    const reopened = await LocalStore.open(db)
+    expect(reopened.deviceId).toBe(id)
+    expect(reopened.isOwnDevice(old)).toBe(true)
+  })
+
+  it('takes over the new id another tab already chose (#46)', async () => {
+    const otherTab = await LocalStore.open(db)
+    const old = store.deviceId
+    await otherTab.createDocument({ workspaceId: WS, title: 'Im anderen Tab' })
+    const id = await store.replaceDeviceId()
+    // The other tab still queued under the old id; it adopts the id instead of making a third.
+    await otherTab.createDocument({ workspaceId: WS, title: 'Noch mit alter Id' })
+    expect(await otherTab.replaceDeviceId()).toBe(id)
+    expect(otherTab.isOwnDevice(old)).toBe(true)
+    expect((await ops()).every((op) => op.deviceId === id)).toBe(true)
+  })
 })
 
 describe('operations', () => {

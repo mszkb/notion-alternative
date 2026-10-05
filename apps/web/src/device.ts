@@ -5,6 +5,7 @@ import { ApiError, api } from './api'
  * Registration state of this browser profile (device id from the local DB, ADR 0009).
  * - `unknown`: not registered yet in this session (offline start) – operations still carry the id.
  * - `revoked`: removed from the account; the server rejects its operations, local data stays.
+ *   After signing in again the device continues under a new id (#46).
  */
 export type DeviceStatus = 'unknown' | 'registered' | 'revoked'
 
@@ -35,14 +36,32 @@ export function defaultDeviceName(userAgent: string): string {
   return os ? `${browser} auf ${os}` : browser
 }
 
-/** Registers the device (idempotent); called on every online refresh. Never throws. */
+/** What registration needs from the local store. */
+export interface DeviceIdentity {
+  readonly deviceId: string
+  replaceDeviceId(): Promise<string>
+}
+
+/**
+ * Registers the device (idempotent); called on every online refresh. Never throws.
+ *
+ * A device removed from the account loses its sessions, so the server answers `device_revoked`
+ * only after the user signed in again. The device then continues under a new id, with its queued
+ * changes (#46). The old id stays removed.
+ */
 export async function registerDevice(
-  deviceId: string,
+  device: DeviceIdentity,
   registerImpl = api.registerDevice,
   userAgent = globalThis.navigator?.userAgent ?? '',
 ): Promise<DeviceStatus> {
+  const name = defaultDeviceName(userAgent)
   try {
-    await registerImpl({ id: deviceId, name: defaultDeviceName(userAgent) })
+    try {
+      await registerImpl({ id: device.deviceId, name })
+    } catch (error) {
+      if (!(error instanceof ApiError && error.code === 'device_revoked')) throw error
+      await registerImpl({ id: await device.replaceDeviceId(), name })
+    }
     deviceStatus.value = 'registered'
   } catch (error) {
     if (error instanceof ApiError && error.code === 'device_revoked') deviceStatus.value = 'revoked'

@@ -1,6 +1,6 @@
 # 0016 – Opt-in-Telemetrie
 
-- **Status:** Proposed
+- **Status:** Proposed – Entscheidung am 2026-10-05 vertagt, Empfehlungen siehe [unten](#empfehlungen-zu-den-offenen-punkten-2026-10-05). Der Datenkatalog ([#105](https://github.com/mszkb/notion-alternative/issues/105)) ist abgenommen.
 - **Datum:** 2026-10-04
 
 ## Kontext
@@ -149,6 +149,32 @@ Heute gibt es kein Administratorkonto: Alle Konten sind gleichberechtigt. Betrei
 **Abhängigkeiten:** keine neue Bibliothek, kein Drittanbieter-SDK. Der Server nutzt `fetch` aus Node 22.
 
 **Verhältnis zu `/api/metrics`:** getrennt. Die Prometheus-Metriken bleiben unverändert und nur für den Betreiber; die Telemetrie liest sie nicht aus.
+
+## Empfehlungen zu den offenen Punkten (2026-10-05)
+
+Die Entscheidung ist vertagt. Für die spätere Annahme empfehle ich:
+
+1. **Keine Installationskennung (Option 1).**
+   - Ohne Kennung sind die Daten anonym. Es fallen keine Betroffenenrechte an (Auskunft, Löschung pro Installation), und ein Datenleck beim Collector verrät nichts über einzelne Instanzen.
+   - Aktive Installationen pro Tag sind trotzdem zählbar (eine Sendung pro Tag).
+   - Eine monatlich rotierende ID lässt sich später nachrüsten, wenn Verläufe wirklich gebraucht werden. Rückwärts, also aus pseudonymen wieder anonyme Daten zu machen, geht dagegen nicht.
+2. **Aufbewahrung beim Collector: 90 Tage Rohdaten, danach nur Wochenaggregate.**
+   - Ohne Kennung sind auch die Rohdaten anonym, eine kürzere Frist brächte kaum Schutz.
+   - 90 Tage decken ein Quartal ab: genug, um die Wirkung eines Releases zu sehen.
+3. **Collector als kleiner eigener Dienst, erst wenn die Domain feststeht.**
+   - Vorschlag: `apps/collector` im selben Repository (Fastify, SQLite, dieselben zod-Schemas aus `@notion-alt/shared`), gehostet in der EU unter einer Projekt-Subdomain, z. B. `telemetry.<projektdomain>`.
+   - Ohne Zugriffslog mit IP-Adressen (nginx `access_log off` bzw. ohne `$remote_addr`) und ohne CDN.
+   - Bis dahin bleibt `TELEMETRY_ENDPOINT` ohne Standardwert.
+4. **Fehlerklassen nicht in Version 1.**
+   - Seltene Fehlerklassen in Kombination mit Version und Plattform machen einzelne Instanzen eher erkennbar als Größenklassen.
+   - Sie brauchen einen eigenen, abschließenden Katalog.
+   - Besser in Version 2, wenn Version 1 läuft und die Vorschau (`telemetry preview`) sich bewährt hat.
+5. **Keine Mindestzahl an Konten:** wie vorgeschlagen. Sonst wären gerade Einzelanwender ausgeschlossen, bei denen Betreiber und Nutzer dieselbe Person sind.
+6. **Reihenfolge der Umsetzung nach der Annahme:**
+   - zuerst Server mit Vorschau-Befehl und ausgeschaltetem Versand (#106), damit Betreiber den Payload vor dem Einschalten sehen;
+   - dann Tests T-TEL-01…07 (#109);
+   - dann der Client-Schalter (#107);
+   - der Collector (#108) zuletzt.
 
 ## Konsequenzen
 

@@ -85,7 +85,7 @@ export async function requestPersistence(): Promise<void> {
  */
 export async function refreshWorkspaces(store: LocalStore): Promise<Workspace[]> {
   if (connection.value === 'online') {
-    await registerDevice(store.deviceId)
+    await registerDevice(store)
     try {
       await store.cacheWorkspaces((await api.listWorkspaces()).workspaces)
     } catch {
