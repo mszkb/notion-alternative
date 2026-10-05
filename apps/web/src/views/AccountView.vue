@@ -105,8 +105,8 @@ async function saveRename(device: Device) {
 async function removeDevice(device: Device) {
   if (
     !window.confirm(
-      `„${device.name}“ entfernen? Das Gerät wird abgemeldet und kann nicht mehr synchronisieren. ` +
-        'Noch nicht synchronisierte Änderungen auf dem Gerät werden dann nicht übertragen.',
+      `„${device.name}“ entfernen? Das Gerät wird abgemeldet. Erst nach erneuter Anmeldung ` +
+        'synchronisiert es wieder, dann als neues Gerät; seine lokalen Änderungen bleiben erhalten.',
     )
   ) {
     return
