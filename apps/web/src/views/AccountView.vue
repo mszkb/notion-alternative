@@ -219,8 +219,8 @@ async function changePassword() {
 
     <h2>Geräte</h2>
     <p v-if="deviceStatus === 'revoked'" class="error">
-      Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten, werden aber nicht
-      mehr synchronisiert.
+      Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten. Nach erneuter
+      Anmeldung synchronisiert es als neues Gerät weiter.
     </p>
     <p v-if="connection !== 'online'" class="muted">
       Die Geräteliste ist nur mit Serververbindung verfügbar.

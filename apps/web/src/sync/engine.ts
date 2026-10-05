@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { api, uploadAttachment } from '../api'
-import { deviceStatus } from '../device'
+import { deviceStatus, registerDevice } from '../device'
 import type { LocalStore } from '../local/store'
 import { connection } from '../session'
 import type { PullFetch } from './pull'
@@ -39,6 +39,7 @@ export interface SyncTransport {
   pull: PullFetch
   snapshot: SnapshotFetch
   upload?: (id: string, data: ArrayBuffer) => Promise<'stored' | 'gone'>
+  register?: typeof api.registerDevice
 }
 
 const defaultTransport: SyncTransport = {
@@ -79,6 +80,12 @@ export function requestSync(
         const outcome = await pushQueue(store, transport.push)
         if (outcome.deviceRevoked) {
           deviceStatus.value = 'revoked'
+          // Another tab may have moved this device to a new id after it signed in again (#46).
+          // Registering takes that id over and the next run sends the queue under it; otherwise
+          // the device stays removed.
+          if ((await registerDevice(store, transport.register)) === 'registered') {
+            again = { full: !!(again?.full || options.full) }
+          }
         } else {
           if (transport.upload) await uploadPendingAttachments(store, transport.upload)
           for (const workspace of await store.cachedWorkspaces()) {
@@ -149,7 +156,8 @@ export async function uploadPendingAttachments(
 async function exclusive(store: LocalStore, run: () => Promise<void>): Promise<void> {
   const locks = globalThis.navigator?.locks
   if (!locks) return run()
-  await locks.request(`notion-alt-sync:${store.deviceId}`, run)
+  // Per local database, not per device id: that changes when a removed device signs in again.
+  await locks.request(`notion-alt-sync:${store.db.name}`, run)
 }
 
 /**

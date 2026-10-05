@@ -23,7 +23,7 @@ Alle IDs sind UUIDs und werden vom Client erzeugt (offline-fähig). Synchronisie
 | --- | --- |
 | `Workspace` | `id`, `name`, `owner_id`, `created_at` |
 | `User` | `id`, `email`, `password_hash`, `created_at` |
-| `Device` | `id`, `user_id`, `name`, `created_at`, `last_seen_at`, `revoked_at` (entfernt; Zeile bleibt, damit Sessions und Operationen des Geräts dauerhaft abgelehnt werden) |
+| `Device` | `id`, `user_id`, `name`, `created_at`, `last_seen_at`, `revoked_at` (entfernt; Zeile bleibt, damit Sessions und Operationen unter dieser ID dauerhaft abgelehnt werden) |
 | `Document` | `id`, `workspace_id`, `parent_id` (Seitenbaum, `null` = Wurzel), `title`, `sort_key`, `favorite`, `created_at`, `updated_at`, `revision`, `deleted_at` |
 | `Block` | `id`, `document_id`, `type` (`paragraph`, `heading`, `list_item`, `code`, `quote`, …), `content` (Text inkl. Inline-Formatierung und Seitenlinks), `attrs` (z. B. Überschriftenebene, Code-Sprache), `sort_key`, `revision`, `deleted_at` |
 | `Tag` | `id`, `workspace_id`, `name`, `revision`, `deleted_at` |
@@ -45,7 +45,11 @@ Protokoll und Operationen: [ADR 0002](../adr/0002-sync-protocol.md).
 
 - Die Geräte-ID entsteht beim ersten Öffnen der lokalen Datenbank eines Benutzers (`meta.deviceId`, eine Dexie-DB pro Benutzer, ADR 0009) und ist damit stabil pro Browserprofil und Konto. Jede Operation trägt sie, auch wenn das Gerät offline gestartet und noch nicht registriert ist.
 - Registrierung `POST /api/devices` (`id`, `name`) ist idempotent und läuft bei jedem Online-Refresh. Sie verknüpft die aktuelle Session mit dem Gerät (`sessions.device_id`) und aktualisiert `last_seen_at`; ein vom Nutzer vergebener Name bleibt erhalten. Gehört die ID einem anderen Konto: `409 device_conflict`.
-- `GET /api/devices` listet aktive Geräte, `PATCH /api/devices/:id` benennt um, `DELETE /api/devices/:id` entfernt: `revoked_at` wird gesetzt und alle Sessions des Geräts enden. Erneute Registrierung derselben ID antwortet `403 device_revoked`; der Client zeigt das an, lokale Daten bleiben lesbar und bearbeitbar. Das aktuell benutzte Gerät kann sich nicht selbst entfernen (`409 current_device`, stattdessen abmelden).
+- `GET /api/devices` listet aktive Geräte, `PATCH /api/devices/:id` benennt um, `DELETE /api/devices/:id` entfernt: `revoked_at` wird gesetzt und alle Sessions des Geräts enden. Lokale Daten bleiben lesbar und bearbeitbar. Ein entferntes Gerät bleibt nicht dauerhaft gesperrt ([#46](https://github.com/mszkb/notion-alternative/issues/46)):
+  - Registriert es sich mit einer Session, die **vor** der Entfernung entstand (z. B. angemeldet, aber nie registriert), endet diese Session mit `401`. Weiter geht es nur nach erneuter Anmeldung.
+  - Mit einer **neueren** Session antwortet der Server `403 device_revoked`, die alte ID bleibt entfernt. Der Client wechselt dann auf eine neue Geräte-ID (`LocalStore.replaceDeviceId`): In einer Transaktion bekommen alle Operationen der Warteschlange die neue ID, Ablehnungen mit `device_not_active` werden zurückgesetzt, und die alten IDs gelten weiter als eigene (Echo beim Pull, eigene Konflikte, Verlauf). Kein ungesendeter Stand geht verloren; ein anderer Tab übernimmt die bereits gewählte ID, statt eine dritte anzulegen.
+  - Die Sync-Sperre zwischen Tabs (Web Locks) hängt deshalb an der lokalen Datenbank, nicht an der Geräte-ID.
+- Das aktuell benutzte Gerät kann sich nicht selbst entfernen (`409 current_device`, stattdessen abmelden).
 - Sync (Phase 3) lehnt Operationen ab, deren `device_id` kein aktives Gerät des Benutzers ist (`findActiveDevice`), und aktualisiert `last_seen_at` bei jedem Lauf.
 
 ### Änderungslog (Server)

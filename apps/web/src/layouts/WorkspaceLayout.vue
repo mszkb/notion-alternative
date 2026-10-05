@@ -399,8 +399,8 @@ watch(
           regelmäßig exportieren.
         </p>
         <p v-if="deviceStatus === 'revoked'" class="error" data-testid="device-revoked">
-          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten, werden aber
-          nicht mehr synchronisiert.
+          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten. Nach erneuter
+          Anmeldung synchronisiert es als neues Gerät weiter.
         </p>
         <p v-if="installPrompt" class="status">
           <button type="button" class="link" @click="installApp">App installieren</button>

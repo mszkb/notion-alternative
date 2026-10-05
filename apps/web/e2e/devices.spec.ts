@@ -1,6 +1,6 @@
-import { PASSWORD, expect, signIn, test } from './fixtures'
+import { PASSWORD, expect, newPage, signIn, test, waitForSaved } from './fixtures'
 
-test('lists, renames and removes devices; a removed device is signed out and flagged', async ({
+test('lists, renames and removes devices; a removed device is signed out and continues as a new device after signing in again', async ({
   page,
   browser,
 }) => {
@@ -32,10 +32,22 @@ test('lists, renames and removes devices; a removed device is signed out and fla
   await expect(devices.getByRole('listitem')).toHaveCount(1)
   await expect(devices).toContainText('Arbeitslaptop')
 
-  // The removed device keeps its local data but loses its session; signing in again is refused.
+  // The removed device keeps its local data but loses its session.
   expect((await phone.request.get('/api/auth/me')).status()).toBe(401)
+  // It keeps working locally meanwhile (#46).
+  await newPage(phone, 'Während entfernt')
+  await waitForSaved(phone)
+
+  // Signing in again: it continues as a new device and sends what it queued.
   await phone.request.post('/api/auth/login', { data: { email, password: PASSWORD } })
   await phone.reload()
-  await expect(phone.getByTestId('device-revoked')).toBeVisible()
+  await expect(phone.getByTestId('sync-status')).toHaveText(/^Synchronisiert um/, {
+    timeout: 15_000,
+  })
+  await expect(phone.getByTestId('device-revoked')).toHaveCount(0)
+  await page.reload()
+  await expect(devices.getByRole('listitem')).toHaveCount(2)
+  await page.goto('/')
+  await expect(page.getByRole('tree')).toContainText('Während entfernt', { timeout: 15_000 })
   await other.close()
 })

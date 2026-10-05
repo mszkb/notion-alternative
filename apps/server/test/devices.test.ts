@@ -117,11 +117,47 @@ describe('devices', () => {
     expect(await findActiveDevice(db, user.id, phoneId)).toBeUndefined()
     expect(await findActiveDevice(db, user.id, laptopId)).toBeDefined()
 
-    // Signing in again on the removed device does not bring it back.
+    // Signing in again does not bring the old id back; the client continues under a new id
+    // (#46), and the removed entry stays hidden.
     const relogin = await login('alice@example.com')
     const retry = await registerDevice(relogin, phoneId)
     expect(retry.statusCode).toBe(403)
     expect(retry.json().error.code).toBe('device_revoked')
+    const newPhoneId = randomUUID()
+    expect((await registerDevice(relogin, newPhoneId)).statusCode).toBe(201)
+    expect(
+      (await list(laptop))
+        .json()
+        .devices.map((d: { id: string }) => d.id)
+        .sort(),
+    ).toEqual([laptopId, newPhoneId].sort())
+    expect(await findActiveDevice(db, user.id, phoneId)).toBeUndefined()
+  })
+
+  it('ends a session from before the removal that the device never registered with (#46)', async () => {
+    ;({ app, db } = await createTestApp())
+    const { cookie: laptop } = await register(app, 'alice@example.com')
+    const laptopId = randomUUID()
+    await registerDevice(laptop, laptopId)
+    // Signed in on the phone, registered with one session; a second one stays unlinked
+    // (e.g. signed in again, then offline before registering).
+    const phone = await login('alice@example.com')
+    const unlinked = await login('alice@example.com')
+    const phoneId = randomUUID()
+    await registerDevice(phone, phoneId)
+    await app.inject({
+      method: 'DELETE',
+      url: `/api/devices/${phoneId}`,
+      headers: { cookie: laptop },
+    })
+
+    const retry = await registerDevice(unlinked, phoneId)
+    expect(retry.statusCode).toBe(401)
+    expect(
+      (await app.inject({ url: '/api/auth/me', headers: { cookie: unlinked } })).statusCode,
+    ).toBe(401)
+    // Nothing can be registered with that session any more, not even a new id.
+    expect((await registerDevice(unlinked, randomUUID())).statusCode).toBe(401)
   })
 })
 

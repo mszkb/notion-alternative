@@ -32,6 +32,21 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
     const token = request.cookies[SESSION_COOKIE]!
     const now = new Date().toISOString()
 
+    const known = await findDeviceById(db, input.id)
+    if (known?.revoked_at && known.user_id === user.id) {
+      const session = await db
+        .selectFrom('sessions')
+        .select('created_at')
+        .where('id', '=', sessionId(token))
+        .executeTakeFirst()
+      if (!session || session.created_at <= known.revoked_at) {
+        // Removing a device ends its sessions; one it never registered with (signed in, then
+        // offline) ends now, so only signing in again gets past a removal (#46).
+        await db.deleteFrom('sessions').where('id', '=', sessionId(token)).execute()
+        throw new HttpError(401, 'unauthorized', 'This device was removed; sign in again')
+      }
+    }
+
     const { row, created } = await db.transaction().execute(async (trx) => {
       const existing = await findDeviceById(trx, input.id)
       if (existing && existing.user_id !== user.id) {
@@ -39,6 +54,7 @@ export async function deviceRoutes(app: FastifyInstance): Promise<void> {
         throw new HttpError(409, 'device_conflict', 'Device id belongs to another account')
       }
       if (existing?.revoked_at) {
+        // Signed in again after the removal: the client continues under a new id (#46).
         throw new HttpError(403, 'device_revoked', 'This device was removed from the account')
       }
       if (existing) {
