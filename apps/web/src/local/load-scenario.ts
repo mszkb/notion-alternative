@@ -94,8 +94,12 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
   const pageMs: number[] = []
   const [, snapshotMs] = await time(async () => {
     const progress = await store.beginResync(workspaceId)
-    const entities = [...data.documents.map((d) => ['documents', d] as const)].concat(
-      data.blocks.map((b) => ['blocks', b] as const) as never,
+    // Like the server (#97): table by table, each ordered by id, so a page of blocks spans
+    // many pages.
+    const byId = <T extends { id: string }>(list: T[]) =>
+      [...list].sort((x, y) => (x.id < y.id ? -1 : 1))
+    const entities = [...byId(data.documents).map((d) => ['documents', d] as const)].concat(
+      byId(data.blocks).map((b) => ['blocks', b] as const) as never,
     )
     for (let i = 0; i < entities.length; i += SNAPSHOT_PAGE_SIZE) {
       const page: SyncSnapshotResponse = { ...data, documents: [], blocks: [] }

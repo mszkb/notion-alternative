@@ -169,9 +169,12 @@ export class LocalStore {
   }
 
   /** Marks the touched pages for the saved search index, inside the write's transaction (#98). */
-  private async persistTouched(ctx: WriteContext) {
+  /** Stores search-index marks for the touched pages, except those already in `skip`. */
+  private async persistTouched(ctx: WriteContext, skip?: Map<string, Set<string>>) {
     const rows = [...ctx.touched].flatMap(([workspaceId, ids]) =>
-      [...ids].map((documentId) => ({ documentId, workspaceId, mark: newId() })),
+      [...ids]
+        .filter((documentId) => !skip?.get(workspaceId)?.has(documentId))
+        .map((documentId) => ({ documentId, workspaceId, mark: newId() })),
     )
     if (rows.length > 0) await this.db.searchDirty.bulkPut(rows)
   }
@@ -1121,7 +1124,9 @@ export class LocalStore {
       await this.db.links.bulkPut(links)
       for (const d of page.documents) this.mark(ctx, workspaceId, d.id)
       for (const b of page.blocks) this.mark(ctx, workspaceId, b.documentId)
-      await this.persistTouched(ctx)
+      // Pages arrive ordered by id, so every page of blocks touches nearly every document
+      // (#102). Only the first touch is stored here; finishResync marks all of them again.
+      await this.persistTouched(ctx, progress.touched)
     })
     for (const id of all) progress.seen.add(id)
     this.collect(progress, ctx)
@@ -1202,10 +1207,12 @@ export class LocalStore {
       await this.db.conflicts.bulkDelete(drop(local.conflicts))
       for (const d of local.documents) this.mark(ctx, workspaceId, d.id)
       for (const b of local.blocks) this.mark(ctx, workspaceId, b.documentId)
-      await this.persistTouched(ctx)
+      this.collect(progress, ctx)
+      // Fresh marks for every page written, together with the cursor: a search index saved
+      // during the re-sync may have consumed a first mark before later pages changed the page.
+      await this.persistTouched(progress)
       await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
     })
-    this.collect(progress, ctx)
     this.reportResync(progress)
   }
 

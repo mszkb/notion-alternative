@@ -409,6 +409,30 @@ describe('paged re-sync (#97)', () => {
     stop()
   })
 
+  it('marks each page for the search index once, and all again with the cursor (#102)', async () => {
+    const docs = await workspaceWithBlocks(3, 6)
+    let stored = 0
+    const bulkPut = b.db.searchDirty.bulkPut.bind(b.db.searchDirty)
+    b.db.searchDirty.bulkPut = ((rows: unknown[]) => {
+      stored += rows.length
+      return bulkPut(rows as never)
+    }) as typeof bulkPut
+    // A search index saved between two pages consumes the marks written so far.
+    const snapshot = pagedSnapshot(4, {
+      beforePage: async (n) => {
+        if (n !== 2) return
+        const marks = await b.searchDirtyMarks(WS)
+        expect(marks.size).toBeGreaterThan(0)
+        await b.saveSearchIndex({ workspaceId: WS, format: 0, documentCount: 0, json: '{}' }, marks)
+      },
+    })
+    await syncWorkspace(b, WS, { pull: server.pull, snapshot })
+    // 21 entities in pages of 4 touch pages over and over; each is stored once per re-sync
+    // while writing, then once more together with the cursor.
+    expect(stored).toBe(2 * docs.length)
+    expect([...(await b.searchDirtyMarks(WS)).keys()].sort()).toEqual(docs.map((d) => d.id).sort())
+  })
+
   it('keeps unsynced local edits across pages', async () => {
     const [doc] = await workspaceWithBlocks(2, 3)
     await syncWorkspace(b, WS, { pull: server.pull, snapshot: pagedSnapshot(100) })
