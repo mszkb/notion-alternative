@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { type ChildProcess, spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import { rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -12,6 +12,7 @@ import { LocalDb } from '../local/db'
 import { LocalStore } from '../local/store'
 import { pushQueue } from './push'
 import { syncWorkspace } from './resync'
+import { spawnServer, waitForServer } from './test-server'
 
 // #75: the server is restored from a backup older than what the devices synced. Devices must
 // re-sync (410) and send again what the restored server lost, without losing local data.
@@ -22,28 +23,8 @@ const DB_PATH = path.join(tmpdir(), `notion-alt-restore-${Date.now()}.sqlite`)
 let server: ChildProcess | null = null
 
 async function startServer() {
-  server = spawn('pnpm', ['--filter', '@notion-alt/server', 'exec', 'tsx', 'src/index.ts'], {
-    env: {
-      ...process.env,
-      PORT: String(PORT),
-      HOST: '127.0.0.1',
-      DATABASE_PATH: DB_PATH,
-      LOG_LEVEL: 'silent',
-      ALLOW_REGISTRATION: 'true',
-    },
-    stdio: 'ignore',
-    // Own process group: the kill reaches tsx and node, not only pnpm.
-    detached: true,
-  })
-  for (let i = 0; i < 150; i++) {
-    try {
-      if ((await fetch(`${BASE}/api/ready`)).ok) return
-    } catch {
-      // not up yet
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  throw new Error('server did not start')
+  server = spawnServer(PORT, DB_PATH)
+  await waitForServer(server, BASE)
 }
 
 async function killServer() {
