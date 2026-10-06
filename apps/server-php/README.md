@@ -73,7 +73,7 @@ Ungültige Werte führen zu einer Fehlermeldung, die nur Variablennamen nennt (z
 
 ## Migrationen
 
-`src/Database/Migrations` enthält je eine Klasse pro Node-Migration (`0001_initial` … `0011_snapshot_paging`) mit exakt der DDL, die Kysely erzeugt. Der Migrator nutzt Kyselys Tabellen `kysely_migration` und `kysely_migration_lock` (gleiche DDL, gleiches Zeitstempelformat): Eine vom Node-Server angelegte Datenbank wird erkannt und fortgeführt, eine neue bekommt dasselbe Schema. Unbekannte Migrationsnamen (z. B. von einer neueren Version) brechen wie bei Kysely ab.
+`src/Database/Migrations` enthält je eine Klasse pro Node-Migration (`0001_initial` … `0012_auth_attempts`) mit exakt der DDL, die Kysely erzeugt. `0012_auth_attempts` (Zähler der Rate-Limits) nutzt nur der PHP-Server; der Node-Server legt die Tabelle an, zählt aber im Speicher. Der Migrator nutzt Kyselys Tabellen `kysely_migration` und `kysely_migration_lock` (gleiche DDL, gleiches Zeitstempelformat): Eine vom Node-Server angelegte Datenbank wird erkannt und fortgeführt, eine neue bekommt dasselbe Schema. Unbekannte Migrationsnamen (z. B. von einer neueren Version) brechen wie bei Kysely ab.
 
 Anders als Kysely unter SQLite (ein Prozess) laufen PHP-Anfragen parallel: Der Migrator setzt den Lock-Eintrag wirklich (`is_locked = 1`) und führt jede Migration samt Buchungszeile in einer eigenen Transaktion aus. Bleibt der Lock nach einem Absturz stehen, nennt die Fehlermeldung das SQL zum Freigeben.
 
@@ -83,7 +83,7 @@ Anders als Kysely unter SQLite (ein Prozess) laufen PHP-Anfragen parallel: Der M
 pnpm --filter @notion-alt/server exec tsx scripts/dump-php-fixtures.ts
 ```
 
-Das Skript schreibt nach `tests/fixtures/`: `node-schema.json` (`sqlite_master` einer frischen Node-Datenbank), `node-0004.sqlite` und `node-latest.sqlite` (Datenbank mit Inhalt vor und nach den Node-Migrationen 0005–0011) und `inline-plaintext.json` (Erwartungswerte für den PHP-Port von `inlineToPlainText`, den Migration 0005 braucht).
+Das Skript schreibt nach `tests/fixtures/`: `node-schema.json` (`sqlite_master` einer frischen Node-Datenbank), `node-0004.sqlite` und `node-latest.sqlite` (Datenbank mit Inhalt vor und nach den Node-Migrationen 0005–0012) und `inline-plaintext.json` (Erwartungswerte für den PHP-Port von `inlineToPlainText`, den Migration 0005 braucht).
 
 ## Tests und Werkzeuge
 

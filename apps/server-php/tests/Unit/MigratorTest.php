@@ -34,6 +34,7 @@ final class MigratorTest extends TestCase
         '0009_search_rowids',
         '0010_search_dirty',
         '0011_snapshot_paging',
+        '0012_auth_attempts',
     ];
 
     public function testFreshDatabaseHasTheSchemaOfTheNodeServer(): void

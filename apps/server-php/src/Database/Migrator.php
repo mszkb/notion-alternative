@@ -15,6 +15,7 @@ use NotionAlt\Database\Migrations\M0008Attachments;
 use NotionAlt\Database\Migrations\M0009SearchRowids;
 use NotionAlt\Database\Migrations\M0010SearchDirty;
 use NotionAlt\Database\Migrations\M0011SnapshotPaging;
+use NotionAlt\Database\Migrations\M0012AuthAttempts;
 
 /**
  * Runs the migrations with Kysely's bookkeeping (`kysely_migration`, `kysely_migration_lock`,
@@ -72,6 +73,7 @@ final class Migrator
             '0009_search_rowids' => new M0009SearchRowids(),
             '0010_search_dirty' => new M0010SearchDirty(),
             '0011_snapshot_paging' => new M0011SnapshotPaging(),
+            '0012_auth_attempts' => new M0012AuthAttempts(),
         ];
     }
 

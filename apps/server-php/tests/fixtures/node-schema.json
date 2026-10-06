@@ -13,6 +13,12 @@
   },
   {
     "type": "index",
+    "name": "auth_attempts_reset_at_idx",
+    "tbl_name": "auth_attempts",
+    "sql": "CREATE INDEX \"auth_attempts_reset_at_idx\" on \"auth_attempts\" (\"reset_at\")"
+  },
+  {
+    "type": "index",
     "name": "blocks_document_id_idx",
     "tbl_name": "blocks",
     "sql": "CREATE INDEX \"blocks_document_id_idx\" on \"blocks\" (\"document_id\")"
@@ -105,6 +111,12 @@
     "type": "index",
     "name": "sqlite_autoindex_attachments_1",
     "tbl_name": "attachments",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_auth_attempts_1",
+    "tbl_name": "auth_attempts",
     "sql": null
   },
   {
@@ -244,6 +256,12 @@
     "name": "attachments",
     "tbl_name": "attachments",
     "sql": "CREATE TABLE \"attachments\" (\"id\" text primary key, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"document_id\" text not null, \"name\" text not null, \"mime_type\" text not null, \"size\" integer not null, \"sha256\" text not null, \"created_at\" text not null, \"stored_at\" text, \"revision\" integer not null, \"deleted_at\" text)"
+  },
+  {
+    "type": "table",
+    "name": "auth_attempts",
+    "tbl_name": "auth_attempts",
+    "sql": "CREATE TABLE \"auth_attempts\" (\"key\" text primary key, \"count\" integer not null, \"reset_at\" integer not null)"
   },
   {
     "type": "table",
