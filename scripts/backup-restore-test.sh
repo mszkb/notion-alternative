@@ -50,8 +50,9 @@ wipe() {
 }
 restore() {
   if [ "$MODE" = docker ]; then
-    chmod -R a+rX "$WORK" # the container runs as user node
-    docker compose run --rm --no-deps -v "$WORK/backup:/restore:ro" backend node dist/index.js restore /restore
+    # Streamed in instead of bind-mounted, so it also works against a remote Docker host.
+    tar -C "$WORK/backup" -c . | docker compose run --rm --no-deps -T backend \
+      sh -c 'mkdir /tmp/restore && tar -x -C /tmp/restore && node dist/index.js restore /tmp/restore'
   else DATA_DIR="$WORK/data" node apps/server/dist/index.js restore "$WORK/backup"; fi
 }
 
