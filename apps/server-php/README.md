@@ -90,7 +90,7 @@ Das Skript schreibt nach `tests/fixtures/`: `node-schema.json` (`sqlite_master` 
 | Befehl | Zweck |
 | --- | --- |
 | `composer test` | PHPUnit (`tests/`) |
-| `composer analyse` | PHPStan, **Level 8** (`phpstan.neon.dist`) |
+| `composer analyse` | PHPStan, **Level max** (`phpstan.neon.dist`) |
 | `composer cs` / `composer cs:fix` | PHP-CS-Fixer (PER-CS 2.0, `declare(strict_types=1)`) prüfen / korrigieren |
 
-PHPStan läuft für das Grundgerüst auf Level 8; Ziel laut ADR 0018 ist `max`, das Level wird angehoben, sobald die Endpunkte portiert sind. Die CI (`.github/workflows/ci.yml`, Job `php`) führt alle drei auf PHP 8.2 und 8.3 aus.
+PHPStan läuft auf Level `max` (ADR 0018). Die CI (`.github/workflows/ci.yml`, Job `php`) führt alle drei auf PHP 8.2 und 8.3 aus.

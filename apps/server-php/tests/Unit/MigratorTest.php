@@ -44,7 +44,8 @@ final class MigratorTest extends TestCase
         self::assertSame(self::nodeSchema(), self::schema($db));
         self::assertSame([['id' => 'migration_lock', 'is_locked' => 0]], self::rows($db, 'select * from kysely_migration_lock'));
         foreach (self::rows($db, 'select timestamp from kysely_migration') as $row) {
-            self::assertMatchesRegularExpression('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/', (string) $row['timestamp']);
+            self::assertIsString($row['timestamp']);
+            self::assertMatchesRegularExpression('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/', $row['timestamp']);
         }
     }
 
@@ -218,7 +219,8 @@ final class MigratorTest extends TestCase
     {
         $snapshot = ['schema' => self::schema($db)];
         foreach (self::rows($db, "select name from sqlite_master where type = 'table' order by name") as $table) {
-            $name = (string) $table['name'];
+            $name = $table['name'];
+            self::assertIsString($name);
             // Some FTS5 shadow tables have no rowid: compare the rows as a sorted set.
             $rows = [];
             foreach (self::rows($db, "select * from \"{$name}\"") as $row) {

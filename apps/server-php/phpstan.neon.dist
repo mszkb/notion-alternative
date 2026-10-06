@@ -1,6 +1,5 @@
 parameters:
-    # Level 8 for the scaffold (#119); raise to max once the ported endpoints are in (ADR 0018).
-    level: 8
+    level: max
     paths:
         - src
         - tests

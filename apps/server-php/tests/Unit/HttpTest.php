@@ -29,6 +29,16 @@ final class HttpTest extends TestCase
     /** @var list<array<string, mixed>> */
     private array $logs = [];
 
+    /**
+     * Log lines written so far (a method, so PHPStan does not keep the narrowed type after a reset).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function logs(): array
+    {
+        return $this->logs;
+    }
+
     public function testHealth(): void
     {
         $response = $this->request('GET', '/api/health');
@@ -142,12 +152,13 @@ final class HttpTest extends TestCase
         $response = $this->request('GET', '/api/boom');
         self::assertSame(500, $response->getStatusCode());
         self::assertSame('{"error":{"code":"internal","message":"Internal server error"}}', (string) $response->getBody());
-        self::assertSame('unhandled error', $this->logs[0]['msg'] ?? null);
-        self::assertSame(50, $this->logs[0]['level'] ?? null);
-        $err = $this->logs[0]['err'] ?? null;
+        $logs = $this->logs();
+        self::assertSame('unhandled error', $logs[0]['msg'] ?? null);
+        self::assertSame(50, $logs[0]['level'] ?? null);
+        $err = $logs[0]['err'] ?? null;
         self::assertIsArray($err);
         self::assertSame('kaputt', $err['message'] ?? null);
-        self::assertSame(['statusCode' => 500], $this->logs[1]['res'] ?? null);
+        self::assertSame(['statusCode' => 500], $logs[1]['res'] ?? null);
     }
 
     public function testBasePath(): void

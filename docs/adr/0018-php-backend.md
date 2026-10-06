@@ -32,7 +32,7 @@ Randbedingungen:
 
 | | |
 | --- | --- |
-| PHP | **≥ 8.2** (8.1 ist ohne Sicherheitsupdates); CI testet 8.2 und die aktuelle Version |
+| PHP | **≥ 8.2** (8.1 ist ohne Sicherheitsupdates); CI testet die Mindestversion 8.2 und 8.3 (`composer.lock` mit Plattform 8.2) |
 | Pflicht | `pdo_sqlite` **mit FTS5** (beim Start geprüft, sonst klare Fehlermeldung), `openssl` (Web Push: ECDH, AES-GCM, ES256), `curl` (Web Push, S3), `mbstring`, `json`, `hash` |
 | Optional | `apcu` (Metriken, Cache); ohne APCu laufen Metriken über SQLite oder sind aus |
 | Nicht nötig | `sodium`: Die vorhandene libsodium-scrypt-Funktion verlangt 32-Byte-Salts, die gespeicherten Hashes haben 16 Byte (siehe Passwörter) |
