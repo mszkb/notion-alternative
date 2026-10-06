@@ -1,6 +1,6 @@
 # Backup, Restore und Upgrade
 
-Anleitung für den Docker-Compose-Stack ([Deployment](deployment.md)). Alle Befehle im Verzeichnis mit der `docker-compose.yml` ausführen. Dieselben Befehle laufen in CI bei jedem Push gegen den echten Stack (`scripts/backup-restore-test.sh`, Job `backup`, T-BAK-01).
+Anleitung für den Docker-Compose-Stack ([Deployment](deployment.md)). Alle Befehle im Verzeichnis mit der `docker-compose.yml` ausführen. Dieselben Befehle laufen jede Nacht gegen den echten Stack (`scripts/backup-restore-test.sh` im Gitea-Nightly (`msz/gitea-workflows`, 22:00), T-BAK-01).
 
 ## Was gesichert wird
 
