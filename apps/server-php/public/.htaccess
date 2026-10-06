@@ -1,0 +1,17 @@
+# Apache: every request goes to index.php (Slim routes everything below /api).
+# Needs mod_rewrite and "AllowOverride FileInfo" (or All) for this directory.
+
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Everything that is not index.php itself goes to the front controller.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# No directory listing or hidden files (.htaccess, .env, …).
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
