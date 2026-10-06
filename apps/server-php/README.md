@@ -85,6 +85,13 @@ pnpm --filter @notion-alt/server exec tsx scripts/dump-php-fixtures.ts
 
 Das Skript schreibt nach `tests/fixtures/`: `node-schema.json` (`sqlite_master` einer frischen Node-Datenbank), `node-0004.sqlite` und `node-latest.sqlite` (Datenbank mit Inhalt vor und nach den Node-Migrationen 0005–0011) und `inline-plaintext.json` (Erwartungswerte für den PHP-Port von `inlineToPlainText`, den Migration 0005 braucht).
 
+## Bausteine
+
+Reine Funktionen ohne HTTP, für die späteren Endpunkte vorab portiert; nur `ext-openssl` und `hash`:
+
+- `src/Push` (Web Push, #125): `WebPushCrypto::encrypt` (RFC 8291, aes128gcm), `Vapid::authorization` (RFC 8292, ES256-JWT), `VapidKeys` (liest und schreibt das JSON, das der Node-Server in `settings` unter `vapid` speichert; ein vorhandenes Schlüsselpaar gilt weiter), `PushRequest::syncAvailable` (Header und verschlüsselter Hinweis ohne Inhalte) und `PushRequest::isAllowedEndpoint`. Tests: RFC-8291-Testvektor, JWT-Prüfung mit dem öffentlichen Schlüssel, Node-Schlüssel laden.
+- `src/Attachments/S3Signer.php` (S3, #124): AWS Signature V4 mit Header und Objekt-URLs (Path-Style oder virtueller Host). Tests: AWS-Beispiel und vom Node-Client aufgezeichnete Anfragen. Presigned URLs gibt es wie im Node-Server nicht.
+
 ## Tests und Werkzeuge
 
 | Befehl | Zweck |
