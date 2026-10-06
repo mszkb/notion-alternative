@@ -12,6 +12,7 @@ use NotionAlt\Http\ErrorHandler;
 use NotionAlt\Http\JsonBodyMiddleware;
 use NotionAlt\Http\RequestLogMiddleware;
 use NotionAlt\Logging\Logger;
+use NotionAlt\Search\SearchRoutes;
 use NotionAlt\Sync\SyncRoutes;
 use NotionAlt\Workspaces\WorkspaceRoutes;
 use Slim\App;
@@ -45,6 +46,7 @@ final class AppFactory
             WorkspaceRoutes::register($api, $db);
             DeviceRoutes::register($api, $db, $logger);
             SyncRoutes::register($api, $db, $config->attachments);
+            SearchRoutes::register($api, $db);
         });
 
         return $app;

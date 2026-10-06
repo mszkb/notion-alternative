@@ -135,7 +135,7 @@ Self-Hosting per ZIP auf Shared Hosting ([#116](https://github.com/mszkb/notion-
 - [x] Auth, Sessions, Workspaces, Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120))
 - [x] Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121); offen: Push-Hinweis nach #125, Metrik nach #127)
 - [x] Sync-Pull, Änderungslog, Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122); die Contract-Tests zu `cursor_expired` brauchen den Import, #126)
-- [ ] Serverseitige Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123); Index und Abfrage portiert, Route offen)
+- [x] Serverseitige Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123))
 - [ ] Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124); SigV4-Signatur portiert)
 - [ ] Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125); Verschlüsselung und VAPID portiert, Routen und Versand offen)
 - [ ] Versionsverlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126))
