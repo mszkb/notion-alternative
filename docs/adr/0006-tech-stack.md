@@ -1,6 +1,6 @@
 # 0006 – Tech-Stack (Frontend/Backend)
 
-- **Status:** Accepted
+- **Status:** Accepted; Backend (Fastify, TypeScript auf dem Server) und Deployment teilweise Superseded by [0018](0018-php-backend.md) (Proposed)
 - **Datum:** 2026-10-02
 
 ## Kontext

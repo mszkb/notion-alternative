@@ -1,6 +1,6 @@
 # 0007 – Bibliotheken und Konventionen für Phase 1
 
-- **Status:** Accepted
+- **Status:** Accepted; Server-Bibliotheken (better-sqlite3, Kysely, esbuild-Server-Build, Server-Tests per `fastify.inject`, scrypt aus `node:crypto`) teilweise Superseded by [0018](0018-php-backend.md) (Proposed)
 - **Datum:** 2026-10-02
 
 ## Kontext

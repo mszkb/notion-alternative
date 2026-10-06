@@ -23,6 +23,10 @@ Entschieden (`Accepted`):
 - **Lokale Datenschicht** ([ADR 0009](docs/adr/0009-local-data-layer.md)): eine Dexie-DB pro Benutzer, Operationen in derselben Transaktion, Entität `document_tag`, Feldnamen camelCase, MiniSearch für die lokale Suche, Offline-Start mit zwischengespeichertem Benutzer.
 - **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. HTTPS für Smartphones wird in Phase 4 entschieden, kein dritter Container.
 
+Vorgeschlagen (`Proposed`), Umsetzung mit dem Owner abgestimmt (Epic #116):
+
+- **PHP-Backend** ([ADR 0018](docs/adr/0018-php-backend.md)): PHP ≥ 8.2 mit Slim 4 in `apps/server-php`, parallel zum Node-Server bis die Contract-Tests grün sind; gleiche SQLite-Datei und `kysely_migration`-Tabellen, gleiches HTTP-API. Shared Hosting wird Hauptweg, Docker bleibt. Ersetzt Teile von ADR 0006, 0007, 0010. Solange beide Server existieren: neue Migrationen in beiden anlegen.
+
 Noch offen in Phase 0: Zielgruppe schärfen.
 
 ## Wo steht was

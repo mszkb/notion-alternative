@@ -1,6 +1,6 @@
 # 0010 – Referenz-Deployment und HTTPS
 
-- **Status:** Accepted
+- **Status:** Accepted; Referenz-Deployment teilweise Superseded by [0018](0018-php-backend.md) (Proposed): Shared Hosting wird Hauptweg, Docker Compose bleibt
 - **Datum:** 2026-10-03
 
 ## Kontext

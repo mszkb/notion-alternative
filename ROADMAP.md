@@ -125,6 +125,24 @@ Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alte
 - [ ] Empfangsdienst (Collector)
 - [ ] Tests T-TEL-01…07
 
+## Ohne Phase – Backend in PHP (Slim 4)
+
+Self-Hosting per ZIP auf Shared Hosting ([#116](https://github.com/mszkb/notion-alternative/issues/116), [ADR 0018](docs/adr/0018-php-backend.md), Proposed). Der PHP-Server entsteht in `apps/server-php` parallel zum Node-Server.
+
+- [ ] ADR 0018: PHP-Backend mit Slim 4 (Vorschlag liegt vor, Annahme durch den Owner offen) ([#117](https://github.com/mszkb/notion-alternative/issues/117))
+- [ ] Contract-Tests gegen beliebige Server-URL ([#118](https://github.com/mszkb/notion-alternative/issues/118))
+- [ ] Grundgerüst: Slim 4, Konfiguration, Fehlerformat, SQLite, Migrationen ([#119](https://github.com/mszkb/notion-alternative/issues/119))
+- [ ] Auth, Sessions, Workspaces, Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120))
+- [ ] Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121))
+- [ ] Sync-Pull, Änderungslog, Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122))
+- [ ] Serverseitige Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123))
+- [ ] Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124))
+- [ ] Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125))
+- [ ] Versionsverlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126))
+- [ ] CLI, Cron, Metriken ([#127](https://github.com/mszkb/notion-alternative/issues/127))
+- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128))
+- [ ] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129))
+
 ## Phase 8 – Collaboration
 
 - [ ] Sharing
