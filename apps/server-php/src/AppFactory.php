@@ -12,6 +12,7 @@ use NotionAlt\Http\ErrorHandler;
 use NotionAlt\Http\JsonBodyMiddleware;
 use NotionAlt\Http\RequestLogMiddleware;
 use NotionAlt\Logging\Logger;
+use NotionAlt\Sync\SyncRoutes;
 use NotionAlt\Workspaces\WorkspaceRoutes;
 use Slim\App;
 use Slim\Interfaces\RouteCollectorProxyInterface;
@@ -43,6 +44,7 @@ final class AppFactory
             AuthRoutes::register($api, $db, $config, $logger);
             WorkspaceRoutes::register($api, $db);
             DeviceRoutes::register($api, $db, $logger);
+            SyncRoutes::register($api, $db, $config->attachments);
         });
 
         return $app;

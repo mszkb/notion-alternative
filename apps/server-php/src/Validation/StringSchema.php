@@ -18,7 +18,7 @@ final class StringSchema extends Schema
     /** zod 4's UUID pattern (`z.uuid()`, RFC 9562 versions 1-8 plus nil and max). */
     private const UUID = '/^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/D';
 
-    /** @var list<array{0: string, 1?: int}> */
+    /** @var list<array{0: string, 1?: int|string}> */
     private array $steps = [];
 
     public function trim(): self
@@ -51,6 +51,12 @@ final class StringSchema extends Schema
         return $this->with(['uuid']);
     }
 
+    /** `.regex(pattern)`; `$pattern` is a PCRE pattern including delimiters. */
+    public function regex(string $pattern): self
+    {
+        return $this->with(['regex', $pattern]);
+    }
+
     public function run(mixed $value, array $path, array &$issues): mixed
     {
         if (!\is_string($value)) {
@@ -68,13 +74,13 @@ final class StringSchema extends Schema
                     $value = mb_strtolower($value, 'UTF-8');
                     break;
                 case 'min':
-                    $min = $step[1] ?? 0;
+                    $min = (int) ($step[1] ?? 0);
                     if (mb_strlen($value, 'UTF-8') < $min) {
                         $issue = new Issue($path, 'too_small', "Too small: expected string to have >={$min} characters");
                     }
                     break;
                 case 'max':
-                    $max = $step[1] ?? 0;
+                    $max = (int) ($step[1] ?? 0);
                     if (mb_strlen($value, 'UTF-8') > $max) {
                         $issue = new Issue($path, 'too_big', "Too big: expected string to have <={$max} characters");
                     }
@@ -89,6 +95,11 @@ final class StringSchema extends Schema
                         $issue = new Issue($path, 'invalid_format', 'Invalid UUID');
                     }
                     break;
+                case 'regex':
+                    if (preg_match((string) ($step[1] ?? ''), $value) !== 1) {
+                        $issue = new Issue($path, 'invalid_format', 'Invalid string: must match pattern');
+                    }
+                    break;
             }
             if ($issue !== null) {
                 $issues[] = $issue;
@@ -99,7 +110,7 @@ final class StringSchema extends Schema
     }
 
     /**
-     * @param array{0: string, 1?: int} $step
+     * @param array{0: string, 1?: int|string} $step
      */
     private function with(array $step): self
     {
