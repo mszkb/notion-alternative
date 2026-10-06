@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T-BAK-01 against the real Docker Compose stack (CI job "backup", docs/operations/backup.md):
+# T-BAK-01 against the real Docker Compose stack (nightly job "Backup and restore", docs/operations/backup.md):
 # create data, back up while running, wipe everything, restore into an empty volume, verify.
 # MODE=local runs the same steps against the built server (`pnpm build`) without Docker.
 set -euo pipefail
@@ -9,7 +9,8 @@ cd "$(dirname "$0")/.."
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-notion-alt-backup-test}"
 export ALLOW_REGISTRATION=true
 export PORT="${PORT:-8089}"
-BASE="http://localhost:${PORT}"
+# BASE: override when the stack runs on another Docker host (nightly on the NAS).
+BASE="${BASE:-http://localhost:${PORT}}"
 WORK="$(mktemp -d)"
 JAR="$WORK/cookies"
 cleanup() {

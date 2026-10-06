@@ -97,7 +97,7 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Lokale Inhalte nur über `LocalStore` schreiben (`apps/web/src/local/store.ts`): Er schreibt Entität und Operation in einer Transaktion. Dexie-Transaktions-Scopes müssen `async`-Funktionen sein, sonst committet Dexie bei nativen `await`s zu früh.
 - Exportformat (`jsonExportSchema`) ändern: `EXPORT_SCHEMA_VERSION` erhöhen, Migration in `packages/shared/src/import.ts` ergänzen, JSON Schema und Fixture neu erzeugen (siehe `apps/server/test/fixtures/exports/README.md`); bestehende Fixtures nie ändern.
 - Lokales Schema ändern: neue `this.version(n + 1)` in `apps/web/src/local/db.ts` mit Upgrade; bestehende Versionen nie ändern (T-MIG-02).
-- Neue Abhängigkeiten im Server-Image müssen auf `linux/arm64` ohne Compiler installierbar sein (Prebuild im Paket); der CI-Job `docker-arm64` prüft das.
+- Neue Abhängigkeiten im Server-Image müssen auf `linux/arm64` ohne Compiler installierbar sein (Prebuild im Paket); der arm64-Build im Gitea-Nightly (`msz/gitea-workflows`, 22:00) prüft das.
 - Editor: Neue strukturelle Schritte in `PageEditor.vue` rufen vorher `checkpoint()` auf, sonst fehlen sie im blockübergreifenden Undo (ADR 0008).
 - Service Worker: `apps/web/src/sw/service-worker.ts`, gebaut von `apps/web/service-worker.plugin.ts` (Precache-Liste, Version) – nur im Production-Build. PWA-E2E (`e2e/pwa-*.spec.ts`) laufen im Playwright-Projekt `pwa` gegen `vite preview`. Komponenten mit entprellten Eingaben melden ihren Flush über `registerPendingEdits` an (Update-Neuladen).
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
