@@ -1,6 +1,6 @@
 # PHP-Server (Slim 4)
 
-Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; die übrigen Endpunkte folgen in #120–#127.
+Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`. Die übrigen Endpunkte folgen in #121–#127.
 
 ## Voraussetzungen
 
@@ -69,7 +69,16 @@ Ungültige Werte führen zu einer Fehlermeldung, die nur Variablennamen nennt (z
 - **Request-Bodys** wie Fastify: `application/json` (ungültig → 400, leer → 400, `__proto__`/`constructor.prototype` → 400), `text/plain` als String, andere Typen mit Body → 415, Limit 1 MiB → 413.
 - **Validierung**: kleiner Port von zod in `src/Validation` (`V::object`, `V::string()->trim()->min()…`, `Validation::parseInput`), Fehler 400 `invalid_input` mit `issues[{path,message}]`. Die Schemas aus `packages/shared` werden mit den Endpunkten portiert (`src/Shared`); Pfade und Codes stimmen überein, Meldungstexte folgen zod.
 - **Logs**: eine JSON-Zeile pro Ereignis im pino-Format (`level` numerisch, `time` in ms, `msg`) auf stderr bzw. `error_log()`. Pro Anfrage `request completed` mit Methode, Pfad **ohne Query-String**, Status und `responseTime`; `/api/health` und `/api/ready` erscheinen erst ab `warn`. `LOG_LEVEL` gilt.
-- **SQLite**: Verzeichnis wird angelegt, `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`.
+- **SQLite**: Verzeichnis wird angelegt, `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`. Schreibende Transaktionen beginnen mit `begin immediate` (parallele Anfragen).
+- **Sessions**: Cookie `session` (`HttpOnly`, `SameSite=Strict`, `Path=/api`, `Expires`, `Secure` nach `COOKIE_SECURE`), Token aus 32 Zufallsbytes (base64url), in der Datenbank nur der SHA-256-Hash; Laufzeit `SESSION_TTL_DAYS`. IDs sind UUID v4, Zeitstempel ISO 8601 mit Millisekunden wie `toISOString()`.
+- **Client-Adresse** (Rate-Limits pro IP): wie `trustProxy` des Node-Servers. Kommt die Verbindung (`REMOTE_ADDR`) von einer privaten oder Loopback-Adresse, gilt der letzte Eintrag von `X-Forwarded-For`, sonst `REMOTE_ADDR`.
+
+## Passwörter und Rate-Limits
+
+- **Neue Hashes** mit `password_hash()`: Argon2id, falls PHP es kennt, sonst bcrypt.
+- **Hashes des Node-Servers** (`scrypt$N$r$p$salt$hash`) prüft `src/Auth/Scrypt.php` (reines PHP, RFC 7914). Das dauert einige Sekunden pro Login (OPcache-JIT beschleunigt es deutlich), aber nur einmal: Nach dem ersten erfolgreichen Login wird der Hash durch einen `password_hash()`-Hash ersetzt. Danach kann der Node-Server dieses Konto nicht mehr prüfen (ADR 0018, offene Frage 1).
+- Für unbekannte E-Mail-Adressen wird gegen einen festen Dummy-Hash desselben Verfahrens geprüft, damit die Antwortzeit keine Konten verrät.
+- **Rate-Limits** (`LOGIN_MAX_FAILURES_PER_IP`, `LOGIN_MAX_FAILURES_PER_EMAIL`, `REGISTER_MAX_ATTEMPTS_PER_IP`, `AUTH_RATE_LIMIT_WINDOW_MINUTES`) wie beim Node-Server (festes Fenster pro Schlüssel, 429 `too_many_attempts` mit `retryAfter` und Header `Retry-After`). Da PHP zwischen Anfragen nichts im Speicher behält, liegen die Zähler in der Tabelle `auth_attempts`; abgelaufene Zeilen löscht jeder schreibende Zugriff.
 
 ## Migrationen
 
