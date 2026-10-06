@@ -33,6 +33,12 @@ abstract class Schema
         return new OptionalSchema($this);
     }
 
+    /** zod's `.default(value)`. */
+    public function default(mixed $value): DefaultSchema
+    {
+        return new DefaultSchema($this, $value);
+    }
+
     public function nullable(): NullableSchema
     {
         return new NullableSchema($this);

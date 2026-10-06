@@ -30,6 +30,12 @@ final class V
         return new IntSchema();
     }
 
+    /** `z.coerce.number()` in front of `$schema`, e.g. `V::coerce(V::int()->min(0))`. */
+    public static function coerce(Schema $schema): CoerceNumberSchema
+    {
+        return new CoerceNumberSchema($schema);
+    }
+
     public static function boolean(): BooleanSchema
     {
         return new BooleanSchema();

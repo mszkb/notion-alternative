@@ -23,6 +23,9 @@ final class SyncSchemas
     public const MAX_LIST_INDENT = 5;
     public const ATTACHMENT_NAME_MAX_LENGTH = 255;
     public const SYNC_PUSH_MAX_OPERATIONS = 500;
+    public const SYNC_PULL_MAX_LIMIT = 1000;
+    /** Largest page of a paged snapshot (#97). */
+    public const SNAPSHOT_PAGE_MAX = 5000;
 
     public const OPERATION_ENTITIES = ['document', 'block', 'tag', 'document_tag', 'attachment', 'conflict'];
     public const OPERATION_KINDS = ['create', 'update', 'move', 'delete', 'restore'];
@@ -49,6 +52,33 @@ final class SyncSchemas
     {
         return V::object([
             'operations' => V::array(self::operation())->min(1)->max(self::SYNC_PUSH_MAX_OPERATIONS),
+        ]);
+    }
+
+    /** `syncPullQuerySchema` (`GET /api/sync/pull`); `syncLogQuerySchema` has the same shape. */
+    public static function pullQuery(): ObjectSchema
+    {
+        return V::object([
+            'workspaceId' => V::uuid(),
+            'cursor' => V::coerce(V::int()->min(0))->default(0),
+            'limit' => V::coerce(V::int()->min(1)->max(self::SYNC_PULL_MAX_LIMIT))->default(self::SYNC_PULL_MAX_LIMIT),
+        ]);
+    }
+
+    /** `syncLogQuerySchema` (`GET /api/sync/log`). */
+    public static function logQuery(): ObjectSchema
+    {
+        return self::pullQuery();
+    }
+
+    /** `syncSnapshotQuerySchema` (`GET /api/sync/snapshot`). */
+    public static function snapshotQuery(): ObjectSchema
+    {
+        return V::object([
+            'workspaceId' => V::uuid(),
+            'limit' => V::coerce(V::int()->min(1)->max(self::SNAPSHOT_PAGE_MAX))->optional(),
+            // `<cursor>.<table>.<last id>`, opaque to the client.
+            'after' => V::string()->regex('/^\d+\.\d\.[0-9A-Fa-f-]{0,64}$/D')->optional(),
         ]);
     }
 
