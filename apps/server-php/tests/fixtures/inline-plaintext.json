@@ -1,0 +1,138 @@
+[
+  {
+    "source": "",
+    "text": ""
+  },
+  {
+    "source": "plain text",
+    "text": "plain text"
+  },
+  {
+    "source": "a **b** *c* `d` [e](https://x.test/) [Seite](page:3f2b8c1e-7d4a-4b6e-9c0f-1a2b3c4d5e6f)",
+    "text": "a b c d e Seite"
+  },
+  {
+    "source": "**a *b* c**",
+    "text": "a b c"
+  },
+  {
+    "source": "*a **b** c*",
+    "text": "a b c"
+  },
+  {
+    "source": "**open",
+    "text": "**open"
+  },
+  {
+    "source": "*open",
+    "text": "*open"
+  },
+  {
+    "source": "`open",
+    "text": "`open"
+  },
+  {
+    "source": "[text](javascript:alert(1))",
+    "text": "[text](javascript:alert(1))"
+  },
+  {
+    "source": "[text](page:not-a-uuid)",
+    "text": "[text](page:not-a-uuid)"
+  },
+  {
+    "source": "[text] (https://x.test)",
+    "text": "[text] (https://x.test)"
+  },
+  {
+    "source": "2 * 3 * 4",
+    "text": "2 * 3 * 4"
+  },
+  {
+    "source": "****",
+    "text": "****"
+  },
+  {
+    "source": "`**x**`",
+    "text": "**x**"
+  },
+  {
+    "source": "\\*not italic\\* \\[x\\]",
+    "text": "*not italic* [x]"
+  },
+  {
+    "source": "a * b",
+    "text": "a * b"
+  },
+  {
+    "source": "**x",
+    "text": "**x"
+  },
+  {
+    "source": "x\\",
+    "text": "x\\"
+  },
+  {
+    "source": "[a](b)",
+    "text": "[a](b)"
+  },
+  {
+    "source": "* x *",
+    "text": "* x *"
+  },
+  {
+    "source": "***x***",
+    "text": "*x*"
+  },
+  {
+    "source": "**a *b***",
+    "text": "a *b*"
+  },
+  {
+    "source": "_a_b_",
+    "text": "ab_"
+  },
+  {
+    "source": "_ü_ und **ö**",
+    "text": "ü und ö"
+  },
+  {
+    "source": "[**fett** im Link](https://example.org/a_b?c=d)",
+    "text": "fett im Link"
+  },
+  {
+    "source": "[Titel mit \\[Klammern\\]](page:3f2b8c1e-7d4a-4b6e-9c0f-1a2b3c4d5e6f)",
+    "text": "Titel mit [Klammern]"
+  },
+  {
+    "source": "[mail](mailto:a@example.com)",
+    "text": "mail"
+  },
+  {
+    "source": "[leer](https://)",
+    "text": "[leer](https://)"
+  },
+  {
+    "source": "[ftp](ftp://x.test/)",
+    "text": "[ftp](ftp://x.test/)"
+  },
+  {
+    "source": "``",
+    "text": "``"
+  },
+  {
+    "source": " *x*  * y* *z *",
+    "text": " x  * y* *z *"
+  },
+  {
+    "source": "[a [b](https://x.test/)",
+    "text": "[a b"
+  },
+  {
+    "source": "**[x](https://x.test/)**",
+    "text": "x"
+  },
+  {
+    "source": "[x](https://x.test/ y)",
+    "text": "[x](https://x.test/ y)"
+  }
+]
