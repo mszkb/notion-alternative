@@ -73,6 +73,13 @@ Relationale Datenbanken mit vielen Views, Echtzeit-Kollaboration/Cursor-Präsenz
 - Sync-, Konflikt- und Export-Code braucht Tests für die Fälle aus `docs/testing/test-matrix.md`.
 - Kleine, fokussierte Commits; keine unbeteiligten Refactorings mitliefern.
 
+## Autonomer Agent
+
+Issues mit dem Label `ready` arbeitet ein lokaler Runner autonom ab (Ablauf, Labels, Grenzen: [`docs/process/autonomous-agent.md`](docs/process/autonomous-agent.md)).
+
+- Für dieses Repo ist der Zugriff auf GitHub per `gh` erlaubt (Issues lesen/anlegen, Labels, Kommentare, PRs) – Ausnahme zur globalen Regel „kein Zugriff auf Repo-Hosting-APIs“.
+- Im Agent-Lauf (Branch `agent/issue-<n>`): nur committen, nie pushen oder Labels ändern. Bei Unklarheit Rückfrage in `QUESTION.md` statt raten; Abschlussbericht in `REPORT.md`. Beide Dateien nie committen.
+
 ## Befehle
 
 Node 22 und pnpm (`corepack enable`).
