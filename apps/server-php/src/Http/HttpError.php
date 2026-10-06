@@ -11,7 +11,8 @@ namespace NotionAlt\Http;
 final class HttpError extends \RuntimeException
 {
     /**
-     * @param array<string, mixed> $details extra fields of the error object
+     * @param array<string, mixed>  $details extra fields of the error object
+     * @param array<string, string> $headers response headers, e.g. `Retry-After`
      */
     public function __construct(
         public readonly int $statusCode,
@@ -19,6 +20,7 @@ final class HttpError extends \RuntimeException
         string $message,
         public readonly array $details = [],
         ?\Throwable $previous = null,
+        public readonly array $headers = [],
     ) {
         parent::__construct($message, 0, $previous);
     }

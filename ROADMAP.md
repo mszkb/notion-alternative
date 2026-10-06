@@ -132,7 +132,7 @@ Self-Hosting per ZIP auf Shared Hosting ([#116](https://github.com/mszkb/notion-
 - [ ] ADR 0018: PHP-Backend mit Slim 4 (Vorschlag liegt vor, Annahme durch den Owner offen) ([#117](https://github.com/mszkb/notion-alternative/issues/117))
 - [x] Contract-Tests gegen beliebige Server-URL ([`contract-tests.md`](docs/testing/contract-tests.md), [#118](https://github.com/mszkb/notion-alternative/issues/118))
 - [x] Grundgerüst: Slim 4, Konfiguration, Fehlerformat, SQLite, Migrationen ([#119](https://github.com/mszkb/notion-alternative/issues/119); offen: erster Lauf des CI-Jobs `php`)
-- [ ] Auth, Sessions, Workspaces, Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120))
+- [x] Auth, Sessions, Workspaces, Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120); der Contract-Test „Gerät entfernen“ braucht noch Sync-Push, #121)
 - [ ] Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121))
 - [ ] Sync-Pull, Änderungslog, Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122))
 - [ ] Serverseitige Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123))

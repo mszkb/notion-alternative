@@ -15,6 +15,7 @@ describe('migrations', () => {
     const names = tables.map((t) => t.name).filter((name) => !name.startsWith('search_index_'))
     expect(names.sort()).toEqual([
       'attachments',
+      'auth_attempts',
       'blocks',
       'changes',
       'conflicts',

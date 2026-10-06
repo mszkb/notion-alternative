@@ -1,6 +1,6 @@
 # PHP-Server (Slim 4)
 
-Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; die übrigen Endpunkte folgen in #120–#127.
+Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`. Die übrigen Endpunkte folgen in #121–#127.
 
 ## Voraussetzungen
 
@@ -69,11 +69,20 @@ Ungültige Werte führen zu einer Fehlermeldung, die nur Variablennamen nennt (z
 - **Request-Bodys** wie Fastify: `application/json` (ungültig → 400, leer → 400, `__proto__`/`constructor.prototype` → 400), `text/plain` als String, andere Typen mit Body → 415, Limit 1 MiB → 413.
 - **Validierung**: kleiner Port von zod in `src/Validation` (`V::object`, `V::string()->trim()->min()…`, `Validation::parseInput`), Fehler 400 `invalid_input` mit `issues[{path,message}]`. Die Schemas aus `packages/shared` werden mit den Endpunkten portiert (`src/Shared`); Pfade und Codes stimmen überein, Meldungstexte folgen zod.
 - **Logs**: eine JSON-Zeile pro Ereignis im pino-Format (`level` numerisch, `time` in ms, `msg`) auf stderr bzw. `error_log()`. Pro Anfrage `request completed` mit Methode, Pfad **ohne Query-String**, Status und `responseTime`; `/api/health` und `/api/ready` erscheinen erst ab `warn`. `LOG_LEVEL` gilt.
-- **SQLite**: Verzeichnis wird angelegt, `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`.
+- **SQLite**: Verzeichnis wird angelegt, `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`. Schreibende Transaktionen beginnen mit `begin immediate` (parallele Anfragen).
+- **Sessions**: Cookie `session` (`HttpOnly`, `SameSite=Strict`, `Path=/api`, `Expires`, `Secure` nach `COOKIE_SECURE`), Token aus 32 Zufallsbytes (base64url), in der Datenbank nur der SHA-256-Hash; Laufzeit `SESSION_TTL_DAYS`. IDs sind UUID v4, Zeitstempel ISO 8601 mit Millisekunden wie `toISOString()`.
+- **Client-Adresse** (Rate-Limits pro IP): wie `trustProxy` des Node-Servers. Kommt die Verbindung (`REMOTE_ADDR`) von einer privaten oder Loopback-Adresse, gilt der letzte Eintrag von `X-Forwarded-For`, sonst `REMOTE_ADDR`.
+
+## Passwörter und Rate-Limits
+
+- **Neue Hashes** mit `password_hash()`: Argon2id, falls PHP es kennt, sonst bcrypt.
+- **Hashes des Node-Servers** (`scrypt$N$r$p$salt$hash`) prüft `src/Auth/Scrypt.php` (reines PHP, RFC 7914). Das dauert einige Sekunden pro Login (OPcache-JIT beschleunigt es deutlich), aber nur einmal: Nach dem ersten erfolgreichen Login wird der Hash durch einen `password_hash()`-Hash ersetzt. Danach kann der Node-Server dieses Konto nicht mehr prüfen (ADR 0018, offene Frage 1).
+- Für unbekannte E-Mail-Adressen wird gegen einen festen Dummy-Hash desselben Verfahrens geprüft, damit die Antwortzeit keine Konten verrät.
+- **Rate-Limits** (`LOGIN_MAX_FAILURES_PER_IP`, `LOGIN_MAX_FAILURES_PER_EMAIL`, `REGISTER_MAX_ATTEMPTS_PER_IP`, `AUTH_RATE_LIMIT_WINDOW_MINUTES`) wie beim Node-Server (festes Fenster pro Schlüssel, 429 `too_many_attempts` mit `retryAfter` und Header `Retry-After`). Da PHP zwischen Anfragen nichts im Speicher behält, liegen die Zähler in der Tabelle `auth_attempts`; abgelaufene Zeilen löscht jeder schreibende Zugriff.
 
 ## Migrationen
 
-`src/Database/Migrations` enthält je eine Klasse pro Node-Migration (`0001_initial` … `0011_snapshot_paging`) mit exakt der DDL, die Kysely erzeugt. Der Migrator nutzt Kyselys Tabellen `kysely_migration` und `kysely_migration_lock` (gleiche DDL, gleiches Zeitstempelformat): Eine vom Node-Server angelegte Datenbank wird erkannt und fortgeführt, eine neue bekommt dasselbe Schema. Unbekannte Migrationsnamen (z. B. von einer neueren Version) brechen wie bei Kysely ab.
+`src/Database/Migrations` enthält je eine Klasse pro Node-Migration (`0001_initial` … `0012_auth_attempts`) mit exakt der DDL, die Kysely erzeugt. `0012_auth_attempts` (Zähler der Rate-Limits) nutzt nur der PHP-Server; der Node-Server legt die Tabelle an, zählt aber im Speicher. Der Migrator nutzt Kyselys Tabellen `kysely_migration` und `kysely_migration_lock` (gleiche DDL, gleiches Zeitstempelformat): Eine vom Node-Server angelegte Datenbank wird erkannt und fortgeführt, eine neue bekommt dasselbe Schema. Unbekannte Migrationsnamen (z. B. von einer neueren Version) brechen wie bei Kysely ab.
 
 Anders als Kysely unter SQLite (ein Prozess) laufen PHP-Anfragen parallel: Der Migrator setzt den Lock-Eintrag wirklich (`is_locked = 1`) und führt jede Migration samt Buchungszeile in einer eigenen Transaktion aus. Bleibt der Lock nach einem Absturz stehen, nennt die Fehlermeldung das SQL zum Freigeben.
 
@@ -83,7 +92,7 @@ Anders als Kysely unter SQLite (ein Prozess) laufen PHP-Anfragen parallel: Der M
 pnpm --filter @notion-alt/server exec tsx scripts/dump-php-fixtures.ts
 ```
 
-Das Skript schreibt nach `tests/fixtures/`: `node-schema.json` (`sqlite_master` einer frischen Node-Datenbank), `node-0004.sqlite` und `node-latest.sqlite` (Datenbank mit Inhalt vor und nach den Node-Migrationen 0005–0011) und `inline-plaintext.json` (Erwartungswerte für den PHP-Port von `inlineToPlainText`, den Migration 0005 braucht).
+Das Skript schreibt nach `tests/fixtures/`: `node-schema.json` (`sqlite_master` einer frischen Node-Datenbank), `node-0004.sqlite` und `node-latest.sqlite` (Datenbank mit Inhalt vor und nach den Node-Migrationen 0005–0012) und `inline-plaintext.json` (Erwartungswerte für den PHP-Port von `inlineToPlainText`, den Migration 0005 braucht).
 
 ## Bausteine
 

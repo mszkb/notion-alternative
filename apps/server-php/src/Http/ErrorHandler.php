@@ -28,7 +28,12 @@ final class ErrorHandler
     {
         [$status, $body] = $this->describe($error);
 
-        return Json::respond($this->responseFactory->createResponse(), ['error' => $body], $status);
+        $response = Json::respond($this->responseFactory->createResponse(), ['error' => $body], $status);
+        foreach ($error instanceof HttpError ? $error->headers : [] as $name => $value) {
+            $response = $response->withHeader($name, $value);
+        }
+
+        return $response;
     }
 
     /**
