@@ -73,7 +73,7 @@ Bewusst **keine** weiteren Laufzeitbibliotheken:
 
 Gespeichert ist `scrypt$N$r$p$salt$hash` (N=2^15, r=8, p=1, 16-Byte-Salt). PHP hat kein natives scrypt mit diesen Parametern. Entscheidung:
 
-- **Bestehende scrypt-Hashes** prüft eine reine PHP-Implementierung (RFC 7914, mit Testvektor). Eine erste, nicht optimierte Messung: rund 11 s ohne und 4 s mit JIT bei 270 MB Speicher. Die Implementierung muss in #120 auf ein vertretbares Maß gebracht werden (Ziel < 2 s, < 64 MB, z. B. durch Blöcke als Strings statt Arrays).
+- **Bestehende scrypt-Hashes** prüft eine reine PHP-Implementierung (RFC 7914, mit Testvektor). Messung eines Prototyps (PHP 8.3, Salsa20/8 ausgerollt, `V` als gepackte Strings): 4,5 s ohne und 1,1 s mit OPcache-JIT bei 44 MB Speicher. Das fällt nur einmal pro Konto an (danach Rehash) und ist dafür vertretbar; die Doku empfiehlt JIT.
 - Nach erfolgreichem Login wird der Hash mit `password_hash()` neu erzeugt (**Argon2id**, falls verfügbar, sonst bcrypt). Neue Konten und Passwortänderungen nutzen direkt `password_hash()`. `verifyPassword` akzeptiert beide Formate.
 - Folge: Nach dem ersten Login über den PHP-Server kann der Node-Server dieses Konto nicht mehr prüfen. Ein Zurück auf Node ist dann nur mit Passwort-Reset möglich. Das ist akzeptiert, weil der Node-Server nach der Umstellung entfernt wird; die Upgrade-Doku weist darauf hin.
 
