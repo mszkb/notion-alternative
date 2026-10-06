@@ -31,5 +31,6 @@ Abgeleitet aus der ursprünglichen Roadmap-Spezifikation („Roadmap: Self-hoste
 
 - [Testmatrix](testing/test-matrix.md)
 - [Lasttests: Skripte, Ergebnisse, Grenzen](testing/load-tests.md)
+- [Contract-Tests: HTTP-API als Black-Box gegen beliebige Server](testing/contract-tests.md)
 
 Gesamtplanung: [`../ROADMAP.md`](../ROADMAP.md)

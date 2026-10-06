@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @notion-alt/server --filter @notion-alt/web dev",
     "build": "pnpm -r build",
-    "test": "pnpm -r test",
+    "test": "pnpm -r --filter '!@notion-alt/contract-tests' test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",

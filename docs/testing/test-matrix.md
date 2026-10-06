@@ -2,6 +2,8 @@
 
 Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spalte „Auto“ = automatisierter Test vorhanden.
 
+Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-tests.md) als HTTP-Black-Box gegen jeden Server (Node, später PHP).
+
 ## Offline / Online
 
 | ID | Szenario | Erwartung | AC | Auto |

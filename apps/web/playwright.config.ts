@@ -38,7 +38,12 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'pnpm --filter @notion-alt/server exec tsx src/index.ts',
+      // SERVER_CMD runs another server (e.g. the PHP one, #118) from the repository root, like
+      // the contract tests: the port comes as PORT, `{port}` in the command is replaced by it.
+      command: (
+        process.env.SERVER_CMD || 'pnpm --filter @notion-alt/server exec tsx src/index.ts'
+      ).replaceAll('{port}', String(API_PORT)),
+      cwd: '../..',
       url: `http://localhost:${API_PORT}/api/ready`,
       // Every test (and retry) registers its own account, so attempts never share server data.
       env: {
