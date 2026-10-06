@@ -91,6 +91,7 @@ Reine Funktionen ohne HTTP, für die späteren Endpunkte vorab portiert; nur `ex
 
 - `src/Push` (Web Push, #125): `WebPushCrypto::encrypt` (RFC 8291, aes128gcm), `Vapid::authorization` (RFC 8292, ES256-JWT), `VapidKeys` (liest und schreibt das JSON, das der Node-Server in `settings` unter `vapid` speichert; ein vorhandenes Schlüsselpaar gilt weiter), `PushRequest::syncAvailable` (Header und verschlüsselter Hinweis ohne Inhalte) und `PushRequest::isAllowedEndpoint`. Tests: RFC-8291-Testvektor, JWT-Prüfung mit dem öffentlichen Schlüssel, Node-Schlüssel laden.
 - `src/Attachments/S3Signer.php` (S3, #124): AWS Signature V4 mit Header und Objekt-URLs (Path-Style oder virtueller Host). Tests: AWS-Beispiel und vom Node-Client aufgezeichnete Anfragen. Presigned URLs gibt es wie im Node-Server nicht.
+- `src/Search/SearchIndex.php` (Suche, #123): Port von `apps/server/src/search/index.ts` mit PDO – `reindexDocument` (Zeile über die Rowid aus `search_documents`), `markForReindex`/`reindexMarked` (`search_dirty`), `toFtsQuery` und `searchWorkspace` (nur Workspaces des Owners, gleiche Treffer, Reihenfolge und Snippets wie Node). Das Eingabeschema von `GET /api/search` steht in `src/Shared/SearchSchemas.php`. Tests: Fälle aus `search.test.ts`/`migrations.test.ts` und `tests/fixtures/search.json` (Treffer des Node-Servers, erzeugt mit `pnpm --filter @notion-alt/server exec tsx scripts/dump-php-search-fixture.ts`).
 
 ## Tests und Werkzeuge
 

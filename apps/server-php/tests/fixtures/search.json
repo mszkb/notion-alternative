@@ -1,0 +1,283 @@
+{
+  "documents": [
+    {
+      "id": "d1",
+      "title": "Reiseplanung",
+      "deleted_at": null
+    },
+    {
+      "id": "d2",
+      "title": "Küche",
+      "deleted_at": null
+    },
+    {
+      "id": "d3",
+      "title": "Garten",
+      "deleted_at": null
+    },
+    {
+      "id": "d4",
+      "title": "Gartenarbeit im Herbst",
+      "deleted_at": null
+    },
+    {
+      "id": "d5",
+      "title": "Gelöschte Gartenseite",
+      "deleted_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "d6",
+      "title": "Notizen [mit] _Zeichen_",
+      "deleted_at": null
+    },
+    {
+      "id": "d7",
+      "title": "Lange Seite",
+      "deleted_at": null
+    }
+  ],
+  "blocks": [
+    {
+      "id": "b1",
+      "document_id": "d1",
+      "type": "paragraph",
+      "content": "Wir fahren **über** die Alpen"
+    },
+    {
+      "id": "b2",
+      "document_id": "d1",
+      "type": "todo",
+      "content": "Garten gießen lassen, [Küche](page:d2)"
+    },
+    {
+      "id": "b3",
+      "document_id": "d2",
+      "type": "code",
+      "content": "const rezept = \"Kuchen\" // **roh**"
+    },
+    {
+      "id": "b4",
+      "document_id": "d3",
+      "type": "heading",
+      "content": "Beete im _Frühling_"
+    },
+    {
+      "id": "b5",
+      "document_id": "d4",
+      "type": "paragraph",
+      "content": "Laub rechen, Garten winterfest"
+    },
+    {
+      "id": "b6",
+      "document_id": "d4",
+      "type": "paragraph",
+      "content": "Garten Garten Garten"
+    },
+    {
+      "id": "b7",
+      "document_id": "d5",
+      "type": "paragraph",
+      "content": "Garten im Papierkorb"
+    },
+    {
+      "id": "b8",
+      "document_id": "d6",
+      "type": "paragraph",
+      "content": "Text mit `code` und \\*Stern\\*"
+    },
+    {
+      "id": "b9",
+      "document_id": "d7",
+      "type": "paragraph",
+      "content": "wort0 wort1 wort2 wort3 wort4 wort5 wort6 wort7 wort8 wort9 wort10 wort11 wort12 wort13 wort14 wort15 wort16 wort17 wort18 wort19 wort20 wort21 wort22 wort23 wort24 wort25 wort26 wort27 wort28 wort29 Treffer wort31 wort32 wort33 wort34 wort35 wort36 wort37 wort38 wort39 wort40 wort41 wort42 wort43 wort44 wort45 wort46 wort47 wort48 wort49 wort50 wort51 wort52 wort53 wort54 wort55 wort56 wort57 wort58 wort59"
+    },
+    {
+      "id": "b10",
+      "document_id": "d7",
+      "type": "paragraph",
+      "content": "Zweiter Absatz mit Treffer"
+    }
+  ],
+  "queries": [
+    {
+      "q": "garten",
+      "limit": null,
+      "ftsQuery": "\"garten\"*",
+      "hits": [
+        {
+          "documentId": "d3",
+          "title": "Garten",
+          "snippet": "Beete im Frühling"
+        },
+        {
+          "documentId": "d4",
+          "title": "Gartenarbeit im Herbst",
+          "snippet": "Laub rechen, Garten winterfest\nGarten Garten Garten"
+        },
+        {
+          "documentId": "d1",
+          "title": "Reiseplanung",
+          "snippet": "Wir fahren über die Alpen\nGarten gießen lassen, [Küche](page:d2)"
+        }
+      ]
+    },
+    {
+      "q": "garten",
+      "limit": 2,
+      "ftsQuery": "\"garten\"*",
+      "hits": [
+        {
+          "documentId": "d3",
+          "title": "Garten",
+          "snippet": "Beete im Frühling"
+        },
+        {
+          "documentId": "d4",
+          "title": "Gartenarbeit im Herbst",
+          "snippet": "Laub rechen, Garten winterfest\nGarten Garten Garten"
+        }
+      ]
+    },
+    {
+      "q": "Gart",
+      "limit": null,
+      "ftsQuery": "\"Gart\"*",
+      "hits": [
+        {
+          "documentId": "d3",
+          "title": "Garten",
+          "snippet": "Beete im Frühling"
+        },
+        {
+          "documentId": "d4",
+          "title": "Gartenarbeit im Herbst",
+          "snippet": "Laub rechen, Garten winterfest\nGarten Garten Garten"
+        },
+        {
+          "documentId": "d1",
+          "title": "Reiseplanung",
+          "snippet": "Wir fahren über die Alpen\nGarten gießen lassen, [Küche](page:d2)"
+        }
+      ]
+    },
+    {
+      "q": "uber alpen",
+      "limit": null,
+      "ftsQuery": "\"uber\"* \"alpen\"*",
+      "hits": [
+        {
+          "documentId": "d1",
+          "title": "Reiseplanung",
+          "snippet": "Wir fahren über die Alpen\nGarten gießen lassen, [Küche](page:d2)"
+        }
+      ]
+    },
+    {
+      "q": "kuche",
+      "limit": null,
+      "ftsQuery": "\"kuche\"*",
+      "hits": [
+        {
+          "documentId": "d2",
+          "title": "Küche",
+          "snippet": "const rezept = \"Kuchen\" // **roh**"
+        },
+        {
+          "documentId": "d1",
+          "title": "Reiseplanung",
+          "snippet": "Wir fahren über die Alpen\nGarten gießen lassen, [Küche](page:d2)"
+        }
+      ]
+    },
+    {
+      "q": "rezept roh",
+      "limit": null,
+      "ftsQuery": "\"rezept\"* \"roh\"*",
+      "hits": [
+        {
+          "documentId": "d2",
+          "title": "Küche",
+          "snippet": "const rezept = \"Kuchen\" // **roh**"
+        }
+      ]
+    },
+    {
+      "q": "fruhling",
+      "limit": null,
+      "ftsQuery": "\"fruhling\"*",
+      "hits": [
+        {
+          "documentId": "d3",
+          "title": "Garten",
+          "snippet": "Beete im Frühling"
+        }
+      ]
+    },
+    {
+      "q": "treffer",
+      "limit": null,
+      "ftsQuery": "\"treffer\"*",
+      "hits": [
+        {
+          "documentId": "d7",
+          "title": "Lange Seite",
+          "snippet": "…wort25 wort26 wort27 wort28 wort29 Treffer wort31 wort32 wort33 wort34 wort35 wort36…"
+        }
+      ]
+    },
+    {
+      "q": "stern code",
+      "limit": null,
+      "ftsQuery": "\"stern\"* \"code\"*",
+      "hits": [
+        {
+          "documentId": "d6",
+          "title": "Notizen [mit] _Zeichen_",
+          "snippet": "Text mit code und *Stern*"
+        }
+      ]
+    },
+    {
+      "q": "zeichen",
+      "limit": null,
+      "ftsQuery": "\"zeichen\"*",
+      "hits": [
+        {
+          "documentId": "d6",
+          "title": "Notizen [mit] _Zeichen_",
+          "snippet": "Text mit code und *Stern*"
+        }
+      ]
+    },
+    {
+      "q": "\"alpha\" OR title:x NEAR(",
+      "limit": null,
+      "ftsQuery": "\"alpha\"* \"OR\"* \"title:x\"* \"NEAR(\"*",
+      "hits": []
+    },
+    {
+      "q": "gießen",
+      "limit": null,
+      "ftsQuery": "\"gießen\"*",
+      "hits": [
+        {
+          "documentId": "d1",
+          "title": "Reiseplanung",
+          "snippet": "Wir fahren über die Alpen\nGarten gießen lassen, [Küche](page:d2)"
+        }
+      ]
+    },
+    {
+      "q": "  -- ",
+      "limit": null,
+      "ftsQuery": null,
+      "hits": []
+    },
+    {
+      "q": "papierkorb",
+      "limit": null,
+      "ftsQuery": "\"papierkorb\"*",
+      "hits": []
+    }
+  ]
+}
