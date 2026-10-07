@@ -88,6 +88,26 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
   const workspaceId = newId()
   const data = snapshot(workspaceId, pages, blocksPerPage)
   const heapBefore = heapMb()
+
+  // A new device "on demand" (ADR 0017): the snapshot without blocks, page by page.
+  const lean = await LocalStore.open(new LocalDb(`load-lean-${workspaceId}`))
+  const [, onDemandFirstSyncMs] = await time(async () => {
+    const progress = await lean.beginResync(workspaceId)
+    const documents = [...data.documents].sort((x, y) => (x.id < y.id ? -1 : 1))
+    for (let i = 0; i < documents.length; i += SNAPSHOT_PAGE_SIZE) {
+      const page: SyncSnapshotResponse = {
+        ...data,
+        documents: documents.slice(i, i + SNAPSHOT_PAGE_SIZE),
+        blocks: [],
+      }
+      await lean.applySnapshotPage(workspaceId, page, progress, false)
+    }
+    await lean.finishResync(workspaceId, data.cursor, progress, false)
+  })
+  const [, onDemandListMs] = await time(() => lean.listDocuments(workspaceId))
+  lean.db.close()
+  await lean.db.delete()
+
   const store = await LocalStore.open(new LocalDb(`load-${workspaceId}`))
   // Pre-ADR-0017 behaviour: every page's content is synced.
   await store.db.meta.put({ key: 'offlineMode', value: 'all' })
@@ -139,6 +159,9 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
     config: { pages, blocksPerPage },
     documents: documents.length,
     indexed: search.index.size,
+    /** New device "on demand" (ADR 0017): page tree and metadata, no blocks. */
+    onDemandFirstSyncMs,
+    onDemandListDocumentsMs: onDemandListMs,
     /** Paged re-sync: all pages plus the final step. */
     replaceWithSnapshotMs: snapshotMs,
     snapshotPageMs: { p50: pageMs[Math.floor(pageMs.length / 2)], max: pageMs.at(-1) },
