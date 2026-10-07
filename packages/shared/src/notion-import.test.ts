@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createZip } from './zip'
+import { createZip, type ZipFile } from './zip'
 import { convertNotionExport, notionTitle, readNotionArchive } from './notion-import'
 
 // Anonymised sample in the layout of the "Markdown & CSV" export: no real content.
@@ -71,7 +71,7 @@ const SAMPLE = [
   { path: `Aufgaben ${ID(3)}/Eins ${ID(4)}.md`, data: enc('# Eins\n\nStatus: Fertig\n') },
 ]
 
-async function convert(files = SAMPLE) {
+async function convert(files: ZipFile[] = SAMPLE) {
   let n = 0
   return convertNotionExport(files, {
     workspace: { id: '00000000-0000-4000-8000-000000000001', name: 'Aus Notion' },

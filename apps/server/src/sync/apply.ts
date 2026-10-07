@@ -279,6 +279,8 @@ async function applyDocument(
           title: p.title,
           sort_key: p.sortKey,
           favorite: p.favorite ? 1 : 0,
+          icon: p.icon ?? null,
+          cover: p.cover ?? null,
           created_at: p.createdAt,
           updated_at: now,
           revision,
@@ -294,6 +296,8 @@ async function applyDocument(
         .set({
           ...(p.title !== undefined && { title: p.title }),
           ...(p.favorite !== undefined && { favorite: p.favorite ? 1 : 0 }),
+          ...(p.icon !== undefined && { icon: p.icon }),
+          ...(p.cover !== undefined && { cover: p.cover }),
           updated_at: now,
           revision,
         })

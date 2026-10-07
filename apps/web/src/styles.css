@@ -940,6 +940,123 @@ kbd {
   background: var(--hover);
 }
 
+/* ------------------------------------------------------------------ icon and cover (#136) */
+
+.page-cover-wrap {
+  margin: 0 0 var(--space-lg);
+}
+
+.page-cover {
+  height: 12rem;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--code-bg);
+}
+
+.page-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-sunrise {
+  background: linear-gradient(135deg, #f6d365, #fda085);
+}
+
+.cover-ocean {
+  background: linear-gradient(135deg, #89f7fe, #2563d9);
+}
+
+.cover-forest {
+  background: linear-gradient(135deg, #a8e063, #2b7530);
+}
+
+.cover-dusk {
+  background: linear-gradient(135deg, #614385, #516395);
+}
+
+.cover-sand {
+  background: linear-gradient(135deg, #f5efe6, #d6c4a8);
+}
+
+.cover-slate {
+  background: linear-gradient(135deg, #8e9eab, #3d4a57);
+}
+
+.page-look {
+  position: relative;
+  min-height: var(--space-xl);
+}
+
+.page-icon {
+  padding: 0;
+  font-size: 3.5rem;
+  line-height: 1.1;
+  background: none;
+}
+
+.page-icon:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+/* Shown on hover or focus, as in the familiar layout (ux-guide.md). */
+.page-look-controls {
+  display: flex;
+  gap: var(--space-lg);
+  font-size: var(--text-sm);
+  opacity: 0;
+}
+
+.page:hover .page-look-controls,
+.page-look-controls:focus-within {
+  opacity: 1;
+}
+
+.page-look-controls .link {
+  color: var(--muted);
+}
+
+.page-look .block-menu {
+  top: 100%;
+  left: 0;
+}
+
+.icon-picker {
+  display: grid;
+  gap: var(--space-sm);
+  width: 22rem;
+  padding: var(--space-sm);
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+}
+
+.emoji-grid button.icon {
+  width: auto;
+  font-size: var(--text-lg);
+}
+
+.cover-menu {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+}
+
+.cover-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-xs);
+}
+
+button.cover-swatch {
+  height: 2rem;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+
 /* ------------------------------------------------------------------ quick search (#134) */
 
 .palette-backdrop {

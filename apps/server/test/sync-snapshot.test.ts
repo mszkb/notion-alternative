@@ -365,3 +365,22 @@ describe('content on demand (ADR 0017)', () => {
     expect((await get(`/api/sync/documents/x?workspaceId=${workspaceId}`)).statusCode).toBe(400)
   })
 })
+
+describe('page icon and cover (#136)', () => {
+  it('stores, changes and clears them; invalid values are rejected', async () => {
+    const doc = randomUUID()
+    const [created] = await push(op('document', 'create', doc, { ...docPayload, icon: '📁' }))
+    expect(created.status).toBe('applied')
+    await push(op('document', 'update', doc, { cover: 'gradient:ocean' }, 1))
+    let page = (await get(`/api/sync/snapshot?workspaceId=${workspaceId}`)).json().documents[0]
+    expect([page.icon, page.cover]).toEqual(['📁', 'gradient:ocean'])
+
+    await push(op('document', 'update', doc, { icon: null }, 2))
+    page = (await get(`/api/sync/snapshot?workspaceId=${workspaceId}`)).json().documents[0]
+    expect(page.icon).toBeUndefined()
+    expect(page.cover).toBe('gradient:ocean')
+
+    const [bad] = await push(op('document', 'update', doc, { cover: 'https://example.com/x' }, 3))
+    expect(bad.status).toBe('rejected')
+  })
+})

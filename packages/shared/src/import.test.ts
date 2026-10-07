@@ -82,7 +82,7 @@ describe('migrateExport', () => {
   })
 
   it('runs every step from an older version, in order', () => {
-    // Pretend version 3 is current: v1 called documents `pages`, v2 had no `links`.
+    // Pretend version 4 is current: v1 called documents `pages`, v2 had no `links`.
     const steps: string[] = []
     const migrations = {
       1: ({ pages, ...rest }: Record<string, unknown>) => {
@@ -93,24 +93,29 @@ describe('migrateExport', () => {
         steps.push('2->3')
         return { ...data, links: [] }
       },
+      3: (data: Record<string, unknown>) => {
+        steps.push('3->4')
+        return data
+      },
     }
     const { documents, ...rest } = sample()
     const v1 = { ...rest, links: undefined, schema_version: 1, pages: documents }
-    // The real schema is at version 2, so the result fails on `schema_version` only.
-    expect(() => migrateExport(v1, migrations, 3)).toThrow(/\(schema_version:/)
-    expect(steps).toEqual(['1->2', '2->3'])
+    // The real schema is at version 3, so the result fails on `schema_version` only.
+    expect(() => migrateExport(v1, migrations, 4)).toThrow(/\(schema_version:/)
+    expect(steps).toEqual(['1->2', '2->3', '3->4'])
   })
 
   it('rejects newer, missing and invalid versions', () => {
-    expect(() => migrateExport({ ...sample(), schema_version: 3 })).toThrow(/neueren Version/)
+    expect(() => migrateExport({ ...sample(), schema_version: 4 })).toThrow(/neueren Version/)
     expect(() => migrateExport({ documents: [] })).toThrow(/schema_version fehlt/)
     expect(() => migrateExport([])).toThrow(ImportError)
     expect(() => migrateExport({ ...sample(), documents: [{ id: 'x' }] })).toThrow(/documents\.0/)
   })
 
-  it('lifts a version 1 export unchanged to version 2 (ADR 0019)', () => {
+  it('lifts version 1 and 2 exports unchanged to the current version', () => {
     const data = sample()
     expect(migrateExport({ ...JSON.parse(JSON.stringify(data)), schema_version: 1 })).toEqual(data)
+    expect(migrateExport({ ...JSON.parse(JSON.stringify(data)), schema_version: 2 })).toEqual(data)
   })
 
   it('names a missing migration step', () => {

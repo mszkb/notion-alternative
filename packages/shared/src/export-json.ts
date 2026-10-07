@@ -14,7 +14,7 @@ import { changeSchema, SYNC_PULL_MAX_LIMIT } from './operations'
  * Version of the JSON export format (ADR 0004). Every change to the format needs a new
  * version and an import migration from all earlier ones.
  */
-export const EXPORT_SCHEMA_VERSION = 2
+export const EXPORT_SCHEMA_VERSION = 3
 
 export const exportLinkSchema = z.object({
   blockId: z.uuid(),

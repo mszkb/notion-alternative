@@ -197,6 +197,9 @@ async function buildRichWorkspace(i: Instance): Promise<Map<string, Uint8Array>>
   const removed = await block(grandchild, 'paragraph', 'Wird gelöscht')
   await push('block', 'delete', removed)
   await push('document', 'move', grandchild, { parentId: child, sortKey: 'b0' })
+  // #136 (schema_version 3)
+  await push('document', 'update', root, { icon: '📁', cover: 'gradient:ocean' })
+  await push('document', 'update', child, { cover: `attachment:${image}` })
 
   const tag = randomUUID()
   const oldTag = randomUUID()

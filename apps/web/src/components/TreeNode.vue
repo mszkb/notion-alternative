@@ -3,7 +3,7 @@ import type { Document } from '@notion-alt/shared'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { expanded } from '../composables/tree-state'
-import { displayTitle, NO_CHILDREN, useWorkspace } from '../composables/workspace'
+import { NO_CHILDREN, pageLabel, useWorkspace } from '../composables/workspace'
 
 const props = defineProps<{ document: Document; depth: number }>()
 
@@ -111,7 +111,7 @@ async function onDrop(event: DragEvent) {
         :aria-current="isActive ? 'page' : undefined"
         @click="open"
       >
-        {{ displayTitle(document) }}
+        {{ pageLabel(document) }}
       </a>
       <button
         type="button"

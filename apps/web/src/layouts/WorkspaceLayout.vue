@@ -19,6 +19,7 @@ import {
 import { expanded } from '../composables/tree-state'
 import {
   displayTitle,
+  pageLabel,
   groupByParent,
   NO_CHILDREN,
   reuseUnchanged,
@@ -452,7 +453,7 @@ const shellStyle = computed(() => ({
                 class="nav-item"
                 :to="{ name: 'page', params: { workspaceId, documentId: doc.id } }"
               >
-                ★ {{ displayTitle(doc) }}
+                ★ {{ pageLabel(doc) }}
               </RouterLink>
             </li>
           </ul>
@@ -466,7 +467,7 @@ const shellStyle = computed(() => ({
                 class="nav-item"
                 :to="{ name: 'page', params: { workspaceId, documentId: doc.id } }"
               >
-                {{ displayTitle(doc) }}
+                {{ pageLabel(doc) }}
               </RouterLink>
             </li>
           </ul>

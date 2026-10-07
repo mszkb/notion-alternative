@@ -437,6 +437,25 @@ export class LocalStore {
     })
   }
 
+  /** Sets or removes the page icon (emoji) and cover (#136); `null` removes, `undefined` keeps. */
+  async setPageLook(
+    id: string,
+    look: { icon?: string | null; cover?: Document['cover'] | null },
+  ): Promise<void> {
+    await this.write(async (ctx) => {
+      const document = await this.requireDocument(id)
+      const fields: { icon?: string | null; cover?: Document['cover'] | null } = {}
+      if (look.icon !== undefined && look.icon !== (document.icon ?? null)) fields.icon = look.icon
+      if (look.cover !== undefined && look.cover !== (document.cover ?? null)) {
+        fields.cover = look.cover
+      }
+      if (Object.keys(fields).length === 0) return
+      await this.db.documents.update(id, fields)
+      await this.enqueue(document.workspaceId, 'document', id, 'update', document.revision, fields)
+      this.mark(ctx, document.workspaceId, id)
+    })
+  }
+
   /** Moves a page in the tree; refuses to move a page below itself. */
   async moveDocument(id: string, parentId: string | null, position: Position = {}): Promise<void> {
     await this.write(async (ctx) => {
@@ -1090,6 +1109,7 @@ export class LocalStore {
         {},
       ),
       favorite: false,
+      ...(source.icon ? { icon: source.icon } : {}),
       createdAt: this.now(),
       updatedAt: this.now(),
       revision: null,
@@ -1101,6 +1121,7 @@ export class LocalStore {
       title: copy.title,
       sortKey: copy.sortKey,
       favorite: copy.favorite,
+      ...(copy.icon ? { icon: copy.icon } : {}),
       createdAt: copy.createdAt,
     })
     const blocks = (await this.db.blocks.where('documentId').equals(source.id).toArray())
@@ -1346,6 +1367,8 @@ export class LocalStore {
         title: d.title,
         sortKey: d.sortKey,
         favorite: d.favorite,
+        ...(d.icon ? { icon: d.icon } : {}),
+        ...(d.cover ? { cover: d.cover } : {}),
         createdAt: d.createdAt,
       })
     }
@@ -1431,6 +1454,8 @@ export class LocalStore {
         const fields: Record<string, unknown> = {}
         if (d.title !== server.title) fields.title = d.title
         if (d.favorite !== server.favorite) fields.favorite = d.favorite
+        if ((d.icon ?? null) !== (server.icon ?? null)) fields.icon = d.icon ?? null
+        if ((d.cover ?? null) !== (server.cover ?? null)) fields.cover = d.cover ?? null
         if (Object.keys(fields).length) ops.push(['update', fields])
         if (d.parentId !== server.parentId || d.sortKey !== server.sortKey) {
           ops.push(['move', { parentId: d.parentId, sortKey: d.sortKey }])
@@ -1522,6 +1547,8 @@ export class LocalStore {
             title: p.title,
             sortKey: p.sortKey,
             favorite: p.favorite,
+            ...(p.icon ? { icon: p.icon } : {}),
+            ...(p.cover ? { cover: p.cover } : {}),
             createdAt: p.createdAt,
             updatedAt: change.appliedAt,
             revision,
@@ -1779,28 +1806,7 @@ export class LocalStore {
   ): Promise<{ attachment: Attachment; block: Block }> {
     return this.write(async (ctx) => {
       const document = await this.requireDocument(documentId)
-      const attachment = attachmentSchema.parse({
-        id: newId(),
-        workspaceId: document.workspaceId,
-        documentId,
-        name: file.name.trim().slice(0, 255) || 'Datei',
-        mimeType: /^[\w.+-]+\/[\w.+-]+$/.test(file.type) ? file.type : 'application/octet-stream',
-        size: file.data.byteLength,
-        sha256: file.sha256,
-        createdAt: this.now(),
-        revision: null,
-        deletedAt: null,
-      } satisfies Attachment)
-      await this.db.attachments.add(attachment)
-      await this.db.attachmentContents.put({ id: attachment.id, data: file.data, uploaded: false })
-      await this.enqueue(document.workspaceId, 'attachment', attachment.id, 'create', null, {
-        documentId,
-        name: attachment.name,
-        mimeType: attachment.mimeType,
-        size: attachment.size,
-        sha256: attachment.sha256,
-        createdAt: attachment.createdAt,
-      })
+      const attachment = await this.createAttachment(document, file)
       const image = INLINE_IMAGE_TYPES.includes(attachment.mimeType)
       const block = await this.insertBlock(
         ctx,
@@ -1814,6 +1820,50 @@ export class LocalStore {
       )
       return { attachment, block }
     })
+  }
+
+  /** Uploads an image as the page's cover (#136): an attachment of the page without a block. */
+  async setCoverImage(
+    documentId: string,
+    file: { name: string; type: string; data: ArrayBuffer; sha256: string },
+  ): Promise<Attachment> {
+    const attachment = await this.write(async () => {
+      const document = await this.requireDocument(documentId)
+      return this.createAttachment(document, file)
+    })
+    await this.setPageLook(documentId, { cover: `attachment:${attachment.id}` })
+    return attachment
+  }
+
+  /** Stores a new attachment with its content and queues it (inside a write). */
+  private async createAttachment(
+    document: Document,
+    file: { name: string; type: string; data: ArrayBuffer; sha256: string },
+  ): Promise<Attachment> {
+    const documentId = document.id
+    const attachment = attachmentSchema.parse({
+      id: newId(),
+      workspaceId: document.workspaceId,
+      documentId,
+      name: file.name.trim().slice(0, 255) || 'Datei',
+      mimeType: /^[\w.+-]+\/[\w.+-]+$/.test(file.type) ? file.type : 'application/octet-stream',
+      size: file.data.byteLength,
+      sha256: file.sha256,
+      createdAt: this.now(),
+      revision: null,
+      deletedAt: null,
+    } satisfies Attachment)
+    await this.db.attachments.add(attachment)
+    await this.db.attachmentContents.put({ id: attachment.id, data: file.data, uploaded: false })
+    await this.enqueue(document.workspaceId, 'attachment', attachment.id, 'create', null, {
+      documentId,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      sha256: attachment.sha256,
+      createdAt: attachment.createdAt,
+    })
+    return attachment
   }
 
   /** Deletes an attachment (tombstone, replicated); its block shows it as removed. */

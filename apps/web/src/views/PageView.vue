@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { DOCUMENT_TITLE_MAX_LENGTH, type Document } from '@notion-alt/shared'
+import {
+  COVER_GRADIENTS,
+  DOCUMENT_TITLE_MAX_LENGTH,
+  type Document,
+  INLINE_IMAGE_TYPES,
+} from '@notion-alt/shared'
+import IconPicker from '../components/IconPicker.vue'
+import PageCover from '../components/PageCover.vue'
+import { sha256Hex } from '../local/store'
+import { maxFileBytes } from '../limits'
+import { formatBytes } from '../local/persistence'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TagBar from '../components/TagBar.vue'
 import { useLiveQuery } from '../composables/live-query'
-import { displayTitle, NO_CHILDREN, useWorkspace } from '../composables/workspace'
+import { displayTitle, NO_CHILDREN, pageLabel, useWorkspace } from '../composables/workspace'
 import PageEditor from '../editor/PageEditor.vue'
 import { registerPendingEdits } from '../pending-edits'
 import { connection } from '../session'
@@ -115,6 +125,49 @@ onBeforeUnmount(() => {
   stopPendingTitle()
 })
 
+// ---------------------------------------------------------------- icon and cover (#136)
+
+const iconPickerOpen = ref(false)
+const coverMenuOpen = ref(false)
+const coverInput = ref<HTMLInputElement | null>(null)
+const lookError = ref<string | null>(null)
+
+async function chooseIcon(icon: string | null) {
+  iconPickerOpen.value = false
+  await store.setPageLook(documentId, { icon })
+}
+
+async function chooseGradient(name: (typeof COVER_GRADIENTS)[number]) {
+  coverMenuOpen.value = false
+  await store.setPageLook(documentId, { cover: `gradient:${name}` })
+}
+
+async function removeCover() {
+  coverMenuOpen.value = false
+  await store.setPageLook(documentId, { cover: null })
+}
+
+async function onCoverFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  coverMenuOpen.value = false
+  lookError.value = null
+  if (!file) return
+  if (!INLINE_IMAGE_TYPES.includes(file.type)) {
+    lookError.value = 'Als Titelbild eignen sich PNG, JPEG, GIF und WebP.'
+    return
+  }
+  if (file.size > maxFileBytes.value) {
+    lookError.value = `Das Bild ist größer als ${formatBytes(maxFileBytes.value)}.`
+    return
+  }
+  const data = await file.arrayBuffer()
+  // Hash before the write: awaiting crypto inside a Dexie transaction would commit it early.
+  const sha256 = await sha256Hex(data)
+  await store.setCoverImage(documentId, { name: file.name, type: file.type, data, sha256 })
+}
+
 // ---------------------------------------------------------------- header (#132)
 
 const editedFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
@@ -181,11 +234,11 @@ async function deletePage() {
       <nav class="breadcrumbs" aria-label="Pfad">
         <template v-for="ancestor in ancestors" :key="ancestor.id">
           <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: ancestor.id } }">
-            {{ displayTitle(ancestor) }}
+            {{ pageLabel(ancestor) }}
           </RouterLink>
           <span aria-hidden="true">/</span>
         </template>
-        <span>{{ displayTitle(document) }}</span>
+        <span>{{ pageLabel(document) }}</span>
       </nav>
       <div class="page-actions">
         <span class="muted edited" data-testid="page-edited">Bearbeitet {{ edited }}</span>
@@ -227,6 +280,69 @@ async function deletePage() {
       </div>
     </header>
 
+    <div v-if="document.cover" class="page-cover-wrap">
+      <PageCover :cover="document.cover" />
+    </div>
+    <div class="page-look" :class="{ 'has-icon': document.icon }">
+      <button
+        v-if="document.icon"
+        type="button"
+        class="page-icon"
+        aria-label="Icon ändern"
+        :disabled="content !== 'loaded'"
+        data-testid="page-icon"
+        @click="iconPickerOpen = !iconPickerOpen"
+      >
+        {{ document.icon }}
+      </button>
+      <div v-if="content === 'loaded'" class="page-look-controls">
+        <button
+          v-if="!document.icon"
+          type="button"
+          class="link"
+          @click="iconPickerOpen = !iconPickerOpen"
+        >
+          Icon hinzufügen
+        </button>
+        <button type="button" class="link" @click="coverMenuOpen = !coverMenuOpen">
+          {{ document.cover ? 'Titelbild ändern' : 'Titelbild hinzufügen' }}
+        </button>
+      </div>
+      <IconPicker v-if="iconPickerOpen" @select="chooseIcon" @close="iconPickerOpen = false" />
+      <div
+        v-if="coverMenuOpen"
+        class="block-menu cover-menu"
+        role="dialog"
+        aria-label="Titelbild"
+        @keydown.escape="coverMenuOpen = false"
+      >
+        <div class="cover-swatches">
+          <button
+            v-for="name in COVER_GRADIENTS"
+            :key="name"
+            type="button"
+            class="cover-swatch"
+            :class="`cover-${name}`"
+            :aria-label="`Farbverlauf ${name}`"
+            @click="chooseGradient(name)"
+          ></button>
+        </div>
+        <button type="button" @click="coverInput?.click()">Bild hochladen …</button>
+        <button v-if="document.cover" type="button" class="danger" @click="removeCover">
+          Entfernen
+        </button>
+      </div>
+      <input
+        ref="coverInput"
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp"
+        hidden
+        data-testid="cover-input"
+        @change="onCoverFile"
+      />
+      <p v-if="lookError" class="error">{{ lookError }}</p>
+    </div>
+
     <input
       ref="titleInput"
       v-model="title"
@@ -267,7 +383,7 @@ async function deletePage() {
       <ul class="link-list">
         <li v-for="child in children" :key="child.id">
           <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: child.id } }">
-            {{ displayTitle(child) }}
+            {{ pageLabel(child) }}
           </RouterLink>
         </li>
       </ul>
@@ -278,7 +394,7 @@ async function deletePage() {
       <ul v-if="backlinks.length" class="link-list">
         <li v-for="source in backlinks" :key="source.id">
           <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: source.id } }">
-            {{ displayTitle(source) }}
+            {{ pageLabel(source) }}
           </RouterLink>
         </li>
       </ul>

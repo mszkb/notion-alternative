@@ -234,7 +234,7 @@ async function runImport(newIds: boolean) {
       <p>
         Verlustfreie Kopie für Backup und Import: alle Seiten, Blöcke, Tags, Links und
         Anhang-Metadaten mit ihren IDs, auch Seiten im Papierkorb. Format:
-        <code>schema_version</code> 2.
+        <code>schema_version</code> 3.
       </p>
       <button type="button" :disabled="running" @click="exportJson">JSON herunterladen</button>
     </section>

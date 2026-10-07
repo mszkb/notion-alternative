@@ -24,8 +24,8 @@ Alle IDs sind UUIDs und werden vom Client erzeugt (offline-fähig). Synchronisie
 | `Workspace` | `id`, `name`, `owner_id`, `created_at` |
 | `User` | `id`, `email`, `password_hash`, `created_at` |
 | `Device` | `id`, `user_id`, `name`, `created_at`, `last_seen_at`, `revoked_at` (entfernt; Zeile bleibt, damit Sessions und Operationen unter dieser ID dauerhaft abgelehnt werden) |
-| `Document` | `id`, `workspace_id`, `parent_id` (Seitenbaum, `null` = Wurzel), `title`, `sort_key`, `favorite`, `created_at`, `updated_at`, `revision`, `deleted_at` |
-| `Block` | `id`, `document_id`, `type` (`paragraph`, `heading`, `list_item`, `code`, `quote`, …), `content` (Text inkl. Inline-Formatierung und Seitenlinks), `attrs` (z. B. Überschriftenebene, Code-Sprache), `sort_key`, `revision`, `deleted_at` |
+| `Document` | `id`, `workspace_id`, `parent_id` (Seitenbaum, `null` = Wurzel), `title`, `sort_key`, `favorite`, `icon` (Emoji, optional), `cover` (`gradient:<name>` oder `attachment:<uuid>`, optional; #136, Migration `0012`), `created_at`, `updated_at`, `revision`, `deleted_at` |
+| `Block` | `id`, `document_id`, `type` (`paragraph`, `heading`, `list_item`, `code`, `quote`, `todo`, `toggle`, `callout`, `divider`, … – [ADR 0019](../adr/0019-block-types.md)), `content` (Text inkl. Inline-Formatierung und Seitenlinks), `attrs` (z. B. Überschriftenebene, Code-Sprache), `sort_key`, `revision`, `deleted_at` |
 | `Tag` | `id`, `workspace_id`, `name`, `revision`, `deleted_at` |
 | `DocumentTag` | `id`, `workspace_id`, `document_id`, `tag_id`, `revision`, `deleted_at` – Zuordnung Tag ↔ Dokument, eigene Entität `document_tag` ([ADR 0009](../adr/0009-local-data-layer.md)) |
 | `Change` | `seq` (monoton pro Workspace = Cursor), `op_id`, `device_id`, `entity`, `entity_id`, `kind`, `revision`, `payload`, `applied_at` |

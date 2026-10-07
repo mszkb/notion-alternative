@@ -11,6 +11,8 @@ import {
   BLOCK_CONTENT_MAX_LENGTH,
   type Document,
   type DocumentTag,
+  documentCoverSchema,
+  documentIconSchema,
   documentTitleSchema,
   type OperationEntity,
   type OperationKind,
@@ -34,11 +36,19 @@ const documentCreate = z
     title: documentTitleSchema,
     sortKey: sortKeySchema,
     favorite: z.boolean(),
+    icon: documentIconSchema.nullable().optional(),
+    cover: documentCoverSchema.nullable().optional(),
     createdAt: z.string().max(40),
   })
   .strict()
 const documentUpdate = z
-  .object({ title: documentTitleSchema, favorite: z.boolean() })
+  .object({
+    title: documentTitleSchema,
+    favorite: z.boolean(),
+    // null removes the icon or cover (#136).
+    icon: documentIconSchema.nullable(),
+    cover: documentCoverSchema.nullable(),
+  })
   .partial()
   .strict()
   .refine((value) => Object.keys(value).length > 0, 'empty update')

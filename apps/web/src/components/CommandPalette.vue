@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { recentPages } from '../composables/recent-pages'
-import { displayTitle, useWorkspace } from '../composables/workspace'
+import { pageLabel, useWorkspace } from '../composables/workspace'
 import { workspaceSearch } from '../local/context'
 import type { SearchHit } from '../local/search'
 import { toggleTheme } from '../theme'
@@ -68,7 +68,7 @@ const items = computed<Item[]>(() => {
       .filter((d) => d !== undefined)
       .map((d) => ({
         key: `page:${d.id}`,
-        label: displayTitle(d),
+        label: pageLabel(d),
         hint: 'Zuletzt besucht',
         run: () => openPage(d.id),
       }))
@@ -76,7 +76,9 @@ const items = computed<Item[]>(() => {
   }
   const pages = hits.value.map((hit) => ({
     key: `page:${hit.id}`,
-    label: hit.title || 'Unbenannt',
+    label: documentsById.value.has(hit.id)
+      ? pageLabel(documentsById.value.get(hit.id))
+      : hit.title || 'Unbenannt',
     hint: hit.snippet,
     run: () => openPage(hit.id),
   }))

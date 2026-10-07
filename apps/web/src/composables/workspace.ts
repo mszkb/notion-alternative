@@ -76,3 +76,9 @@ export function useWorkspace(): WorkspaceContext {
 export function displayTitle(document: Pick<Document, 'title'> | undefined): string {
   return document?.title.trim() || 'Unbenannt'
 }
+
+/** Title with the page icon in front, for the tree, breadcrumbs and lists (#136). */
+export function pageLabel(document: Pick<Document, 'title' | 'icon'> | undefined): string {
+  const icon = document?.icon
+  return icon ? `${icon} ${displayTitle(document)}` : displayTitle(document)
+}

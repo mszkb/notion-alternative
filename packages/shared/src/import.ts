@@ -12,6 +12,8 @@ export type ExportMigration = (data: Record<string, unknown>) => Record<string, 
 export const EXPORT_MIGRATIONS: Record<number, ExportMigration> = {
   // 1 → 2 (ADR 0019): new block types and attributes; every version 1 export is valid as is.
   1: (data) => data,
+  // 2 → 3 (#136): optional page icon and cover; every version 2 export is valid as is.
+  2: (data) => data,
 }
 
 /**

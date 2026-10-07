@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { displayTitle, useWorkspace } from '../composables/workspace'
+import { pageLabel, useWorkspace } from '../composables/workspace'
 
 const { store, workspaceId, documents } = useWorkspace()
 const router = useRouter()
@@ -32,7 +32,7 @@ async function createPage() {
       <ul class="link-list">
         <li v-for="doc in recent" :key="doc.id">
           <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: doc.id } }">
-            {{ displayTitle(doc) }}
+            {{ pageLabel(doc) }}
           </RouterLink>
           <small class="muted">{{ new Date(doc.updatedAt).toLocaleString() }}</small>
         </li>
