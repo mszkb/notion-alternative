@@ -571,13 +571,20 @@ button.danger,
 }
 
 .page-title {
+  display: block;
   width: 100%;
   padding: 0;
+  overflow: hidden;
+  font: inherit;
   font-size: var(--text-title);
   font-weight: 700;
+  line-height: 1.2;
+  color: inherit;
+  background: transparent;
   border: 0;
   border-radius: 0;
   outline: none;
+  resize: none;
 }
 
 .tag-bar {

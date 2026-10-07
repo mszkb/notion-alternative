@@ -10,7 +10,7 @@ import PageCover from '../components/PageCover.vue'
 import { sha256Hex } from '../local/store'
 import { maxFileBytes } from '../limits'
 import { formatBytes } from '../local/persistence'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TagBar from '../components/TagBar.vue'
 import { useLiveQuery } from '../composables/live-query'
@@ -85,7 +85,7 @@ const conflicts = useLiveQuery(
 // ---------------------------------------------------------------- title
 
 const title = ref('')
-const titleInput = ref<HTMLInputElement | null>(null)
+const titleInput = ref<HTMLTextAreaElement | null>(null)
 let titleTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(
@@ -109,7 +109,23 @@ function saveTitle(): Promise<void> {
 }
 const stopPendingTitle = registerPendingEdits(saveTitle)
 
+/** The title wraps like a heading (a textarea growing with its text), but stays one line. */
+function fitTitle() {
+  const el = titleInput.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+watch(title, () => void nextTick(fitTitle), { flush: 'post' })
+onMounted(() => {
+  fitTitle()
+  window.addEventListener('resize', fitTitle)
+})
+onBeforeUnmount(() => window.removeEventListener('resize', fitTitle))
+
 function onTitleInput() {
+  // Pasted line breaks become spaces: a title has one line.
+  if (/[\r\n]/.test(title.value)) title.value = title.value.replace(/[\r\n]+/g, ' ')
   if (titleTimer) clearTimeout(titleTimer)
   titleTimer = setTimeout(saveTitle, 400)
 }
@@ -343,9 +359,10 @@ async function deletePage() {
       <p v-if="lookError" class="error">{{ lookError }}</p>
     </div>
 
-    <input
+    <textarea
       ref="titleInput"
       v-model="title"
+      rows="1"
       class="page-title"
       placeholder="Unbenannt"
       aria-label="Titel"
@@ -354,7 +371,7 @@ async function deletePage() {
       @input="onTitleInput"
       @blur="saveTitle"
       @keydown.enter.prevent="focusFirstBlock"
-    />
+    ></textarea>
 
     <template v-if="content === 'loaded'">
       <TagBar :document-id="document.id" />
