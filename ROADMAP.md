@@ -21,7 +21,7 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 
 ## Phase 0 – Discovery
 
-- [ ] Zielgruppe schärfen ([`docs/product/vision.md`](docs/product/vision.md))
+- [x] Zielgruppe schärfen ([`docs/product/vision.md`](docs/product/vision.md): Umsteiger von Notion, [#17](https://github.com/mszkb/notion-alternative/issues/17))
 - [x] Datenmodell festlegen ([`docs/architecture/sync.md`](docs/architecture/sync.md))
 - [x] Exportformat festlegen – [ADR 0004](docs/adr/0004-export-format.md)
 - [x] Lizenz bestätigen (MIT, siehe `LICENSE`)
