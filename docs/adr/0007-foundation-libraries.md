@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Datum:** 2026-10-02
 
+
+> **Hinweis:** Der Teil „Server-Bibliotheken (Fastify-Umfeld, Kysely, better-sqlite3)“ wird mit [ADR 0018](0018-php-backend.md) (PHP-Backend, `Proposed`) ersetzt, sobald es angenommen ist.
+
 ## Kontext
 
 [ADR 0006](0006-tech-stack.md) legt den Stack fest und überlässt die Wahl der konkreten Bibliotheken Phase 1. Ziel: wenige, verbreitete Abhängigkeiten; der Datenzugriff soll einen späteren Wechsel auf PostgreSQL erlauben.

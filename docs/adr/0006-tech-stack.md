@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Datum:** 2026-10-02
 
+
+> **Hinweis:** Der Teil „Backend (Fastify, Node)“ wird mit [ADR 0018](0018-php-backend.md) (PHP-Backend, `Proposed`) ersetzt, sobald es angenommen ist.
+
 ## Kontext
 
 Die Roadmap schlug einen Stack vor, legte ihn aber nicht fest. Für den Prototyp (Phasen 0–2) soll der Betrieb möglichst einfach sein: wenige Container, keine zusätzlichen Infrastrukturdienste.

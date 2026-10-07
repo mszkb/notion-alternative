@@ -126,6 +126,16 @@ Folgt aus der Zielgruppe ([`vision.md`](docs/product/vision.md)); Epic [#130](ht
 - [x] Seiten-Icons und Titelbilder ([#136](https://github.com/mszkb/notion-alternative/issues/136))
 - [x] Import aus Notion ([#137](https://github.com/mszkb/notion-alternative/issues/137))
 
+## Ohne Phase – PHP-Backend für Webhosting
+
+Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), Entscheidung [ADR 0018](docs/adr/0018-php-backend.md) (Proposed).
+
+- [ ] ADR 0018 angenommen ([#117](https://github.com/mszkb/notion-alternative/issues/117); Entwurf liegt vor)
+- [ ] Contract-Tests gegen beliebige Server-URL ([#118](https://github.com/mszkb/notion-alternative/issues/118))
+- [ ] PHP-Server: Grundgerüst, Auth, Sync, Suche, Anhänge, Push, Verlauf, Import, CLI ([#119](https://github.com/mszkb/notion-alternative/issues/119)–[#127](https://github.com/mszkb/notion-alternative/issues/127))
+- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128))
+- [ ] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129))
+
 ## Ohne Phase – Opt-in-Telemetrie
 
 Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alternative/issues/103)). Gebaut wird erst, wenn [ADR 0016](docs/adr/0016-opt-in-telemetry.md) angenommen ist.

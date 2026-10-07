@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Datum:** 2026-10-03
 
+
+> **Hinweis:** Der Teil „Referenz-Deployment nur mit Docker“ wird mit [ADR 0018](0018-php-backend.md) (PHP-Backend, `Proposed`) ersetzt, sobald es angenommen ist.
+
 ## Kontext
 
 Bisher wurden die Images nur in der CI auf x86 gebaut und nie auf einem echten Host betrieben. Offen waren:
