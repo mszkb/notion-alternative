@@ -19,6 +19,7 @@ import type {
   SyncPushInput,
   SyncPushResult,
   SyncDocumentResponse,
+  SyncDocumentsResponse,
   SyncSnapshotResponse,
   User,
   Workspace,
@@ -102,6 +103,8 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
           ...(content ? {} : { content: 'false' }),
         })}`,
       ),
+    syncDocuments: (workspaceId: string, ids: string[]) =>
+      request<SyncDocumentsResponse>('POST', '/sync/documents', { workspaceId, ids }),
     syncDocument: (workspaceId: string, documentId: string) =>
       request<SyncDocumentResponse>(
         'GET',

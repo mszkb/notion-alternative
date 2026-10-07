@@ -193,6 +193,15 @@ describe('GET /sync/snapshot', () => {
     expect(
       (await a.get(`/sync/documents/${randomUUID()}?workspaceId=${a.workspaceId}`)).status,
     ).toBe(404)
+    const batch = await a.post('/sync/documents', {
+      workspaceId: a.workspaceId,
+      ids: [doc, randomUUID()],
+    })
+    expect(batch.status).toBe(200)
+    expect(batch.body.pages.map((p: { document: { id: string } }) => p.document.id)).toEqual([doc])
+    expect(batch.body.seq).toBe(lean.cursor)
+    const empty = await a.post('/sync/documents', { workspaceId: a.workspaceId, ids: [] })
+    expect(empty.status).toBe(400)
   })
 
   it('refuses malformed paging tokens and foreign workspaces', async () => {

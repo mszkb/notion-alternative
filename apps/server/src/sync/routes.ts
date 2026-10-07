@@ -5,6 +5,7 @@ import {
   type SyncPushResult,
   syncDocumentParamsSchema,
   syncDocumentQuerySchema,
+  syncDocumentsInputSchema,
   syncLogQuerySchema,
   syncPullQuerySchema,
   syncPushInputSchema,
@@ -17,7 +18,7 @@ import { parseInput } from '../validation'
 import { applyBatch } from './apply'
 import { latestSeq, listChangesSince } from './changes'
 import { toChange } from './mapping'
-import { loadDocument, loadSnapshot, loadSnapshotPage } from './snapshot'
+import { loadDocument, loadDocuments, loadSnapshot, loadSnapshotPage } from './snapshot'
 import { findWorkspaceForUser } from '../workspaces/repository'
 import { reindexMarked } from '../search/index'
 
@@ -128,6 +129,14 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     const { workspaceId } = parseInput(syncDocumentQuerySchema, request.query)
     const result = await loadDocument(db, currentUser(request).id, workspaceId, id)
     if (!result) throw new HttpError(404, 'not_found', 'Page not found')
+    return result
+  })
+
+  /** Several pages at once: "make everything available offline" and re-sync (ADR 0017). */
+  app.post('/sync/documents', async (request) => {
+    const { workspaceId, ids } = parseInput(syncDocumentsInputSchema, request.body)
+    const result = await loadDocuments(db, currentUser(request).id, workspaceId, ids)
+    if (!result) throw new HttpError(404, 'not_found', 'Workspace not found')
     return result
   })
 }

@@ -65,7 +65,7 @@ Angenommen am 2026-10-07 ([#112](https://github.com/mszkb/notion-alternative/iss
   - Der Editor zeigt „Inhalt ist nicht auf diesem Gerät. Er wird geladen, sobald der Server erreichbar ist.“
   - Nichts lässt sich bearbeiten, keine leere Seite täuscht Inhalt vor.
 - **Einstellungen, Abschnitt „Offline verfügbar“:**
-  - Der Knopf „Alles offline verfügbar machen“ lädt alle fehlenden Seiteninhalte Seite für Seite (`GET /api/sync/documents/:id`, damit Abbrechen und Fortsetzen ohne erneuten Gesamtdownload gehen) und alle Anhänge, mit Fortschrittsbalken. Erst wenn alles geladen ist, steht das Gerät auf `offlineMode = all`.
+  - Der Knopf „Alles offline verfügbar machen“ lädt alle fehlenden Seiteninhalte in Paketen zu 100 Seiten (`POST /api/sync/documents`, damit Abbrechen und Fortsetzen ohne erneuten Gesamtdownload gehen) und alle Anhänge, mit Fortschrittsbalken. Erst wenn alles geladen ist, steht das Gerät auf `offlineMode = all`.
   - „Abbrechen“ beendet das Laden sofort. Was bis dahin geladen ist, bleibt geladen; das Gerät bleibt bei „bei Bedarf“. Ein erneuter Klick setzt fort und lädt nur, was noch fehlt.
   - „Nur bei Bedarf laden“ stellt zurück, Geladenes bleibt.
   - Angezeigt wird, wie viele Seiten geladen sind und wie viel Speicher das belegt.

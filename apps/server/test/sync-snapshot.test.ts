@@ -351,6 +351,46 @@ describe('content on demand (ADR 0017)', () => {
     expect(body.seq).toBe(5)
   })
 
+  it('loads several pages at once and leaves out unknown ids', async () => {
+    const one = randomUUID()
+    const two = randomUUID()
+    await push(
+      op('document', 'create', one, docPayload),
+      op('document', 'create', two, docPayload),
+      block(one, 'eins'),
+      block(two, 'zwei'),
+    )
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/documents',
+      headers: { cookie },
+      payload: { workspaceId, ids: [one, two, randomUUID()] },
+    })
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.seq).toBe(4)
+    expect(
+      body.pages
+        .map((p: { document: { id: string }; blocks: { content: string }[] }) => [
+          p.document.id,
+          p.blocks.map((b) => b.content),
+        ])
+        .sort(),
+    ).toEqual(
+      [
+        [one, ['eins']],
+        [two, ['zwei']],
+      ].sort(),
+    )
+    const tooMany = await app.inject({
+      method: 'POST',
+      url: '/api/sync/documents',
+      headers: { cookie },
+      payload: { workspaceId, ids: Array.from({ length: 101 }, () => randomUUID()) },
+    })
+    expect(tooMany.statusCode).toBe(400)
+  })
+
   it('answers 404 for foreign workspaces and unknown pages, 400 for bad input', async () => {
     const doc = randomUUID()
     await push(op('document', 'create', doc, docPayload))

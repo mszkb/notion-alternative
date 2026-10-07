@@ -277,6 +277,22 @@ export interface SyncDocumentResponse {
   seq: number
 }
 
+/** Most pages per `POST /api/sync/documents`. */
+export const SYNC_DOCUMENTS_MAX = 100
+
+/** `POST /api/sync/documents`: several pages with their blocks at once (ADR 0017). */
+export const syncDocumentsInputSchema = z.object({
+  workspaceId: z.uuid(),
+  ids: z.array(z.uuid()).min(1).max(SYNC_DOCUMENTS_MAX),
+})
+
+export interface SyncDocumentsResponse {
+  /** The requested pages the server has; unknown ids are left out. */
+  pages: { document: Document; blocks: Block[] }[]
+  /** Change-log position all pages reflect (as for a single page). */
+  seq: number
+}
+
 /** One version of a page: an editing session of one device (ADR 0013). */
 export interface DocumentVersion {
   /** Last change of the session; identifies the version. */

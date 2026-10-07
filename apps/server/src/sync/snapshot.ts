@@ -1,4 +1,8 @@
-import type { SyncDocumentResponse, SyncSnapshotResponse } from '@notion-alt/shared'
+import type {
+  SyncDocumentResponse,
+  SyncDocumentsResponse,
+  SyncSnapshotResponse,
+} from '@notion-alt/shared'
 import type { Db } from '../db/database'
 import { findWorkspaceForUser } from '../workspaces/repository'
 import { latestSeq } from './changes'
@@ -182,5 +186,50 @@ export async function loadDocument(
       latestSeq(trx, workspaceId, workspace.compacted_seq),
     ])
     return { document: toDocument(document), blocks: blocks.map(toBlock), seq }
+  })
+}
+
+/**
+ * Several pages with their blocks, read in one transaction with the change-log position they
+ * reflect (ADR 0017). Ids the workspace does not have are left out. Null if the user may not
+ * access the workspace.
+ */
+export async function loadDocuments(
+  db: Db,
+  userId: string,
+  workspaceId: string,
+  ids: string[],
+): Promise<SyncDocumentsResponse | null> {
+  return db.transaction().execute(async (trx) => {
+    const workspace = await findWorkspaceForUser(trx, workspaceId, userId)
+    if (!workspace) return null
+    const [documents, blocks, seq] = await Promise.all([
+      trx
+        .selectFrom('documents')
+        .selectAll()
+        .where('workspace_id', '=', workspaceId)
+        .where('id', 'in', ids)
+        .execute(),
+      trx
+        .selectFrom('blocks')
+        .selectAll()
+        .where('workspace_id', '=', workspaceId)
+        .where('document_id', 'in', ids)
+        .execute(),
+      latestSeq(trx, workspaceId, workspace.compacted_seq),
+    ])
+    const byDocument = new Map<string, ReturnType<typeof toBlock>[]>()
+    for (const row of blocks) {
+      const list = byDocument.get(row.document_id) ?? []
+      list.push(toBlock(row))
+      byDocument.set(row.document_id, list)
+    }
+    return {
+      pages: documents.map((row) => ({
+        document: toDocument(row),
+        blocks: byDocument.get(row.id) ?? [],
+      })),
+      seq,
+    }
   })
 }

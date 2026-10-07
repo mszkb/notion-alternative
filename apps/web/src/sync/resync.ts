@@ -1,4 +1,9 @@
-import type { SyncDocumentResponse, SyncSnapshotResponse } from '@notion-alt/shared'
+import {
+  SYNC_DOCUMENTS_MAX,
+  type SyncDocumentResponse,
+  type SyncDocumentsResponse,
+  type SyncSnapshotResponse,
+} from '@notion-alt/shared'
 import { ApiError } from '../api'
 import type { LocalStore } from '../local/store'
 import { type PullFetch, pullWorkspace } from './pull'
@@ -18,6 +23,9 @@ export type DocumentFetch = (
   workspaceId: string,
   documentId: string,
 ) => Promise<SyncDocumentResponse>
+
+/** Several pages with their blocks; unknown ids are left out (ADR 0017). */
+export type DocumentsFetch = (workspaceId: string, ids: string[]) => Promise<SyncDocumentsResponse>
 
 export interface ResyncProgress {
   workspaceId: string
@@ -42,7 +50,12 @@ const count = (page: SyncSnapshotResponse) =>
 export async function syncWorkspace(
   store: LocalStore,
   workspaceId: string,
-  transport: { pull: PullFetch; snapshot: SnapshotFetch; document?: DocumentFetch },
+  transport: {
+    pull: PullFetch
+    snapshot: SnapshotFetch
+    document?: DocumentFetch
+    documents?: DocumentsFetch
+  },
   full = false,
   onProgress?: (progress: ResyncProgress) => void,
 ): Promise<'pull' | 'resync'> {
@@ -59,15 +72,15 @@ export async function syncWorkspace(
   const content = (await store.offlineMode()) === 'all'
   await resyncWorkspace(store, workspaceId, transport.snapshot, content, onProgress)
   if (!content) {
-    const fetchDocument = transport.document
-    if (!fetchDocument) throw new Error('Loading content on demand needs a document fetch')
+    const fetchDocuments = transport.documents ?? batchOf(transport.document)
+    const ids: string[] = []
     for (const documentId of await store.loadedDocumentIds(workspaceId)) {
       // Never synced (created here, still queued): the server has nothing to load yet. Pages in
       // the trash are not refreshed; restoring one reloads it when it is opened.
       const page = await store.db.documents.get(documentId)
-      if (page?.revision == null || page.deletedAt) continue
-      await loadDocumentContent(store, workspaceId, documentId, fetchDocument)
+      if (page?.revision != null && !page.deletedAt) ids.push(documentId)
     }
+    await loadDocumentsContent(store, workspaceId, ids, fetchDocuments)
   }
   // Anything that happened after the snapshot was taken, including what later pages missed.
   await pullWorkspace(store, workspaceId, transport.pull)
@@ -127,4 +140,50 @@ export async function loadDocumentContent(
   }
   await store.applyDocumentContent(workspaceId, content)
   return true
+}
+
+/** Fetches several pages one by one where no batch fetch is available (tests, older servers). */
+export function batchOf(fetchDocument: DocumentFetch | undefined): DocumentsFetch {
+  if (!fetchDocument) {
+    return () => Promise.reject(new Error('Loading content on demand needs a document fetch'))
+  }
+  return async (workspaceId, ids) => {
+    const pages: SyncDocumentsResponse['pages'] = []
+    let seq = 0
+    for (const id of ids) {
+      try {
+        const page = await fetchDocument(workspaceId, id)
+        pages.push({ document: page.document, blocks: page.blocks })
+        seq = Math.max(seq, page.seq)
+      } catch (error) {
+        if (!(error instanceof ApiError && error.status === 404)) throw error
+      }
+    }
+    return { pages, seq }
+  }
+}
+
+/**
+ * Loads (or refreshes) pages in batches of SYNC_DOCUMENTS_MAX, each written in its own
+ * transaction. Returns the ids the server did not have. The caller holds the sync lock.
+ */
+export async function loadDocumentsContent(
+  store: LocalStore,
+  workspaceId: string,
+  ids: string[],
+  fetchDocuments: DocumentsFetch,
+  onLoaded?: (count: number) => void,
+): Promise<string[]> {
+  const missing: string[] = []
+  for (let i = 0; i < ids.length; i += SYNC_DOCUMENTS_MAX) {
+    const batch = ids.slice(i, i + SYNC_DOCUMENTS_MAX)
+    const { pages, seq } = await fetchDocuments(workspaceId, batch)
+    const served = new Set(pages.map((page) => page.document.id))
+    for (const page of pages) {
+      await store.applyDocumentContent(workspaceId, { ...page, seq })
+    }
+    missing.push(...batch.filter((id) => !served.has(id)))
+    onLoaded?.(batch.length)
+  }
+  return missing
 }

@@ -7,6 +7,7 @@ import type { PullFetch } from './pull'
 import { pushQueue, type PushSend } from './push'
 import {
   type DocumentFetch,
+  type DocumentsFetch,
   type ResyncProgress,
   type SnapshotFetch,
   syncWorkspace,
@@ -45,6 +46,7 @@ export interface SyncTransport {
   snapshot: SnapshotFetch
   /** Required when the device loads content on demand (ADR 0017). */
   document?: DocumentFetch
+  documents?: DocumentsFetch
   upload?: (id: string, data: ArrayBuffer) => Promise<'stored' | 'gone'>
   register?: typeof api.registerDevice
 }
@@ -54,6 +56,7 @@ const defaultTransport: SyncTransport = {
   pull: api.syncPull,
   snapshot: api.syncSnapshot,
   document: api.syncDocument,
+  documents: api.syncDocuments,
   upload: (id, data) => uploadAttachment(id, data),
 }
 

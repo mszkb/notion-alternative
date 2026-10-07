@@ -262,6 +262,7 @@ describe('content on demand', () => {
       },
       onProgress: (p) => progress.push(p.done),
       signal: controller.signal,
+      batchSize: 1,
     })
     expect(first.stopped).toBe('cancelled')
     expect(first.loaded).toBeGreaterThan(0)
@@ -309,6 +310,29 @@ describe('content on demand', () => {
     expect(await b.offlineMode()).toBe('onDemand')
   })
 
+  it('loads in batches with the batch fetch and reports pages the server lacks', async () => {
+    for (const title of ['A', 'B', 'C']) await pageWithText(title, title)
+    await syncA()
+    await syncWorkspace(b, WS, server)
+    const ghost = (await b.unloadedDocuments())[0]!.id
+    const requests: string[][] = []
+    const result = await loadAllDocuments(b, {
+      fetchDocuments: async (ws, ids) => {
+        requests.push(ids)
+        const pages = []
+        for (const id of ids.filter((x) => x !== ghost)) {
+          const { document, blocks } = await server.document(ws, id)
+          pages.push({ document, blocks })
+        }
+        return { pages, seq: 99 }
+      },
+      batchSize: 2,
+    })
+    expect(requests.map((r) => r.length)).toEqual([2, 1])
+    expect(result).toEqual({ loaded: 2, unavailable: 1, stopped: null })
+    expect(await b.isDocumentLoaded(ghost)).toBe(false)
+  })
+
   it('stops when the connection is lost and keeps what was loaded', async () => {
     for (const title of ['A', 'B', 'C']) await pageWithText(title, title)
     await syncA()
@@ -319,6 +343,7 @@ describe('content on demand', () => {
         if (++calls === 2) throw new TypeError('Failed to fetch')
         return server.document(ws, id)
       },
+      batchSize: 1,
     })
     expect(result).toEqual({ loaded: 1, unavailable: 0, stopped: 'offline' })
     expect((await b.unloadedDocuments()).length).toBe(2)

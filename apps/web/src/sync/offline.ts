@@ -2,7 +2,14 @@ import { ApiError, api } from '../api'
 import type { LocalStore } from '../local/store'
 import { connection } from '../session'
 import { exclusive } from './engine'
-import { type DocumentFetch, loadDocumentContent } from './resync'
+import { SYNC_DOCUMENTS_MAX } from '@notion-alt/shared'
+import {
+  batchOf,
+  type DocumentFetch,
+  type DocumentsFetch,
+  loadDocumentContent,
+  loadDocumentsContent,
+} from './resync'
 
 export type OpenOutcome = 'loaded' | 'offline' | 'missing'
 
@@ -54,20 +61,27 @@ export interface MakeOfflineResult {
 
 /**
  * "Alles offline verfügbar machen" (ADR 0017), pages part: loads every page this device has not
- * loaded, one after another, each under the sync lock (a pull never runs between fetching and
- * writing a page), so normal syncs keep running in between. Cancelling or losing the connection
- * stops it; a new run continues with what is still missing. Only a complete run switches the
- * device to "all"; pages the server does not know keep it "on demand".
+ * loaded, up to SYNC_DOCUMENTS_MAX per request, each batch under the sync lock (a pull never runs
+ * between fetching and writing), so normal syncs keep running in between. Cancelling or losing
+ * the connection stops it; a new run continues with what is still missing. Only a complete run
+ * switches the device to "all"; pages the server does not know keep it "on demand".
  */
 export async function loadAllDocuments(
   store: LocalStore,
   options: {
+    fetchDocuments?: DocumentsFetch
+    /** Single-page fetch instead of the batch (tests). */
     fetchDocument?: DocumentFetch
     onProgress?: (progress: MakeOfflineProgress) => void
     signal?: AbortSignal
+    /** Pages per request; smaller only in tests. */
+    batchSize?: number
   } = {},
 ): Promise<MakeOfflineResult> {
-  const fetchDocument = options.fetchDocument ?? api.syncDocument
+  const batchSize = options.batchSize ?? SYNC_DOCUMENTS_MAX
+  const fetchDocuments =
+    options.fetchDocuments ??
+    (options.fetchDocument ? batchOf(options.fetchDocument) : api.syncDocuments)
   const result: MakeOfflineResult = { loaded: 0, unavailable: 0, stopped: null }
   const unavailable = new Set<string>()
   let done = 0
@@ -81,23 +95,28 @@ export async function loadAllDocuments(
       if (unavailable.size > 0 || (await store.offlineMode()) === 'all') return result
       continue
     }
+    const byWorkspace = new Map<string, string[]>()
     for (const page of missing) {
-      if (options.signal?.aborted) return { ...result, stopped: 'cancelled' }
-      try {
-        const loaded = await exclusive(store, () =>
-          loadDocumentContent(store, page.workspaceId, page.id, fetchDocument),
-        )
-        if (loaded) result.loaded++
-        else {
-          unavailable.add(page.id)
-          result.unavailable++
+      byWorkspace.set(page.workspaceId, [...(byWorkspace.get(page.workspaceId) ?? []), page.id])
+    }
+    for (const [workspaceId, ids] of byWorkspace) {
+      for (let i = 0; i < ids.length; i += batchSize) {
+        if (options.signal?.aborted) return { ...result, stopped: 'cancelled' }
+        const batch = ids.slice(i, i + batchSize)
+        try {
+          const absent = await exclusive(store, () =>
+            loadDocumentsContent(store, workspaceId, batch, fetchDocuments),
+          )
+          for (const id of absent) unavailable.add(id)
+          result.unavailable += absent.length
+          result.loaded += batch.length - absent.length
+        } catch (error) {
+          if (unreachable(error)) return { ...result, stopped: 'offline' }
+          throw error
         }
-      } catch (error) {
-        if (unreachable(error)) return { ...result, stopped: 'offline' }
-        throw error
+        done += batch.length
+        options.onProgress?.({ done, total })
       }
-      done++
-      options.onProgress?.({ done, total })
     }
   }
 }
