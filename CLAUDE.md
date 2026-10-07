@@ -31,7 +31,7 @@ Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaff
 | Datei / Ordner | Inhalt |
 | --- | --- |
 | `ROADMAP.md` | Phasen 0–9, Milestones, Fortschritt (Checklisten) |
-| `docs/product/` | Vision, Zielgruppen, Prinzipien, MVP-Scope, Nicht-Ziele, Akzeptanzkriterien |
+| `docs/product/` | Vision, Zielgruppen, Prinzipien, MVP-Scope, Nicht-Ziele, Akzeptanzkriterien, UX-Leitlinie (`ux-guide.md`) |
 | `docs/architecture/` | Architekturüberblick, Datenmodell & Sync, Push-Strategie |
 | `docs/adr/` | Architecture Decision Records (Vorlage: `0000-template.md`) |
 | `docs/process/` | Definition of Done, Aufgabenzerlegung für den Roadmap-Agenten |

@@ -20,6 +20,7 @@ import {
 } from '../push-notifications'
 import { resetAppCache } from '../pwa'
 import { requestSync, syncState } from '../sync/engine'
+import { setTheme, themePreference, type ThemePreference } from '../theme'
 import { loadAllDocuments, type MakeOfflineProgress, type MakeOfflineResult } from '../sync/offline'
 import type { OfflineMode } from '../local/db'
 
@@ -305,6 +306,23 @@ async function changePassword() {
     </header>
     <p class="muted">Angemeldet als {{ currentUser?.email }}</p>
 
+    <h2>Darstellung</h2>
+    <label class="theme-choice">
+      Farbschema
+      <select
+        :value="themePreference"
+        data-testid="theme"
+        @change="setTheme(($event.target as HTMLSelectElement).value as ThemePreference)"
+      >
+        <option value="system">Wie das System</option>
+        <option value="light">Hell</option>
+        <option value="dark">Dunkel</option>
+      </select>
+    </label>
+    <p class="muted">
+      Umschalten zwischen hell und dunkel auch mit <kbd>Strg/⌘ + Umschalt + L</kbd>.
+    </p>
+
     <h2>Passwort ändern</h2>
     <p v-if="connection !== 'online'" class="muted" data-testid="password-offline">
       Zum Ändern des Passworts wird eine Serververbindung benötigt.
@@ -578,13 +596,13 @@ async function changePassword() {
 
 <style scoped>
 h2 {
-  margin: 1.5rem 0 0.75rem;
-  font-size: 1.1rem;
+  margin: var(--space-xl) 0 var(--space-md);
+  font-size: var(--text-lg);
 }
 
 .devices {
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-md);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -592,7 +610,7 @@ h2 {
 
 .devices > li {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-md);
   align-items: center;
   justify-content: space-between;
 }
@@ -603,7 +621,7 @@ h2 {
 
 fieldset {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
   margin: 0;
   padding: 0;
   border: 0;

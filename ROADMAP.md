@@ -114,6 +114,18 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Entferntes Gerät synchronisiert nach erneuter Anmeldung als neues Gerät weiter ([#46](https://github.com/mszkb/notion-alternative/issues/46))
 - [x] Seiteninhalte bei Bedarf laden, „Alles offline verfügbar machen“ in den Einstellungen ([ADR 0017](docs/adr/0017-content-on-demand.md), [#112](https://github.com/mszkb/notion-alternative/issues/112))
 
+## Ohne Phase – Vertraute Oberfläche für Umsteiger von Notion
+
+Folgt aus der Zielgruppe ([`vision.md`](docs/product/vision.md)); Epic [#130](https://github.com/mszkb/notion-alternative/issues/130), Leitlinie [`ux-guide.md`](docs/product/ux-guide.md).
+
+- [x] Design-Leitlinie und Design-Tokens, hell/dunkel umschaltbar ([#131](https://github.com/mszkb/notion-alternative/issues/131))
+- [ ] Einklappbare Seitenleiste, Breadcrumbs, Seitenkopf ([#132](https://github.com/mszkb/notion-alternative/issues/132))
+- [ ] Slash-Menü, Markdown-Kürzel, Blockgriff ([#133](https://github.com/mszkb/notion-alternative/issues/133))
+- [ ] Schnellsuche und Tastenkürzel ([#134](https://github.com/mszkb/notion-alternative/issues/134))
+- [ ] Blocktypen To-do, Toggle, Callout, Trenner ([#135](https://github.com/mszkb/notion-alternative/issues/135))
+- [ ] Seiten-Icons und Titelbilder ([#136](https://github.com/mszkb/notion-alternative/issues/136))
+- [ ] Import aus Notion ([#137](https://github.com/mszkb/notion-alternative/issues/137))
+
 ## Ohne Phase – Opt-in-Telemetrie
 
 Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alternative/issues/103)). Gebaut wird erst, wenn [ADR 0016](docs/adr/0016-opt-in-telemetry.md) angenommen ist.

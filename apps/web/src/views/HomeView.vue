@@ -159,20 +159,20 @@ async function logout() {
 <style scoped>
 .logout {
   display: grid;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
-  padding-top: 1rem;
+  gap: var(--space-md);
+  margin-top: var(--space-xl);
+  padding-top: var(--space-lg);
   border-top: 1px solid var(--border);
 }
 
 .logout h2 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
 }
 
 .check {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   align-items: flex-start;
 }
 </style>

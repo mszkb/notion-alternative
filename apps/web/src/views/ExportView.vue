@@ -304,13 +304,13 @@ async function runImport(newIds: boolean) {
 <style scoped>
 .check {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   align-items: flex-start;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-md);
 }
 .import-summary {
   display: grid;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
 }
 </style>

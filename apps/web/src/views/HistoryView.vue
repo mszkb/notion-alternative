@@ -172,7 +172,7 @@ const titleChanged = computed(
 .history-layout {
   display: grid;
   grid-template-columns: minmax(12rem, 16rem) 1fr;
-  gap: 1.5rem;
+  gap: var(--space-xl);
 }
 
 @media (max-width: 720px) {
@@ -183,7 +183,7 @@ const titleChanged = computed(
 
 .versions {
   display: grid;
-  gap: 0.25rem;
+  gap: var(--space-xs);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -192,11 +192,11 @@ const titleChanged = computed(
 .version {
   display: grid;
   width: 100%;
-  padding: 0.45rem 0.6rem;
+  padding: var(--space-sm);
   color: inherit;
   text-align: left;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .version[aria-current] {
@@ -205,7 +205,7 @@ const titleChanged = computed(
 
 .diff {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-xs);
   margin: 0;
   padding: 0;
   list-style: none;
