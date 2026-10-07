@@ -22,8 +22,8 @@ Die Produktprinzipien gelten unverändert: Jede Bedienung funktioniert offline, 
 | Seitenbaum mit Auf-/Zuklappen, „+“ bei Hover für eine Unterseite, Ziehen zum Verschieben | `TreeNode.vue` | vorhanden |
 | Zentrierte Inhaltsspalte, großer Seitentitel, viel Weißraum | `.page`, `--content-width` | vorhanden |
 | Kopfzeile mit Breadcrumbs und Seitenmenü | `PageView.vue` | umgesetzt: „Bearbeitet …“, Favorit, Seitenmenü ⋯ (Unterseite, Verlauf, Export, Löschen) (#132) |
-| Steuerelemente erscheinen erst bei Hover bzw. Fokus | Blockgriff, „+“ im Baum | teilweise, #132/#133 |
-| `/` öffnet ein Menü für Blocktypen, Markdown-Kürzel beim Tippen | Block-Editor (ADR 0008) | [#133](https://github.com/mszkb/notion-alternative/issues/133) |
+| Steuerelemente erscheinen erst bei Hover bzw. Fokus | Blockgriff ⋮⋮ (Klick: Menü mit Umwandeln, Duplizieren, Link kopieren, Verschieben, Löschen; Ziehen: verschieben), „+“ im Baum | umgesetzt (#132/#133) |
+| `/` öffnet ein Menü für Blocktypen, Markdown-Kürzel beim Tippen | `SlashMenu.vue`: leerer Block wird umgewandelt, sonst neuer Block danach; Kürzel `#`, `-`, `1.`, `>`, ```` ``` ```` | umgesetzt (#133) |
 | Schnellsuche mit `Strg/⌘+K` bzw. `Strg/⌘+P` | `CommandPalette.vue`: zuletzt besuchte Seiten, lokale Volltextsuche (offline), Befehle | umgesetzt (#134) |
 | To-do, Toggle, Callout, Trenner | neue Blocktypen | [#135](https://github.com/mszkb/notion-alternative/issues/135) |
 | Seiten-Icons (Emoji) und Titelbilder | Dokument-Felder | [#136](https://github.com/mszkb/notion-alternative/issues/136) |

@@ -120,7 +120,7 @@ Folgt aus der Zielgruppe ([`vision.md`](docs/product/vision.md)); Epic [#130](ht
 
 - [x] Design-Leitlinie und Design-Tokens, hell/dunkel umschaltbar ([#131](https://github.com/mszkb/notion-alternative/issues/131))
 - [x] Einklappbare Seitenleiste, Breadcrumbs, Seitenkopf ([#132](https://github.com/mszkb/notion-alternative/issues/132))
-- [ ] Slash-Menü, Markdown-Kürzel, Blockgriff ([#133](https://github.com/mszkb/notion-alternative/issues/133))
+- [x] Slash-Menü, Markdown-Kürzel, Blockgriff ([#133](https://github.com/mszkb/notion-alternative/issues/133))
 - [x] Schnellsuche und Tastenkürzel ([#134](https://github.com/mszkb/notion-alternative/issues/134))
 - [ ] Blocktypen To-do, Toggle, Callout, Trenner ([#135](https://github.com/mszkb/notion-alternative/issues/135))
 - [ ] Seiten-Icons und Titelbilder ([#136](https://github.com/mszkb/notion-alternative/issues/136))

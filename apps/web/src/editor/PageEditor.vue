@@ -29,6 +29,8 @@ import AttachmentBlock from './AttachmentBlock.vue'
 import { EditHistory } from './history'
 import { renderInline, serializeDom } from './inline-dom'
 import PagePicker, { type PickerChoice } from './PagePicker.vue'
+import { opensSlashMenu, type SlashOption } from './slash'
+import SlashMenu from './SlashMenu.vue'
 
 const props = defineProps<{ documentId: string }>()
 
@@ -850,6 +852,12 @@ function onInput(block: Block, event: Event) {
     const input = event as InputEvent
     if (input.inputType === 'insertText' && input.data === '[' && textBeforeCaret(2) === '[[') {
       openPicker(block, el, 'page', 2)
+    } else if (
+      input.inputType === 'insertText' &&
+      input.data === '/' &&
+      opensSlashMenu(textBeforeCaret(2))
+    ) {
+      openSlash(block, el)
     }
   }
   scheduleSave(block.id)
@@ -1105,6 +1113,99 @@ function closePicker(refocus: boolean) {
   if (state && refocus) elements.get(state.blockId)?.focus()
 }
 
+// ------------------------------------------------------------------ slash menu (#133)
+
+const slash = ref<{
+  blockId: string
+  /** Caret offset in characters right after the typed "/" (survives re-rendering). */
+  offset: number
+  position: { top: number; left: number }
+} | null>(null)
+
+function openSlash(block: Block, el: HTMLElement) {
+  const selection = document.getSelection()
+  if (!selection?.rangeCount) return
+  const range = selection.getRangeAt(0)
+  if (!el.contains(range.startContainer) && range.startContainer !== el) return
+  const rect = range.getBoundingClientRect()
+  const box = el.getBoundingClientRect()
+  slash.value = {
+    blockId: block.id,
+    offset: getCaretOffset(el) ?? 0,
+    position: {
+      top: (rect.bottom || box.bottom) + 6,
+      left: Math.min(rect.left || box.left, window.innerWidth - 320),
+    },
+  }
+}
+
+function closeSlash(refocus: boolean) {
+  const state = slash.value
+  slash.value = null
+  const el = state ? elements.get(state.blockId) : undefined
+  if (!state || !el || !refocus) return
+  el.focus()
+  setCaretOffset(el, Math.min(state.offset, textLength(el)))
+}
+
+/** Removes the typed "/" (the character before `offset`) and puts the caret there. */
+function removeSlash(state: { offset: number }, el: HTMLElement) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+  let seen = 0
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    if (seen + node.data.length >= state.offset) {
+      const at = state.offset - seen - 1
+      if (at >= 0 && node.data[at] === '/') node.deleteData(at, 1)
+      break
+    }
+    seen += node.data.length
+  }
+  el.classList.toggle('is-empty', textLength(el) === 0)
+  el.focus()
+  setCaretOffset(el, Math.max(0, state.offset - 1))
+}
+
+async function chooseSlash(option: SlashOption) {
+  const state = slash.value
+  slash.value = null
+  const block = state ? blockById.value.get(state.blockId) : undefined
+  const el = state ? elements.get(state.blockId) : undefined
+  if (!state || !block || !el) return
+  checkpoint()
+  removeSlash(state, el)
+  scheduleSave(block.id)
+  if (option.kind === 'type') {
+    if (textLength(el) === 0 || block.type === option.type) {
+      // An empty block turns into the chosen type, as in Notion.
+      await setType(block, option.type, option.attrs, 0)
+    } else {
+      await flush(block.id)
+      await insertBlockAfter(block.id, option.type, option.attrs, '')
+    }
+  } else if (option.kind === 'file') {
+    chooseFiles(block.id)
+  } else {
+    openPicker(block, el, 'page', 0)
+  }
+}
+
+async function insertBlockAfter(
+  afterId: string | null,
+  type: BlockType,
+  attrs: BlockAttrs,
+  content: string,
+) {
+  checkpoint()
+  const created = draftBlock({ type, attrs, content })
+  pendingFocus = { id: created.id, offset: 'end' }
+  await structural(
+    created.id,
+    (list) => insertAfter(list, afterId, created),
+    () => store.createBlock(props.documentId, created, { afterId }),
+  )
+}
+
 /** Block whose saved range is in use while a chosen link is inserted (keeps it from re-rendering). */
 const linking = ref<string | null>(null)
 
@@ -1245,6 +1346,113 @@ function closeMenuOnOutsideClick(event: MouseEvent) {
   }
 }
 
+async function duplicate(block: Block) {
+  await flush(block.id)
+  await insertBlockAfter(block.id, block.type, { ...block.attrs }, currentContent(block))
+}
+
+/** Link to this block: the page's address with `#block-<id>`, opened scrolled to the block. */
+async function copyBlockLink(block: Block) {
+  const href = router.resolve({ hash: `#block-${block.id}` }).href
+  const url = new URL(href, window.location.origin).toString()
+  try {
+    await navigator.clipboard.writeText(url)
+  } catch {
+    window.prompt('Link zum Block', url)
+  }
+}
+
+let scrolledToHash = false
+watch(blocks, async (list) => {
+  if (scrolledToHash || !list) return
+  scrolledToHash = true
+  const id = window.location.hash.startsWith('#block-') ? window.location.hash.slice(7) : null
+  if (!id || !list.some((b) => b.id === id)) return
+  await nextTick()
+  const el = document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(id)}"]`)
+  el?.scrollIntoView({ block: 'center' })
+  el?.classList.add('linked')
+  setTimeout(() => el?.classList.remove('linked'), 2000)
+})
+
+// ------------------------------------------------------------------ drag the handle to move
+
+const BLOCK_DRAG_TYPE = 'application/x-notion-alt-block'
+const dropTarget = ref<{ id: string; after: boolean } | null>(null)
+
+function onHandleDragStart(block: Block, event: DragEvent) {
+  menuFor.value = null
+  event.dataTransfer?.setData(BLOCK_DRAG_TYPE, block.id)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+function onBlockDragOver(block: Block, event: DragEvent) {
+  if (!event.dataTransfer?.types.includes(BLOCK_DRAG_TYPE)) return
+  event.preventDefault()
+  event.stopPropagation()
+  const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  dropTarget.value = { id: block.id, after: event.clientY > box.top + box.height / 2 }
+}
+
+async function onBlockDrop(block: Block, event: DragEvent) {
+  const id = event.dataTransfer?.getData(BLOCK_DRAG_TYPE)
+  if (!id) return
+  event.preventDefault()
+  event.stopPropagation()
+  const target = dropTarget.value
+  dropTarget.value = null
+  if (!target || id === block.id) return
+  const list = blocks.value ?? []
+  const index = list.findIndex((b) => b.id === block.id)
+  const afterId = target.after ? block.id : (list[index - 1]?.id ?? null)
+  if (afterId === id) return
+  await moveTo(id, afterId)
+}
+
+async function moveTo(id: string, afterId: string | null) {
+  const list = blocks.value ?? []
+  const moving = list.find((b) => b.id === id)
+  if (!moving) return
+  checkpoint()
+  void flush(id)
+  await structural(
+    id,
+    (current) =>
+      insertAfter(
+        current.filter((b) => b.id !== id),
+        afterId,
+        moving,
+      ),
+    () => store.moveBlock(id, { afterId }),
+  )
+}
+
+/** Arrow keys move between the entries, Esc closes and returns to the handle (#133). */
+function onMenuKeydown(event: KeyboardEvent) {
+  const menu = event.currentTarget as HTMLElement
+  const items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+  const index = items.indexOf(document.activeElement as HTMLElement)
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const step = event.key === 'ArrowDown' ? 1 : -1
+    items[(index + step + items.length) % items.length]?.focus()
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    const handle = menu.parentElement?.querySelector<HTMLElement>('.block-handle')
+    menuFor.value = null
+    handle?.focus()
+  }
+}
+
+// Opening the menu by keyboard puts the focus on its first entry.
+watch(menuFor, async (id) => {
+  if (!id) return
+  await nextTick()
+  document
+    .querySelector<HTMLElement>(`[data-block-id="${CSS.escape(id)}"] .block-menu [role="menuitem"]`)
+    ?.focus()
+})
+
 async function menuAction(action: () => Promise<void>) {
   menuFor.value = null
   checkpoint()
@@ -1320,7 +1528,12 @@ function blockLabel(block: Block): string {
       class="block"
       :class="[
         blockClass(block),
-        { selected: selectedSet.has(block.id), 'has-conflict': conflicted.has(block.id) },
+        {
+          selected: selectedSet.has(block.id),
+          'has-conflict': conflicted.has(block.id),
+          'drop-before': dropTarget?.id === block.id && !dropTarget.after,
+          'drop-after': dropTarget?.id === block.id && dropTarget.after,
+        },
       ]"
       :title="
         conflicted.has(block.id) ? 'Konflikt: siehe Konflikte in der Seitenleiste' : undefined
@@ -1328,12 +1541,17 @@ function blockLabel(block: Block): string {
       :style="{ '--indent': block.attrs.indent ?? 0 }"
       :data-block-id="block.id"
       :aria-selected="selectedSet.has(block.id) || undefined"
+      @dragover.capture="onBlockDragOver(block, $event)"
+      @drop.capture="onBlockDrop(block, $event)"
     >
       <button
         type="button"
         class="block-handle"
         aria-label="Blockmenü"
-        title="Blockmenü"
+        title="Klicken: Blockmenü · Ziehen: verschieben"
+        draggable="true"
+        @dragstart="onHandleDragStart(block, $event)"
+        @dragend="dropTarget = null"
         @click="menuFor = menuFor === block.id ? null : block.id"
       >
         ⋮⋮
@@ -1376,7 +1594,7 @@ function blockLabel(block: Block): string {
         @click="onClick"
       ></div>
 
-      <ul v-if="menuFor === block.id" class="block-menu" role="menu">
+      <ul v-if="menuFor === block.id" class="block-menu" role="menu" @keydown="onMenuKeydown">
         <li v-for="option in isAtom(block) ? [] : TYPE_OPTIONS" :key="option.label">
           <button
             type="button"
@@ -1394,6 +1612,16 @@ function blockLabel(block: Block): string {
             @click="menuAction(async () => chooseFiles(block.id))"
           >
             Bild/Datei einfügen …
+          </button>
+        </li>
+        <li v-if="!isAtom(block)">
+          <button type="button" role="menuitem" @click="menuAction(() => duplicate(block))">
+            Duplizieren
+          </button>
+        </li>
+        <li>
+          <button type="button" role="menuitem" @click="menuAction(() => copyBlockLink(block))">
+            Link kopieren
           </button>
         </li>
         <li>
@@ -1442,6 +1670,13 @@ function blockLabel(block: Block): string {
       @change="onFilesChosen"
     />
 
+    <SlashMenu
+      v-if="slash"
+      :position="slash.position"
+      @select="chooseSlash"
+      @close="closeSlash(true)"
+      @dismiss="closeSlash(false)"
+    />
     <PagePicker
       v-if="picker"
       :mode="picker.mode"

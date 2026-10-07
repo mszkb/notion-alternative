@@ -40,5 +40,6 @@ export const SHORTCUT_OVERVIEW: { keys: string; action: string }[] = [
   { keys: 'Strg/⌘ + B / I / E', action: 'Fett, kursiv, Code (im Text)' },
   { keys: 'Strg/⌘ + K (im Text)', action: 'Link auf eine Seite einfügen' },
   { keys: 'Strg/⌘ + Z / Umschalt + Z', action: 'Rückgängig / Wiederholen' },
+  { keys: '/ (im Text)', action: 'Block einfügen oder umwandeln' },
   { keys: 'Esc', action: 'Menü schließen, Blöcke auswählen' },
 ]
