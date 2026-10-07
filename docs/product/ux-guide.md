@@ -24,7 +24,7 @@ Die Produktprinzipien gelten unverändert: Jede Bedienung funktioniert offline, 
 | Kopfzeile mit Breadcrumbs und Seitenmenü | `PageView.vue` | umgesetzt: „Bearbeitet …“, Favorit, Seitenmenü ⋯ (Unterseite, Verlauf, Export, Löschen) (#132) |
 | Steuerelemente erscheinen erst bei Hover bzw. Fokus | Blockgriff, „+“ im Baum | teilweise, #132/#133 |
 | `/` öffnet ein Menü für Blocktypen, Markdown-Kürzel beim Tippen | Block-Editor (ADR 0008) | [#133](https://github.com/mszkb/notion-alternative/issues/133) |
-| Schnellsuche mit `Strg/⌘+K` bzw. `Strg/⌘+P` | Befehlspalette | [#134](https://github.com/mszkb/notion-alternative/issues/134) |
+| Schnellsuche mit `Strg/⌘+K` bzw. `Strg/⌘+P` | `CommandPalette.vue`: zuletzt besuchte Seiten, lokale Volltextsuche (offline), Befehle | umgesetzt (#134) |
 | To-do, Toggle, Callout, Trenner | neue Blocktypen | [#135](https://github.com/mszkb/notion-alternative/issues/135) |
 | Seiten-Icons (Emoji) und Titelbilder | Dokument-Felder | [#136](https://github.com/mszkb/notion-alternative/issues/136) |
 | Hell/Dunkel nach System, manuell umschaltbar | `data-theme`, `src/theme.ts` | umgesetzt (#131) |
@@ -53,6 +53,21 @@ Neue Werte erst als Token anlegen, dann verwenden. Die Systemschrift ist Absicht
 - Standard: wie das System (`prefers-color-scheme`).
 - Manuell: Konto → Darstellung, oder `Strg/⌘ + Umschalt + L` (#134). Die Wahl gilt pro Gerät und Browser (`localStorage`) und wird vor dem ersten Zeichnen angewendet (`initTheme` in `main.ts`).
 - Technisch: `data-theme="light"` bzw. `"dark"` auf `<html>`. Die dunklen Werte stehen einmal für die Systemeinstellung und einmal für die manuelle Wahl; beide Blöcke müssen gleich bleiben.
+
+## Tastenkürzel
+
+Wie in Notion, Übersicht in der App mit `Strg/⌘ + /` (`SHORTCUT_OVERVIEW` in `apps/web/src/shortcuts.ts`).
+
+| Kürzel | Aktion | Konflikt mit dem Browser |
+| --- | --- | --- |
+| `Strg/⌘ + K` | Schnellsuche; im Text: Link auf eine Seite | Chrome/Firefox: Websuche in der Adressleiste – die App übernimmt es, wie Notion |
+| `Strg/⌘ + P` | Schnellsuche, auch im Text | Drucken – die App übernimmt es, wie Notion; Drucken über das Browser-Menü |
+| `Strg/⌘ + N` | Neue Seite | Chrome und Firefox geben es Webseiten nicht (neues Fenster). Ersatz: `Strg/⌘ + Alt + N`; in der installierten App je nach Browser auch `Strg/⌘ + N` |
+| `Strg/⌘ + \` | Seitenleiste ein-/ausblenden | keiner |
+| `Strg/⌘ + Umschalt + L` | Hell/Dunkel | Safari: Seitenleiste des Browsers – die App übernimmt es |
+| `Strg/⌘ + /` | Übersicht der Kürzel | keiner |
+| `Strg/⌘ + B`, `I`, `E` | Fett, kursiv, Code | Firefox: `B` öffnet sonst die Lesezeichen-Seitenleiste – im Text übernimmt es die App |
+| `Strg/⌘ + U` | – | Unterstreichen gibt es nicht (kein Markdown); das Kürzel bleibt beim Browser (Quelltext) |
 
 ## Barrierefreiheit
 

@@ -2,7 +2,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   clampSidebarWidth,
-  isSidebarShortcut,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   setSidebarCollapsed,
@@ -26,11 +25,5 @@ describe('sidebar state (#132)', () => {
     expect(localStorage.getItem('notion-alt.sidebar.collapsed')).toBe('true')
     setSidebarCollapsed(false)
     expect(localStorage.getItem('notion-alt.sidebar.collapsed')).toBe('false')
-  })
-
-  it('recognises Ctrl/⌘ + \\', () => {
-    expect(isSidebarShortcut(new KeyboardEvent('keydown', { key: '\\', ctrlKey: true }))).toBe(true)
-    expect(isSidebarShortcut(new KeyboardEvent('keydown', { key: '\\', metaKey: true }))).toBe(true)
-    expect(isSidebarShortcut(new KeyboardEvent('keydown', { key: '\\' }))).toBe(false)
   })
 })

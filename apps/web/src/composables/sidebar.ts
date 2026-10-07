@@ -42,8 +42,3 @@ export function setSidebarWidth(width: number): void {
   sidebarWidth.value = clampSidebarWidth(width)
   save(WIDTH_KEY, String(sidebarWidth.value))
 }
-
-/** Ctrl/⌘ + \ (as in Notion). */
-export function isSidebarShortcut(event: KeyboardEvent): boolean {
-  return (event.ctrlKey || event.metaKey) && !event.altKey && event.key === '\\'
-}

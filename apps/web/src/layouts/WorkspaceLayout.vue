@@ -5,8 +5,10 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
+import CommandPalette from '../components/CommandPalette.vue'
+import ShortcutsDialog from '../components/ShortcutsDialog.vue'
+import { loadRecentPages, rememberVisit } from '../composables/recent-pages'
 import {
-  isSidebarShortcut,
   setSidebarCollapsed,
   setSidebarWidth,
   SIDEBAR_MAX_WIDTH,
@@ -39,6 +41,8 @@ import { connection, currentUser, refreshSession } from '../session'
 import { onPushHint } from '../pwa'
 import { onSyncHint, requestSync, syncState } from '../sync/engine'
 import { DEFAULT_TRIGGERS, startSyncTriggers } from '../sync/triggers'
+import { isTextTarget, shortcutFor } from '../shortcuts'
+import { toggleTheme } from '../theme'
 
 const route = useRoute()
 const router = useRouter()
@@ -285,10 +289,39 @@ function toggleSidebar() {
   else setSidebarCollapsed(!sidebarCollapsed.value)
 }
 
+// ---------------------------------------------------------------- shortcuts, quick search (#134)
+
+const paletteOpen = ref(false)
+const shortcutsOpen = ref(false)
+
 function onShortcut(event: KeyboardEvent) {
-  if (!isSidebarShortcut(event)) return
+  const command = shortcutFor(event, isTextTarget(event.target))
+  if (!command) return
   event.preventDefault()
-  toggleSidebar()
+  if (command === 'palette') {
+    shortcutsOpen.value = false
+    paletteOpen.value = !paletteOpen.value
+  } else if (command === 'newPage') void createPage()
+  else if (command === 'toggleTheme') toggleTheme()
+  else if (command === 'sidebar') toggleSidebar()
+  else if (command === 'shortcuts') {
+    paletteOpen.value = false
+    shortcutsOpen.value = !shortcutsOpen.value
+  }
+}
+
+watch(workspaceId, (id) => loadRecentPages(id), { immediate: true })
+watch(
+  activeDocumentId,
+  (id) => {
+    if (id) rememberVisit(workspaceId.value, id)
+  },
+  { immediate: true },
+)
+
+function showShortcuts() {
+  paletteOpen.value = false
+  shortcutsOpen.value = true
 }
 onMounted(() => window.addEventListener('keydown', onShortcut))
 onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
@@ -371,7 +404,7 @@ const shellStyle = computed(() => ({
         v-model="query"
         class="search"
         type="search"
-        placeholder="Suchen…"
+        placeholder="Suchen… (Strg/⌘ + K)"
         aria-label="Seiten durchsuchen"
         @keydown.enter="hits[0] && openHit(hits[0])"
         @keydown.escape="query = ''"
@@ -530,6 +563,8 @@ const shellStyle = computed(() => ({
           {{ currentUser?.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
           <RouterLink :to="{ name: 'trash', params: { workspaceId } }">Papierkorb</RouterLink> ·
           <RouterLink :to="{ name: 'export', params: { workspaceId } }">Export & Import</RouterLink>
+          ·
+          <button type="button" class="link" @click="showShortcuts">Tastenkürzel</button>
         </p>
       </footer>
     </aside>
@@ -550,5 +585,13 @@ const shellStyle = computed(() => ({
     <main class="content">
       <RouterView :key="String(route.params.documentId ?? route.params.tagId ?? '')" />
     </main>
+
+    <CommandPalette
+      v-if="paletteOpen"
+      @close="paletteOpen = false"
+      @new-page="createPage"
+      @shortcuts="showShortcuts"
+    />
+    <ShortcutsDialog v-if="shortcutsOpen" @close="shortcutsOpen = false" />
   </div>
 </template>

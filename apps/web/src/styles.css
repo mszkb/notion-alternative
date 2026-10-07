@@ -21,6 +21,7 @@
   --code-bg: rgba(135, 131, 120, 0.15);
   --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.15);
   --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.15);
+  --backdrop: rgba(0, 0, 0, 0.25);
 
   /* spacing */
   --space-2xs: 0.15rem;
@@ -878,6 +879,92 @@ kbd {
 
 .picker li.active {
   background: var(--hover);
+}
+
+/* ------------------------------------------------------------------ quick search (#134) */
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh var(--space-lg) var(--space-lg);
+  background: var(--backdrop);
+}
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  width: min(36rem, 100%);
+  max-height: 70vh;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+}
+
+.palette input {
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--text-lg);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  outline: none;
+}
+
+.palette ul {
+  margin: 0;
+  padding: var(--space-xs);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.palette li[role='option'] {
+  display: flex;
+  gap: var(--space-md);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.palette li[aria-selected='true'] {
+  background: var(--hover);
+}
+
+.palette li small {
+  overflow: hidden;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.palette .empty {
+  padding: var(--space-sm) var(--space-md);
+}
+
+.palette.shortcuts {
+  padding: var(--space-lg) var(--space-xl);
+}
+
+.palette.shortcuts h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.palette.shortcuts table {
+  margin: var(--space-md) 0;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.palette.shortcuts td {
+  padding: var(--space-xs) var(--space-md) var(--space-xs) 0;
+  vertical-align: top;
 }
 
 /* ------------------------------------------------------------------ narrow screens */
