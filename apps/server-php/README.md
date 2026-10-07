@@ -40,6 +40,16 @@ Alle Routen beginnen mit `/api`. Liegt die App nicht im Wurzelverzeichnis des Ho
 
 Das Paket für Shared Hosting (SPA + `api/` + `vendor/`) und das Docker-Image folgen in #128.
 
+## Docker (Probebetrieb)
+
+Zum Ausprobieren, z. B. auf einem Raspberry Pi (64-Bit-OS): Das bestehende Frontend (nginx mit der SPA) bleibt, statt des Node-Backends läuft der PHP-Server (`apps/server-php/Dockerfile`, eingebauter Server von PHP mit 4 Workern).
+
+```sh
+ALLOW_REGISTRATION=true docker compose -f docker-compose.yml -f docker-compose.php.yml up -d --build
+```
+
+Die App ist dann unter `http://127.0.0.1:8080` erreichbar (Zugriff von außen wie beim Node-Stack, siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)). Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen. Noch nicht portiert und daher in der App ohne Funktion: Dateianhänge (#124), Web Push (#125), Versionsverlauf und Import (#126). Das endgültige Image folgt in #128.
+
 ## Konfiguration
 
 Dieselben Variablen, Defaults und Prüfungen wie `apps/server/src/config.ts` (siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)), ohne `HOST` und `PORT` (die bestimmt der Webserver). Leere Werte gelten als nicht gesetzt.
