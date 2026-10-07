@@ -82,7 +82,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Installationsflow (inkl. iOS-Hinweise, [Anleitung](docs/user/installation.md); iOS-Test manuell)
 - [x] Cache-Strategie ([`caching.md`](docs/architecture/caching.md))
 - [x] Web Push (VAPID, Subscription nach Nutzeraktion; ohne Bibliothek, Payload ohne Inhalte)
-- [ ] HTTPS für Smartphones/weitere Geräte entscheiden (Optionen in [ADR 0010](docs/adr/0010-reference-deployment-and-https.md))
+- [x] HTTPS für Smartphones/weitere Geräte entscheiden ([ADR 0011](docs/adr/0011-https-for-mobile-devices.md): Tailscale im Home-Lab, sonst Webhosting/Reverse Proxy)
 
 ## Phase 5 – Files and history
 

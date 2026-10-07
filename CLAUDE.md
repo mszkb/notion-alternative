@@ -8,7 +8,7 @@ Self-hosted, **local-first / offline-first** Wissens- und Dokumentenplattform (N
 
 ## Status
 
-Phase 0 abgeschlossen, Phase 1 (Foundation) umgesetzt: Monorepo, Server mit Auth (inkl. Login-Rate-Limiting, Passwort ändern) und Workspaces, Metriken, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Phase 3 (Sync) begonnen: Geräteverwaltung, serverseitiges Änderungslog (`apps/server/src/sync/`) Push der Offline-Queue, Delta-Pull, Tombstones, Re-Sync, Sync-Trigger (`apps/web/src/sync/`), Block-Merge mit Konfliktobjekten und Konfliktansicht, serverseitige Suche (FTS5). Phase 4 (PWA) bis auf die HTTPS-Entscheidung (ADR 0011, `Proposed`) umgesetzt: Manifest, eigener Service Worker, Installationsflow, Web Push ohne Bibliothek. Phase 5 begonnen: Dateianhänge (ADR 0012). Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+Phase 0 abgeschlossen, Phase 1 (Foundation) umgesetzt: Monorepo, Server mit Auth (inkl. Login-Rate-Limiting, Passwort ändern) und Workspaces, Metriken, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Phase 3 (Sync) begonnen: Geräteverwaltung, serverseitiges Änderungslog (`apps/server/src/sync/`) Push der Offline-Queue, Delta-Pull, Tombstones, Re-Sync, Sync-Trigger (`apps/web/src/sync/`), Block-Merge mit Konfliktobjekten und Konfliktansicht, serverseitige Suche (FTS5). Phase 4 (PWA) umgesetzt (HTTPS: ADR 0011): Manifest, eigener Service Worker, Installationsflow, Web Push ohne Bibliothek. Phase 5 begonnen: Dateianhänge (ADR 0012). Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
 
 Entschieden (`Accepted`):
 
@@ -21,7 +21,8 @@ Entschieden (`Accepted`):
 - **Bibliotheken** ([ADR 0007](docs/adr/0007-foundation-libraries.md)): pnpm, Kysely + better-sqlite3, zod, esbuild, Vitest, ESLint + Prettier, nginx.
 - **Editor** ([ADR 0008](docs/adr/0008-block-editor.md)): eigener Block-Editor (ein `contenteditable` pro Block); `Block.content` ist Markdown-Inline, Seitenlinks `[Titel](page:<uuid>)`, kursiv wird als `_x_` geschrieben.
 - **Lokale Datenschicht** ([ADR 0009](docs/adr/0009-local-data-layer.md)): eine Dexie-DB pro Benutzer, Operationen in derselben Transaktion, Entität `document_tag`, Feldnamen camelCase, MiniSearch für die lokale Suche, Offline-Start mit zwischengespeichertem Benutzer.
-- **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. HTTPS für Smartphones wird in Phase 4 entschieden, kein dritter Container.
+- **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. Kein dritter Container.
+- **HTTPS für Smartphones** ([ADR 0011](docs/adr/0011-https-for-mobile-devices.md)): Home-Lab/Raspberry Pi per `tailscale serve`, sonst Webhosting bzw. vorhandener Reverse Proxy; keine Code-Änderung, `COOKIE_SECURE=true`.
 
 Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaffine (`docs/product/vision.md`).
 

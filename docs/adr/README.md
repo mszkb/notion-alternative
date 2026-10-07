@@ -16,7 +16,7 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0008](0008-block-editor.md) | Editor und Inline-Repräsentation von Blöcken | Accepted |
 | [0009](0009-local-data-layer.md) | Lokale Datenschicht, Operationen und Suche | Accepted |
 | [0010](0010-reference-deployment-and-https.md) | Referenz-Deployment und HTTPS | Accepted |
-| [0011](0011-https-for-mobile-devices.md) | HTTPS für Smartphones und weitere Geräte | Proposed |
+| [0011](0011-https-for-mobile-devices.md) | HTTPS für Smartphones und weitere Geräte | Accepted |
 | [0012](0012-attachments.md) | Dateianhänge | Accepted |
 | [0013](0013-version-history.md) | Versionsverlauf | Accepted |
 | [0014](0014-sharing-and-permissions.md) | Sharing, Berechtigungen und Kommentare | Proposed |
