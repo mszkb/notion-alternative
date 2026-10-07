@@ -271,7 +271,7 @@ describe('POST /api/import', () => {
     })
     expect(self.statusCode).toBe(400)
 
-    const wrongVersion = await importInto(target, { ...data, schema_version: 2 } as never)
+    const wrongVersion = await importInto(target, { ...data, schema_version: 3 } as never)
     expect(wrongVersion.statusCode).toBe(400)
 
     const huge = {

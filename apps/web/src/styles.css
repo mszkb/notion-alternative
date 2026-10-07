@@ -738,6 +738,46 @@ kbd {
   text-align: right;
 }
 
+/* Children of a collapsed toggle (ADR 0019); .block's display would override [hidden]. */
+.block[hidden] {
+  display: none;
+}
+
+.todo-check {
+  width: 1rem;
+  height: 1rem;
+  margin: 0.3rem var(--space-2xs) 0;
+  accent-color: var(--accent);
+}
+
+.block-todo.checked .block-input {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.toggle-arrow {
+  flex: none;
+  margin-top: var(--space-2xs);
+}
+
+.block-callout {
+  padding: var(--space-md) var(--space-lg) var(--space-md) var(--space-sm);
+  background: var(--code-bg);
+  border-radius: var(--radius);
+}
+
+.callout-icon {
+  flex: none;
+  font-size: var(--text-lg);
+}
+
+.divider {
+  flex: 1;
+  margin: var(--space-md) 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
 .block-quote .block-input {
   padding-left: var(--space-md);
   border-left: 3px solid var(--text);

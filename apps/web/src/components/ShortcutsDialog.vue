@@ -40,8 +40,8 @@ onMounted(() => closeButton.value?.focus())
       </table>
       <p class="muted">
         Markdown beim Tippen: <kbd>#</kbd> Überschrift, <kbd>-</kbd> Liste,
-        <kbd>1.</kbd> nummeriert, <kbd>&gt;</kbd> Zitat, <kbd>```</kbd> Code,
-        <kbd>[[</kbd> Seitenlink.
+        <kbd>1.</kbd> nummeriert, <kbd>[]</kbd> To-do, <kbd>&gt;</kbd> Zitat, <kbd>```</kbd> Code,
+        <kbd>---</kbd> Trenner, <kbd>[[</kbd> Seitenlink, <kbd>/</kbd> alle Blocktypen.
       </p>
     </div>
   </div>

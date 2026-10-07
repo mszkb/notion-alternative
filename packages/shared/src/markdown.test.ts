@@ -28,6 +28,29 @@ describe('blocksToMarkdown', () => {
     )
   })
 
+  it('writes to-dos, toggles with their children, callouts and dividers (ADR 0019)', () => {
+    const md = blocksToMarkdown([
+      { type: 'todo', content: 'offen', attrs: {} },
+      { type: 'todo', content: 'erledigt', attrs: { checked: true } },
+      { type: 'toggle', content: 'Mehr', attrs: {} },
+      { type: 'paragraph', content: 'Kind', attrs: { indent: 1 } },
+      { type: 'todo', content: 'Kind-Aufgabe', attrs: { indent: 1 } },
+      { type: 'callout', content: 'Achtung\nzweite Zeile', attrs: { icon: '⚠️' } },
+      { type: 'divider', content: '', attrs: {} },
+      { type: 'callout', content: 'Tipp', attrs: {} },
+    ])
+    expect(md).toBe(
+      [
+        '- [ ] offen\n- [x] erledigt\n- Mehr',
+        '  Kind',
+        '  - [ ] Kind-Aufgabe',
+        '> ⚠️ Achtung\n> zweite Zeile',
+        '---',
+        '> 💡 Tipp',
+      ].join('\n\n'),
+    )
+  })
+
   it('numbers ordered lists per level and restarts after other blocks', () => {
     const item = (content: string, indent = 0) => ({
       type: 'list_item' as const,

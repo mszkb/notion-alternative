@@ -14,6 +14,8 @@ describe('slash menu (#133)', () => {
     expect(filterSlashOptions('über').map((o) => o.key)).toEqual(['h1', 'h2', 'h3'])
     expect(filterSlashOptions('h2').map((o) => o.key)).toEqual(['h2'])
     expect(filterSlashOptions('list').map((o) => o.key)).toEqual(['bullet', 'ordered'])
+    expect(filterSlashOptions('todo').map((o) => o.key)).toEqual(['todo'])
+    expect(filterSlashOptions('trenn').map((o) => o.key)).toEqual(['divider'])
     expect(filterSlashOptions('code').map((o) => o.key)).toEqual(['code'])
     expect(filterSlashOptions('bild').map((o) => o.key)).toEqual(['file'])
     expect(filterSlashOptions('xyz')).toEqual([])

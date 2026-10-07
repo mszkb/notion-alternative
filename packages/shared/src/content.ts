@@ -38,6 +38,12 @@ export const blockTypeSchema = z.enum([
   // Attachment blocks (ADR 0012): `attrs.attachmentId`, `content` is the caption.
   'image',
   'file',
+  // ADR 0019: `todo` (`attrs.checked`), `toggle` (the following blocks with a larger `indent`
+  // are its children), `callout` (`attrs.icon`), `divider` (no content).
+  'todo',
+  'toggle',
+  'callout',
+  'divider',
 ])
 export type BlockType = z.infer<typeof blockTypeSchema>
 
@@ -47,8 +53,12 @@ export const blockAttrsSchema = z
     level: z.number().int().min(1).max(3).optional(),
     /** List style (`list_item`). */
     list: z.enum(['bullet', 'ordered']).optional(),
-    /** Nesting depth (`list_item`). */
+    /** Nesting depth (`list_item`, `todo`, children of a `toggle`). */
     indent: z.number().int().min(0).max(MAX_LIST_INDENT).optional(),
+    /** Done (`todo`). */
+    checked: z.boolean().optional(),
+    /** Emoji shown before the text (`callout`). */
+    icon: z.string().min(1).max(16).optional(),
     /** Language hint (`code`). */
     language: z.string().max(40).optional(),
     /** Attachment shown by an `image` or `file` block. */

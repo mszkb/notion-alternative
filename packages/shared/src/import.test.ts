@@ -96,16 +96,21 @@ describe('migrateExport', () => {
     }
     const { documents, ...rest } = sample()
     const v1 = { ...rest, links: undefined, schema_version: 1, pages: documents }
-    // The real schema is still at version 1, so the result fails on `schema_version` only.
+    // The real schema is at version 2, so the result fails on `schema_version` only.
     expect(() => migrateExport(v1, migrations, 3)).toThrow(/\(schema_version:/)
     expect(steps).toEqual(['1->2', '2->3'])
   })
 
   it('rejects newer, missing and invalid versions', () => {
-    expect(() => migrateExport({ ...sample(), schema_version: 2 })).toThrow(/neueren Version/)
+    expect(() => migrateExport({ ...sample(), schema_version: 3 })).toThrow(/neueren Version/)
     expect(() => migrateExport({ documents: [] })).toThrow(/schema_version fehlt/)
     expect(() => migrateExport([])).toThrow(ImportError)
     expect(() => migrateExport({ ...sample(), documents: [{ id: 'x' }] })).toThrow(/documents\.0/)
+  })
+
+  it('lifts a version 1 export unchanged to version 2 (ADR 0019)', () => {
+    const data = sample()
+    expect(migrateExport({ ...JSON.parse(JSON.stringify(data)), schema_version: 1 })).toEqual(data)
   })
 
   it('names a missing migration step', () => {

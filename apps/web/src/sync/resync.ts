@@ -62,6 +62,8 @@ export async function syncWorkspace(
     const fetchDocument = transport.document
     if (!fetchDocument) throw new Error('Loading content on demand needs a document fetch')
     for (const documentId of await store.loadedDocumentIds(workspaceId)) {
+      // Never synced (created here, still queued): the server has nothing to load yet.
+      if ((await store.db.documents.get(documentId))?.revision == null) continue
       await loadDocumentContent(store, workspaceId, documentId, fetchDocument)
     }
   }

@@ -4,7 +4,7 @@
   "properties": {
     "schema_version": {
       "type": "number",
-      "const": 1
+      "const": 2
     },
     "exported_at": {
       "type": "string"
@@ -129,7 +129,11 @@
               "quote",
               "code",
               "image",
-              "file"
+              "file",
+              "todo",
+              "toggle",
+              "callout",
+              "divider"
             ]
           },
           "content": {
@@ -155,6 +159,14 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 5
+              },
+              "checked": {
+                "type": "boolean"
+              },
+              "icon": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16
               },
               "language": {
                 "type": "string",
