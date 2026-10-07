@@ -1013,6 +1013,13 @@ kbd {
   opacity: 1;
 }
 
+/* Touch screens have no hover: show the controls. */
+@media (hover: none) {
+  .page-look-controls {
+    opacity: 1;
+  }
+}
+
 .page-look-controls .link {
   color: var(--muted);
 }
