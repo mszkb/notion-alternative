@@ -62,8 +62,10 @@ export async function syncWorkspace(
     const fetchDocument = transport.document
     if (!fetchDocument) throw new Error('Loading content on demand needs a document fetch')
     for (const documentId of await store.loadedDocumentIds(workspaceId)) {
-      // Never synced (created here, still queued): the server has nothing to load yet.
-      if ((await store.db.documents.get(documentId))?.revision == null) continue
+      // Never synced (created here, still queued): the server has nothing to load yet. Pages in
+      // the trash are not refreshed; restoring one reloads it when it is opened.
+      const page = await store.db.documents.get(documentId)
+      if (page?.revision == null || page.deletedAt) continue
       await loadDocumentContent(store, workspaceId, documentId, fetchDocument)
     }
   }

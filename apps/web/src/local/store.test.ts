@@ -449,11 +449,27 @@ describe('page icon and cover (#136)', () => {
       false,
     )
 
+    // Replacing and removing the cover image deletes the image nothing shows any more.
+    const second = await store.setCoverImage(doc.id, {
+      name: 'neu.png',
+      type: 'image/png',
+      data,
+      sha256,
+    })
+    expect((await db.attachments.get(cover.id))!.deletedAt).not.toBeNull()
+    await store.setPageLook(doc.id, { cover: null })
+    expect((await db.attachments.get(second.id))!.deletedAt).not.toBeNull()
+    expect(
+      (await ops()).filter((op) => op.entity === 'attachment' && op.kind === 'delete'),
+    ).toHaveLength(2)
+
     const updates = (await ops()).filter((op) => op.entity === 'document' && op.kind === 'update')
     expect(updates.map((op) => op.payload)).toEqual([
       { icon: '✈️', cover: 'gradient:ocean' },
       { icon: null },
       { cover: `attachment:${cover.id}` },
+      { cover: `attachment:${second.id}` },
+      { cover: null },
     ])
     for (const op of await ops()) {
       expect(operationSchema.safeParse(op).success).toBe(true)

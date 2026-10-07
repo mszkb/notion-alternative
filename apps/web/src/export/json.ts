@@ -16,8 +16,6 @@ export interface JsonExportResult {
   blob: Blob
   documents: number
   changes: number | null
-  /** Pages exported without content: not on this device and not loadable now (ADR 0017). */
-  missingDocuments: { id: string; title: string }[]
 }
 
 /** Reads the whole change log of the workspace from the server, page by page. */
@@ -52,6 +50,13 @@ export async function buildJsonExport(
 ): Promise<JsonExportResult> {
   const now = options.now ?? new Date()
   const missingDocuments = await loadContentForExport(store, workspace.id, options.fetchDocument)
+  // The JSON export is the lossless restore format and has no place to mark missing content:
+  // refuse instead of writing empty pages (principle 3). The ZIP names them in its manifest.
+  if (missingDocuments.length > 0) {
+    throw new Error(
+      `${missingDocuments.length} Seiten sind nicht auf diesem Gerät und ohne Serververbindung nicht ladbar. Online exportieren oder den vollständigen Export (ZIP) wählen.`,
+    )
+  }
   const input = await store.exportData(workspace.id)
   const history = options.syncLog ? await fetchHistory(workspace.id, options.syncLog) : null
   const data = createJsonExport(input, {
@@ -64,6 +69,5 @@ export async function buildJsonExport(
     blob: new Blob([...jsonExportChunks(data)], { type: 'application/json' }),
     documents: data.documents.filter((d) => !d.deletedAt).length,
     changes: history?.changes.length ?? null,
-    missingDocuments,
   }
 }

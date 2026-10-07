@@ -239,6 +239,22 @@ async function requireDocumentIn(db: Db, workspaceId: string, id: string, what: 
   return document
 }
 
+/** A cover image must be an attachment of the same workspace (#136). */
+async function assertCoverInWorkspace(
+  db: Db,
+  workspaceId: string,
+  cover: string | null | undefined,
+): Promise<void> {
+  if (!cover?.startsWith('attachment:')) return
+  const attachment = await db
+    .selectFrom('attachments')
+    .select('id')
+    .where('id', '=', cover.slice('attachment:'.length))
+    .where('workspace_id', '=', workspaceId)
+    .executeTakeFirst()
+  if (!attachment) reject('invalid_payload', 'Cover attachment not found in this workspace')
+}
+
 /**
  * A page must not become its own ancestor. Also stops on a cycle that already exists among the
  * ancestors (never created by the server, but data must not make this loop forever).
@@ -270,6 +286,7 @@ async function applyDocument(
     case 'create': {
       const p = op.payload as DocumentCreatePayload
       await assertNoCycle(db, op.workspaceId, op.entityId, p.parentId)
+      await assertCoverInWorkspace(db, op.workspaceId, p.cover)
       await db
         .insertInto('documents')
         .values({
@@ -291,6 +308,7 @@ async function applyDocument(
     }
     case 'update': {
       const p = op.payload as DocumentUpdatePayload
+      await assertCoverInWorkspace(db, op.workspaceId, p.cover)
       await db
         .updateTable('documents')
         .set({

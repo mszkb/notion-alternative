@@ -1537,29 +1537,58 @@ async function onBlockDrop(block: Block, event: DragEvent) {
   event.stopPropagation()
   const target = dropTarget.value
   dropTarget.value = null
-  if (!target || id === block.id) return
+  const group = withChildren(id)
+  if (!target || group.includes(block.id)) return
   const list = blocks.value ?? []
   const index = list.findIndex((b) => b.id === block.id)
   const afterId = target.after ? block.id : (list[index - 1]?.id ?? null)
-  if (afterId === id) return
-  await moveTo(id, afterId)
+  // Dropped right next to itself: nothing moves.
+  if (afterId !== null && group.includes(afterId)) return
+  await moveTo(group, afterId)
 }
 
-async function moveTo(id: string, afterId: string | null) {
+/** A block and, for a toggle, its children: the following blocks with a larger indent. */
+function withChildren(id: string): string[] {
   const list = blocks.value ?? []
-  const moving = list.find((b) => b.id === id)
-  if (!moving) return
+  const index = list.findIndex((b) => b.id === id)
+  const block = list[index]
+  if (!block) return []
+  if (block.type !== 'toggle') return [id]
+  const depth = block.attrs.indent ?? 0
+  const group = [id]
+  for (const next of list.slice(index + 1)) {
+    if ((next.attrs.indent ?? 0) <= depth) break
+    group.push(next.id)
+  }
+  return group
+}
+
+/** Moves blocks together (in their order) after `afterId`, as one undo step. */
+async function moveTo(ids: string[], afterId: string | null) {
+  const list = blocks.value ?? []
+  const moving = ids.map((id) => list.find((b) => b.id === id)).filter((b) => b !== undefined)
+  if (moving.length === 0) return
   checkpoint()
-  void flush(id)
+  for (const block of moving) await flush(block.id)
+  const moved = new Set(ids)
   await structural(
-    id,
-    (current) =>
-      insertAfter(
-        current.filter((b) => b.id !== id),
-        afterId,
-        moving,
-      ),
-    () => store.moveBlock(id, { afterId }),
+    moving[0]!.id,
+    (current) => {
+      let next = current.filter((b) => !moved.has(b.id))
+      let previous = afterId
+      for (const block of moving) {
+        next = insertAfter(next, previous, block)
+        previous = block.id
+      }
+      return next
+    },
+    async () => {
+      let previous = afterId
+      for (const block of moving) {
+        await store.moveBlock(block.id, { afterId: previous })
+        previous = block.id
+      }
+    },
   )
 }
 

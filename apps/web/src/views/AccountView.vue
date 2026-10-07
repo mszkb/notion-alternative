@@ -193,7 +193,9 @@ async function makeEverythingOffline() {
       signal,
     })
     attachmentResult.value = attachments
-    makeOfflineResult.value = 'Alle Seiten sind auf diesem Gerät.'
+    makeOfflineResult.value = pages.unavailable
+      ? `${pages.unavailable.toLocaleString('de-DE')} Seiten sind auf dem Server nicht verfügbar und bleiben ohne Inhalt; alle anderen sind auf diesem Gerät.`
+      : 'Alle Seiten sind auf diesem Gerät.'
   } catch (error) {
     makeOfflineResult.value = `Laden fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`
   } finally {

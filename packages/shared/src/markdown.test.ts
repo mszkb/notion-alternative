@@ -51,6 +51,15 @@ describe('blocksToMarkdown', () => {
     )
   })
 
+  it('keeps numbering an outer list across nested to-dos and toggle children', () => {
+    const md = blocksToMarkdown([
+      { type: 'list_item', content: 'A', attrs: { list: 'ordered', indent: 0 } },
+      { type: 'todo', content: 'x', attrs: { indent: 1 } },
+      { type: 'list_item', content: 'B', attrs: { list: 'ordered', indent: 0 } },
+    ])
+    expect(md).toBe('1. A\n  - [ ] x\n2. B')
+  })
+
   it('numbers ordered lists per level and restarts after other blocks', () => {
     const item = (content: string, indent = 0) => ({
       type: 'list_item' as const,

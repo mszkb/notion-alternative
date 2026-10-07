@@ -93,7 +93,6 @@ const exportJson = () =>
       fetchDocument: download ? api.syncDocument : undefined,
     })
     saveFile(exported.fileName, exported.blob)
-    missingPages.value = exported.missingDocuments.map((d) => d.title || 'Unbenannt')
     result.value =
       `${plural(exported.documents, 'Seite', 'Seiten')} exportiert` +
       (exported.changes === null

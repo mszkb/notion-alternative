@@ -46,15 +46,18 @@ export interface MakeOfflineProgress {
 
 export interface MakeOfflineResult {
   loaded: number
+  /** Pages the server does not have (yet); they stay unloaded and are tried again next time. */
+  unavailable: number
   /** Stopped early: cancelled or connection lost. What was loaded stays loaded. */
   stopped: 'cancelled' | 'offline' | null
 }
 
 /**
  * "Alles offline verfügbar machen" (ADR 0017), pages part: loads every page this device has not
- * loaded, a few at a time, each under the sync lock so normal syncs keep running in between.
- * Cancelling or losing the connection stops it; a new run continues with what is still missing.
- * Only a complete run switches the device to "all".
+ * loaded, one after another, each under the sync lock (a pull never runs between fetching and
+ * writing a page), so normal syncs keep running in between. Cancelling or losing the connection
+ * stops it; a new run continues with what is still missing. Only a complete run switches the
+ * device to "all"; pages the server does not know keep it "on demand".
  */
 export async function loadAllDocuments(
   store: LocalStore,
@@ -62,45 +65,39 @@ export async function loadAllDocuments(
     fetchDocument?: DocumentFetch
     onProgress?: (progress: MakeOfflineProgress) => void
     signal?: AbortSignal
-    concurrency?: number
   } = {},
 ): Promise<MakeOfflineResult> {
   const fetchDocument = options.fetchDocument ?? api.syncDocument
-  const concurrency = options.concurrency ?? 4
-  const result: MakeOfflineResult = { loaded: 0, stopped: null }
+  const result: MakeOfflineResult = { loaded: 0, unavailable: 0, stopped: null }
+  const unavailable = new Set<string>()
   let done = 0
-  let total = 0
   for (;;) {
-    const missing = await store.unloadedDocuments()
-    total = done + missing.length
+    const missing = (await store.unloadedDocuments()).filter((d) => !unavailable.has(d.id))
+    const total = done + missing.length
     options.onProgress?.({ done, total })
-    if (missing.length === 0 && (await store.completeOfflineMode())) return result
-    let next = 0
-    const worker = async () => {
-      while (next < missing.length && !result.stopped) {
-        if (options.signal?.aborted) {
-          result.stopped = 'cancelled'
-          return
-        }
-        const page = missing[next++]!
-        try {
-          await exclusive(store, () =>
-            loadDocumentContent(store, page.workspaceId, page.id, fetchDocument),
-          )
-        } catch (error) {
-          if (unreachable(error)) {
-            result.stopped = 'offline'
-            return
-          }
-          throw error
-        }
-        result.loaded++
-        done++
-        options.onProgress?.({ done, total })
-      }
+    if (missing.length === 0) {
+      if (unavailable.size === 0) await store.completeOfflineMode()
+      // Pages may have arrived meanwhile: completeOfflineMode refuses then, go round again.
+      if (unavailable.size > 0 || (await store.offlineMode()) === 'all') return result
+      continue
     }
-    await Promise.all(Array.from({ length: concurrency }, worker))
-    if (result.stopped) return result
-    if (options.signal?.aborted) return { ...result, stopped: 'cancelled' }
+    for (const page of missing) {
+      if (options.signal?.aborted) return { ...result, stopped: 'cancelled' }
+      try {
+        const loaded = await exclusive(store, () =>
+          loadDocumentContent(store, page.workspaceId, page.id, fetchDocument),
+        )
+        if (loaded) result.loaded++
+        else {
+          unavailable.add(page.id)
+          result.unavailable++
+        }
+      } catch (error) {
+        if (unreachable(error)) return { ...result, stopped: 'offline' }
+        throw error
+      }
+      done++
+      options.onProgress?.({ done, total })
+    }
   }
 }

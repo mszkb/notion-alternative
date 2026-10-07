@@ -262,7 +262,6 @@ describe('content on demand', () => {
       },
       onProgress: (p) => progress.push(p.done),
       signal: controller.signal,
-      concurrency: 1,
     })
     expect(first.stopped).toBe('cancelled')
     expect(first.loaded).toBeGreaterThan(0)
@@ -275,7 +274,7 @@ describe('content on demand', () => {
       fetchDocument: server.document,
       onProgress: (p) => totals.push(p.total),
     })
-    expect(second).toEqual({ loaded: 5 - first.loaded, stopped: null })
+    expect(second).toEqual({ loaded: 5 - first.loaded, unavailable: 0, stopped: null })
     expect(totals[0]).toBe(5 - first.loaded)
     expect(await b.offlineMode()).toBe('all')
     for (const page of pages) {
@@ -293,6 +292,23 @@ describe('content on demand', () => {
     expect(await b.isDocumentLoaded(doc.id)).toBe(true)
   })
 
+  it('finishes when the server lacks a page, which stays unloaded and keeps "on demand"', async () => {
+    const { doc: kept } = await pageWithText('Da', 'x')
+    const { doc: lost } = await pageWithText('Weg', 'y')
+    await syncA()
+    await syncWorkspace(b, WS, server)
+    const result = await loadAllDocuments(b, {
+      fetchDocument: async (ws, id) => {
+        if (id === lost.id) throw new ApiError(404, 'not_found', 'Page not found')
+        return server.document(ws, id)
+      },
+    })
+    expect(result).toEqual({ loaded: 1, unavailable: 1, stopped: null })
+    expect(await b.isDocumentLoaded(kept.id)).toBe(true)
+    expect(await b.isDocumentLoaded(lost.id)).toBe(false)
+    expect(await b.offlineMode()).toBe('onDemand')
+  })
+
   it('stops when the connection is lost and keeps what was loaded', async () => {
     for (const title of ['A', 'B', 'C']) await pageWithText(title, title)
     await syncA()
@@ -303,9 +319,8 @@ describe('content on demand', () => {
         if (++calls === 2) throw new TypeError('Failed to fetch')
         return server.document(ws, id)
       },
-      concurrency: 1,
     })
-    expect(result).toEqual({ loaded: 1, stopped: 'offline' })
+    expect(result).toEqual({ loaded: 1, unavailable: 0, stopped: 'offline' })
     expect((await b.unloadedDocuments()).length).toBe(2)
     expect(await b.offlineMode()).toBe('onDemand')
   })
@@ -351,13 +366,15 @@ describe('export with pages not on this device (principle 3)', () => {
     const offline = await buildArchiveExport(b, { id: WS, name: 'W' })
     expect(offline.manifest.missing_documents?.map((d) => d.title).sort()).toEqual(['Eins', 'Zwei'])
 
+    // The JSON export (restore format) refuses instead of writing empty pages.
+    await expect(buildJsonExport(b, { id: WS, name: 'W' })).rejects.toThrow(/2 Seiten/)
+
     // Online: the content is loaded first and stays on the device.
     const online = await buildJsonExport(
       b,
       { id: WS, name: 'W' },
       { fetchDocument: server.document },
     )
-    expect(online.missingDocuments).toEqual([])
     expect(await b.isDocumentLoaded(first.id)).toBe(true)
     expect((await b.listBlocks(second.id)).map((x) => x.content)).toEqual(['zweiter Inhalt'])
     const text = await online.blob.text()

@@ -443,17 +443,55 @@ export class LocalStore {
     look: { icon?: string | null; cover?: Document['cover'] | null },
   ): Promise<void> {
     await this.write(async (ctx) => {
-      const document = await this.requireDocument(id)
-      const fields: { icon?: string | null; cover?: Document['cover'] | null } = {}
-      if (look.icon !== undefined && look.icon !== (document.icon ?? null)) fields.icon = look.icon
-      if (look.cover !== undefined && look.cover !== (document.cover ?? null)) {
-        fields.cover = look.cover
-      }
-      if (Object.keys(fields).length === 0) return
-      await this.db.documents.update(id, fields)
-      await this.enqueue(document.workspaceId, 'document', id, 'update', document.revision, fields)
-      this.mark(ctx, document.workspaceId, id)
+      await this.applyLook(ctx, await this.requireDocument(id), look)
     })
+  }
+
+  /** Changes icon and cover inside a write; a cover image no longer shown is deleted. */
+  private async applyLook(
+    ctx: WriteContext,
+    document: Document,
+    look: { icon?: string | null; cover?: Document['cover'] | null },
+  ): Promise<void> {
+    const fields: { icon?: string | null; cover?: Document['cover'] | null } = {}
+    if (look.icon !== undefined && look.icon !== (document.icon ?? null)) fields.icon = look.icon
+    if (look.cover !== undefined && look.cover !== (document.cover ?? null)) {
+      fields.cover = look.cover
+    }
+    if (Object.keys(fields).length === 0) return
+    await this.db.documents.update(document.id, fields)
+    await this.enqueue(
+      document.workspaceId,
+      'document',
+      document.id,
+      'update',
+      document.revision,
+      fields,
+    )
+    this.mark(ctx, document.workspaceId, document.id)
+    // The previous cover image is an attachment without a block: unless a block shows it too,
+    // nothing would ever show or delete it again (#136).
+    const previous = document.cover?.startsWith('attachment:')
+      ? document.cover.slice('attachment:'.length)
+      : null
+    if (fields.cover !== undefined && previous) {
+      const shown = (await this.db.blocks.where('documentId').equals(document.id).toArray()).some(
+        (block) => !block.deletedAt && block.attrs.attachmentId === previous,
+      )
+      const attachment = await this.db.attachments.get(previous)
+      if (!shown && attachment && !attachment.deletedAt) {
+        await this.db.attachments.update(previous, { deletedAt: this.now() })
+        await this.db.attachmentContents.delete(previous)
+        await this.enqueue(
+          attachment.workspaceId,
+          'attachment',
+          previous,
+          'delete',
+          attachment.revision,
+          {},
+        )
+      }
+    }
   }
 
   /** Moves a page in the tree; refuses to move a page below itself. */
@@ -1827,12 +1865,13 @@ export class LocalStore {
     documentId: string,
     file: { name: string; type: string; data: ArrayBuffer; sha256: string },
   ): Promise<Attachment> {
-    const attachment = await this.write(async () => {
+    // One transaction: never an uploaded attachment without the cover pointing to it.
+    return this.write(async (ctx) => {
       const document = await this.requireDocument(documentId)
-      return this.createAttachment(document, file)
+      const attachment = await this.createAttachment(document, file)
+      await this.applyLook(ctx, document, { cover: `attachment:${attachment.id}` })
+      return attachment
     })
-    await this.setPageLook(documentId, { cover: `attachment:${attachment.id}` })
-    return attachment
   }
 
   /** Stores a new attachment with its content and queues it (inside a write). */

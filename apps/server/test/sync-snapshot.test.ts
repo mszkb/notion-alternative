@@ -382,5 +382,9 @@ describe('page icon and cover (#136)', () => {
 
     const [bad] = await push(op('document', 'update', doc, { cover: 'https://example.com/x' }, 3))
     expect(bad.status).toBe('rejected')
+    const [foreign] = await push(
+      op('document', 'update', doc, { cover: `attachment:${randomUUID()}` }, 3),
+    )
+    expect(foreign).toMatchObject({ status: 'rejected', code: 'invalid_payload' })
   })
 })

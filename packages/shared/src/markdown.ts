@@ -47,15 +47,15 @@ export function blocksToMarkdown(
       }
       text = `${'  '.repeat(indent)}${marker} ${block.content}`
     } else if (block.type === 'todo') {
-      // GitHub/CommonMark task list (ADR 0019).
-      counters.length = 0
+      // GitHub/CommonMark task list (ADR 0019). Numbering of outer levels continues after it.
+      counters.length = Math.min(counters.length, indent)
       text = `${'  '.repeat(indent)}- [${block.attrs.checked ? 'x' : ' '}] ${block.content}`
     } else if (block.type === 'toggle') {
       // A list item; its children follow indented (ADR 0019).
-      counters.length = 0
+      counters.length = Math.min(counters.length, indent)
       text = `${'  '.repeat(indent)}- ${block.content}`
     } else {
-      counters.length = 0
+      counters.length = Math.min(counters.length, indent)
       switch (block.type) {
         case 'heading':
           text = `${'#'.repeat(block.attrs.level ?? 1)} ${block.content}`

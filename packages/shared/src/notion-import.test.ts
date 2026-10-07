@@ -152,6 +152,10 @@ describe('Notion import (#137)', () => {
     expect(files.map((f) => f.path)).toContain(`Projekte ${ID(1)}.md`)
 
     await expect(readNotionArchive(enc('kein zip'))).rejects.toThrow(/keine gültige ZIP/)
+    // The parts share one limit, and ZIPs inside parts are not unpacked again.
+    await expect(readNotionArchive(outer, 100)).rejects.toThrow(/zu groß/)
+    const deeper = createZip([{ path: 'a.zip', data: outer, modified }])
+    expect((await readNotionArchive(deeper)).map((f) => f.path)).toEqual(['Export-Part-1.zip'])
     const foreign = createZip([{ path: 'bild.png', data: PNG, modified }])
     await expect(convert(await readNotionArchive(foreign))).rejects.toThrow(/keine Seiten/)
   })

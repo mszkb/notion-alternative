@@ -34,20 +34,32 @@ export class NotionImportError extends Error {}
  * Unpacks the export ZIP. Larger exports come as a ZIP that holds one or more ZIPs ("Part-1"…);
  * those are unpacked too.
  */
-export async function readNotionArchive(archive: Uint8Array): Promise<ZipFile[]> {
-  let files: ZipFile[]
-  try {
-    files = await readZipCompressed(archive)
-  } catch {
-    throw new NotionImportError('Die Datei ist keine gültige ZIP-Datei.')
+export async function readNotionArchive(
+  archive: Uint8Array,
+  maxBytes = 2 * 1024 ** 3,
+): Promise<ZipFile[]> {
+  const read = async (bytes: Uint8Array, limit: number) => {
+    try {
+      return await readZipCompressed(bytes, limit)
+    } catch (error) {
+      if (error instanceof Error && /too large/.test(error.message)) {
+        throw new NotionImportError('Der Export ist entpackt zu groß.')
+      }
+      throw new NotionImportError('Die Datei ist keine gültige ZIP-Datei.')
+    }
   }
+  const files = await read(archive, maxBytes)
   const nested = files.filter((f) => extension(f.path) === 'zip')
-  if (nested.length > 0 && nested.length === files.length) {
-    const inner: ZipFile[] = []
-    for (const zip of nested) inner.push(...(await readNotionArchive(zip.data)))
-    return inner
+  if (nested.length === 0 || nested.length !== files.length) return files
+  // One level only, and all parts together within the same limit (zip bombs).
+  const inner: ZipFile[] = []
+  let left = maxBytes
+  for (const zip of nested) {
+    const part = await read(zip.data, left)
+    left -= part.reduce((sum, file) => sum + file.data.length, 0)
+    inner.push(...part)
   }
-  return files
+  return inner
 }
 
 const NOTION_ID = /^(.*?)\s+([0-9a-f]{32})$/i
