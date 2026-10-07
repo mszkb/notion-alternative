@@ -288,3 +288,80 @@ describe('GET /api/sync/log', () => {
     expect(response.statusCode).toBe(404)
   })
 })
+
+describe('content on demand (ADR 0017)', () => {
+  const block = (documentId: string, content = 'x') =>
+    op('block', 'create', randomUUID(), {
+      documentId,
+      type: 'paragraph',
+      content,
+      attrs: {},
+      sortKey: 'a0',
+    })
+
+  it('leaves out the blocks with content=false, whole and paged', async () => {
+    const doc = randomUUID()
+    const tag = randomUUID()
+    await push(
+      op('document', 'create', doc, docPayload),
+      op('tag', 'create', tag, { name: 'Projekt' }),
+      ...Array.from({ length: 5 }, () => block(doc)),
+    )
+    const whole = (await get(`/api/sync/snapshot?workspaceId=${workspaceId}&content=false`)).json()
+    expect(whole.documents).toHaveLength(1)
+    expect(whole.tags).toHaveLength(1)
+    expect(whole.blocks).toEqual([])
+    expect(whole.cursor).toBe(7)
+
+    for (const limit of [1, 2, 100]) {
+      const seen: string[] = []
+      let after: string | undefined
+      let first = true
+      for (;;) {
+        const query = new URLSearchParams({ workspaceId, limit: String(limit), content: 'false' })
+        if (after !== undefined) query.set('after', after)
+        const page = (await get(`/api/sync/snapshot?${query}`)).json()
+        if (first) expect(page.total).toBe(2)
+        first = false
+        expect(page.blocks).toEqual([])
+        seen.push(...page.documents.map((d: { id: string }) => d.id))
+        seen.push(...page.tags.map((t: { id: string }) => t.id))
+        if (!page.next) break
+        after = page.next
+      }
+      expect(seen.sort()).toEqual([doc, tag].sort())
+    }
+  })
+
+  it('loads one page with its blocks and the matching seq', async () => {
+    const doc = randomUUID()
+    const other = randomUUID()
+    await push(
+      op('document', 'create', doc, docPayload),
+      op('document', 'create', other, docPayload),
+      block(doc, 'eins'),
+      block(doc, 'zwei'),
+      block(other, 'fremd'),
+    )
+    const response = await get(`/api/sync/documents/${doc}?workspaceId=${workspaceId}`)
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.document.id).toBe(doc)
+    expect(body.blocks.map((b: { content: string }) => b.content).sort()).toEqual(['eins', 'zwei'])
+    expect(body.seq).toBe(5)
+  })
+
+  it('answers 404 for foreign workspaces and unknown pages, 400 for bad input', async () => {
+    const doc = randomUUID()
+    await push(op('document', 'create', doc, docPayload))
+    const { cookie: bob } = await register(app, 'bob@example.com')
+    expect(
+      (await get(`/api/sync/documents/${doc}?workspaceId=${workspaceId}`, bob)).statusCode,
+    ).toBe(404)
+    expect(
+      (await get(`/api/sync/documents/${randomUUID()}?workspaceId=${workspaceId}`)).statusCode,
+    ).toBe(404)
+    expect((await get(`/api/sync/documents/${doc}`)).statusCode).toBe(400)
+    expect((await get(`/api/sync/documents/x?workspaceId=${workspaceId}`)).statusCode).toBe(400)
+  })
+})

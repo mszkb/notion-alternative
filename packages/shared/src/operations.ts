@@ -226,6 +226,11 @@ export const syncSnapshotQuerySchema = z.object({
     .string()
     .regex(/^\d+\.\d\.[0-9A-Fa-f-]{0,64}$/)
     .optional(),
+  // `false`: everything except blocks; page contents load on demand (ADR 0017).
+  content: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
 })
 
 export interface SyncSnapshotResponse {
@@ -245,6 +250,21 @@ export interface SyncSnapshotResponse {
   next?: string | null
   /** Paged, first page only: number of entities in the whole snapshot (progress). */
   total?: number
+}
+
+/** `GET /api/sync/documents/:id`: one page with its blocks, loaded on demand (ADR 0017). */
+export const syncDocumentQuerySchema = z.object({ workspaceId: z.uuid() })
+export const syncDocumentParamsSchema = z.object({ id: z.uuid() })
+
+export interface SyncDocumentResponse {
+  document: Document
+  /** All blocks of the page, tombstones included. */
+  blocks: Block[]
+  /**
+   * Change-log position this state reflects. Changes up to it are contained; a later pull may
+   * replay some of them, which the block revisions turn into no-ops.
+   */
+  seq: number
 }
 
 /** One version of a page: an editing session of one device (ADR 0013). */

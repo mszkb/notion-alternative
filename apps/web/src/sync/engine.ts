@@ -5,7 +5,12 @@ import type { LocalStore } from '../local/store'
 import { connection } from '../session'
 import type { PullFetch } from './pull'
 import { pushQueue, type PushSend } from './push'
-import { type ResyncProgress, type SnapshotFetch, syncWorkspace } from './resync'
+import {
+  type DocumentFetch,
+  type ResyncProgress,
+  type SnapshotFetch,
+  syncWorkspace,
+} from './resync'
 
 export interface SyncState {
   running: boolean
@@ -38,6 +43,8 @@ export interface SyncTransport {
   push: PushSend
   pull: PullFetch
   snapshot: SnapshotFetch
+  /** Required when the device loads content on demand (ADR 0017). */
+  document?: DocumentFetch
   upload?: (id: string, data: ArrayBuffer) => Promise<'stored' | 'gone'>
   register?: typeof api.registerDevice
 }
@@ -46,6 +53,7 @@ const defaultTransport: SyncTransport = {
   push: api.syncPush,
   pull: api.syncPull,
   snapshot: api.syncSnapshot,
+  document: api.syncDocument,
   upload: (id, data) => uploadAttachment(id, data),
 }
 
@@ -153,11 +161,11 @@ export async function uploadPendingAttachments(
  * waits for the other tab's run and then sends what is still queued. Without Web Locks runs may
  * overlap between tabs, which idempotent operations tolerate.
  */
-async function exclusive(store: LocalStore, run: () => Promise<void>): Promise<void> {
+export async function exclusive<T>(store: LocalStore, run: () => Promise<T>): Promise<T> {
   const locks = globalThis.navigator?.locks
   if (!locks) return run()
   // Per local database, not per device id: that changes when a removed device signs in again.
-  await locks.request(`notion-alt-sync:${store.db.name}`, run)
+  return locks.request(`notion-alt-sync:${store.db.name}`, run) as Promise<T>
 }
 
 /**

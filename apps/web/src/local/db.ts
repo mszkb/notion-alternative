@@ -67,6 +67,18 @@ export interface SearchDirtyEntry {
   mark: string
 }
 
+/**
+ * A page whose content (blocks) this device has not loaded (ADR 0017). Only pages that arrived
+ * from the server without content are listed; everything else is loaded. Not synchronised.
+ */
+export interface UnloadedDocument {
+  documentId: string
+  workspaceId: string
+}
+
+/** How much content a device keeps (ADR 0017); stored in `meta` under `offlineMode`. */
+export type OfflineMode = 'all' | 'onDemand'
+
 /** Local database of one user account (ADR 0009). */
 export class LocalDb extends Dexie {
   meta!: EntityTable<MetaEntry, 'key'>
@@ -82,6 +94,7 @@ export class LocalDb extends Dexie {
   attachmentContents!: EntityTable<AttachmentContent, 'id'>
   searchIndexes!: EntityTable<SearchIndexCache, 'workspaceId'>
   searchDirty!: EntityTable<SearchDirtyEntry, 'documentId'>
+  unloadedDocuments!: EntityTable<UnloadedDocument, 'documentId'>
 
   constructor(name: string) {
     super(name)
@@ -111,6 +124,19 @@ export class LocalDb extends Dexie {
       searchIndexes: 'workspaceId',
       searchDirty: 'documentId, workspaceId',
     })
+    // ADR 0017: page content on demand. Devices that already hold content keep loading
+    // everything; a new, empty database starts with "on demand".
+    this.version(5)
+      .stores({ unloadedDocuments: 'documentId, workspaceId' })
+      .upgrade(async (trx) => {
+        const hasContent =
+          (await trx.table('documents').count()) > 0 ||
+          (await trx
+            .table('meta')
+            .filter((entry: MetaEntry) => entry.key.startsWith('syncCursor:'))
+            .count()) > 0
+        if (hasContent) await trx.table('meta').put({ key: 'offlineMode', value: 'all' })
+      })
   }
 }
 

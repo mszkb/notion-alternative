@@ -1,4 +1,4 @@
-import type { SyncSnapshotResponse } from '@notion-alt/shared'
+import type { SyncDocumentResponse, SyncSnapshotResponse } from '@notion-alt/shared'
 import type { Db } from '../db/database'
 import { findWorkspaceForUser } from '../workspaces/repository'
 import { latestSeq } from './changes'
@@ -6,12 +6,14 @@ import { toAttachment, toBlock, toConflict, toDocument, toDocumentTag, toTag } f
 
 /**
  * Complete state of a workspace including tombstones, read in one transaction so entities and
- * cursor match (ADR 0002 re-sync). Null if the user may not access the workspace.
+ * cursor match (ADR 0002 re-sync). Without `content` the blocks are left out (ADR 0017). Null if
+ * the user may not access the workspace.
  */
 export async function loadSnapshot(
   db: Db,
   userId: string,
   workspaceId: string,
+  content = true,
 ): Promise<SyncSnapshotResponse | null> {
   return db.transaction().execute(async (trx) => {
     const workspace = await findWorkspaceForUser(trx, workspaceId, userId)
@@ -19,7 +21,9 @@ export async function loadSnapshot(
     const [documents, blocks, tags, documentTags, attachments, conflicts, cursor] =
       await Promise.all([
         trx.selectFrom('documents').selectAll().where('workspace_id', '=', workspaceId).execute(),
-        trx.selectFrom('blocks').selectAll().where('workspace_id', '=', workspaceId).execute(),
+        content
+          ? trx.selectFrom('blocks').selectAll().where('workspace_id', '=', workspaceId).execute()
+          : [],
         trx.selectFrom('tags').selectAll().where('workspace_id', '=', workspaceId).execute(),
         trx
           .selectFrom('document_tags')
@@ -52,7 +56,8 @@ const TABLES = ['documents', 'tags', 'document_tags', 'attachments', 'blocks', '
  * the cursor and carries it in `next`. Rows on later pages may be newer than the cursor and rows
  * created behind the walk are missing; both are covered by the pull from the cursor, which
  * replays every change after it (tombstones included, ADR 0002). Null if the user may not
- * access the workspace or `after` is malformed.
+ * access the workspace or `after` is malformed. Without `content` the walk skips the blocks
+ * (ADR 0017); the caller passes the same value on every page.
  */
 export async function loadSnapshotPage(
   db: Db,
@@ -60,7 +65,9 @@ export async function loadSnapshotPage(
   workspaceId: string,
   limit: number,
   after?: string,
+  content = true,
 ): Promise<SyncSnapshotResponse | null> {
+  const skip = (name: (typeof TABLES)[number]) => !content && name === 'blocks'
   return db.transaction().execute(async (trx) => {
     const workspace = await findWorkspaceForUser(trx, workspaceId, userId)
     if (!workspace) return null
@@ -78,6 +85,7 @@ export async function loadSnapshotPage(
       cursor = await latestSeq(trx, workspaceId, workspace.compacted_seq)
       total = 0
       for (const name of TABLES) {
+        if (skip(name)) continue
         const row = await trx
           .selectFrom(name)
           .select((eb) => eb.fn.countAll<number>().as('n'))
@@ -101,6 +109,7 @@ export async function loadSnapshotPage(
     let room = limit
     for (; table < TABLES.length && room > 0; table++, lastId = null) {
       const name = TABLES[table]!
+      if (skip(name)) continue
       let query = trx
         .selectFrom(name)
         .selectAll()
@@ -139,5 +148,39 @@ export async function loadSnapshotPage(
     // The page filled up exactly at the end of a table: continue with the next one.
     if (table < TABLES.length) page.next = `${cursor}.${table}.`
     return page
+  })
+}
+
+/**
+ * One page with all its blocks (tombstones included) and the change-log position they reflect,
+ * read in one transaction (ADR 0017). Null if the user may not access the workspace or the page
+ * is not in it.
+ */
+export async function loadDocument(
+  db: Db,
+  userId: string,
+  workspaceId: string,
+  documentId: string,
+): Promise<SyncDocumentResponse | null> {
+  return db.transaction().execute(async (trx) => {
+    const workspace = await findWorkspaceForUser(trx, workspaceId, userId)
+    if (!workspace) return null
+    const document = await trx
+      .selectFrom('documents')
+      .selectAll()
+      .where('workspace_id', '=', workspaceId)
+      .where('id', '=', documentId)
+      .executeTakeFirst()
+    if (!document) return null
+    const [blocks, seq] = await Promise.all([
+      trx
+        .selectFrom('blocks')
+        .selectAll()
+        .where('workspace_id', '=', workspaceId)
+        .where('document_id', '=', documentId)
+        .execute(),
+      latestSeq(trx, workspaceId, workspace.compacted_seq),
+    ])
+    return { document: toDocument(document), blocks: blocks.map(toBlock), seq }
   })
 }

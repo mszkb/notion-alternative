@@ -89,6 +89,8 @@ export async function runClientLoad({ pages, blocksPerPage, heapMb }: ClientLoad
   const data = snapshot(workspaceId, pages, blocksPerPage)
   const heapBefore = heapMb()
   const store = await LocalStore.open(new LocalDb(`load-${workspaceId}`))
+  // Pre-ADR-0017 behaviour: every page's content is synced.
+  await store.db.meta.put({ key: 'offlineMode', value: 'all' })
 
   // Re-sync page by page like the sync engine does (#97).
   const pageMs: number[] = []

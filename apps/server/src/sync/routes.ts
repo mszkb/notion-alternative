@@ -3,6 +3,8 @@ import {
   type SyncLogResponse,
   type SyncPullResponse,
   type SyncPushResult,
+  syncDocumentParamsSchema,
+  syncDocumentQuerySchema,
   syncLogQuerySchema,
   syncPullQuerySchema,
   syncPushInputSchema,
@@ -15,7 +17,7 @@ import { parseInput } from '../validation'
 import { applyBatch } from './apply'
 import { latestSeq, listChangesSince } from './changes'
 import { toChange } from './mapping'
-import { loadSnapshot, loadSnapshotPage } from './snapshot'
+import { loadDocument, loadSnapshot, loadSnapshotPage } from './snapshot'
 import { findWorkspaceForUser } from '../workspaces/repository'
 import { reindexMarked } from '../search/index'
 
@@ -106,14 +108,26 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
 
   /** Full re-sync: complete workspace including tombstones and the matching cursor. */
   app.get('/sync/snapshot', async (request) => {
-    const { workspaceId, limit, after } = parseInput(syncSnapshotQuerySchema, request.query)
+    const { workspaceId, limit, after, content } = parseInput(
+      syncSnapshotQuerySchema,
+      request.query,
+    )
     const userId = currentUser(request).id
     // Paged (#97) unless an older client asks for everything at once.
     const snapshot =
       limit === undefined
-        ? await loadSnapshot(db, userId, workspaceId)
-        : await loadSnapshotPage(db, userId, workspaceId, limit, after)
+        ? await loadSnapshot(db, userId, workspaceId, content ?? true)
+        : await loadSnapshotPage(db, userId, workspaceId, limit, after, content ?? true)
     if (!snapshot) throw new HttpError(404, 'not_found', 'Workspace not found')
     return snapshot
+  })
+
+  /** One page with its blocks, for devices that load content on demand (ADR 0017). */
+  app.get('/sync/documents/:id', async (request) => {
+    const { id } = parseInput(syncDocumentParamsSchema, request.params)
+    const { workspaceId } = parseInput(syncDocumentQuerySchema, request.query)
+    const result = await loadDocument(db, currentUser(request).id, workspaceId, id)
+    if (!result) throw new HttpError(404, 'not_found', 'Page not found')
+    return result
   })
 }

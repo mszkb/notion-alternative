@@ -18,6 +18,7 @@ import type {
   SyncPullResponse,
   SyncPushInput,
   SyncPushResult,
+  SyncDocumentResponse,
   SyncSnapshotResponse,
   User,
   Workspace,
@@ -91,14 +92,20 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
           limit: String(limit),
         })}`,
       ),
-    syncSnapshot: (workspaceId: string, after?: string) =>
+    syncSnapshot: (workspaceId: string, after?: string, content = true) =>
       request<SyncSnapshotResponse>(
         'GET',
         `/sync/snapshot?${new URLSearchParams({
           workspaceId,
           limit: String(SNAPSHOT_PAGE_SIZE),
           ...(after === undefined ? {} : { after }),
+          ...(content ? {} : { content: 'false' }),
         })}`,
+      ),
+    syncDocument: (workspaceId: string, documentId: string) =>
+      request<SyncDocumentResponse>(
+        'GET',
+        `/sync/documents/${encodeURIComponent(documentId)}?${new URLSearchParams({ workspaceId })}`,
       ),
     search: (workspaceId: string, q: string) =>
       request<{ hits: ServerSearchHit[] }>(
