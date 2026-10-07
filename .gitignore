@@ -11,3 +11,7 @@ data/
 .DS_Store
 test-results/
 playwright-report/
+
+# Autonomous agent scratch files (never committed)
+/REPORT.md
+/QUESTION.md
