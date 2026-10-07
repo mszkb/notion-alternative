@@ -124,7 +124,7 @@ Folgt aus der Zielgruppe ([`vision.md`](docs/product/vision.md)); Epic [#130](ht
 - [x] Schnellsuche und Tastenkürzel ([#134](https://github.com/mszkb/notion-alternative/issues/134))
 - [x] Blocktypen To-do, Toggle, Callout, Trenner ([#135](https://github.com/mszkb/notion-alternative/issues/135))
 - [ ] Seiten-Icons und Titelbilder ([#136](https://github.com/mszkb/notion-alternative/issues/136))
-- [ ] Import aus Notion ([#137](https://github.com/mszkb/notion-alternative/issues/137))
+- [x] Import aus Notion ([#137](https://github.com/mszkb/notion-alternative/issues/137))
 
 ## Ohne Phase – Opt-in-Telemetrie
 

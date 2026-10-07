@@ -5,10 +5,17 @@ import { api, ApiError, downloadAttachment } from '../api'
 import { useWorkspace } from '../composables/workspace'
 import { buildArchiveExport } from '../export/archive'
 import { buildJsonExport } from '../export/json'
-import { importWorkspace, readImportFile, type ImportSource } from '../export/import'
+import {
+  importWorkspace,
+  readImportFile,
+  readNotionImportFile,
+  type ImportSource,
+} from '../export/import'
+import type { NotionImportReport } from '@notion-alt/shared'
 import { buildMarkdownExport, saveFile } from '../export/markdown'
 import { refreshWorkspaces, workspaces } from '../local/context'
 import { connection } from '../session'
+import { requestSync } from '../sync/engine'
 
 const { store, workspaceId } = useWorkspace()
 const workspace = computed(() => ({
@@ -102,6 +109,8 @@ const importName = ref('')
 const importError = ref<string | null>(null)
 const idsExist = ref(false)
 const importing = ref(false)
+/** Set when the source is a converted Notion export (#137). */
+const notionReport = ref<NotionImportReport | null>(null)
 const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
 
 const importSummary = computed(() => {
@@ -119,10 +128,30 @@ const importSummary = computed(() => {
   }
 })
 
+async function chooseNotionFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  importSource.value = null
+  notionReport.value = null
+  importError.value = null
+  idsExist.value = false
+  if (!file) return
+  try {
+    const source = await readNotionImportFile(file, 'Aus Notion')
+    notionReport.value = source.report
+    importSource.value = source
+    importName.value = 'Aus Notion'
+  } catch (cause) {
+    importError.value = `Datei kann nicht importiert werden: ${cause instanceof Error ? cause.message : String(cause)}`
+    input.value = ''
+  }
+}
+
 async function chooseImportFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   importSource.value = null
+  notionReport.value = null
   importError.value = null
   idsExist.value = false
   if (!file) return
@@ -146,6 +175,8 @@ async function runImport(newIds: boolean) {
       send: api.importWorkspace,
     })
     await refreshWorkspaces(store)
+    // Fetch the new workspace now instead of at the next sync trigger.
+    void requestSync(store)
     await router.push({ name: 'workspace', params: { workspaceId: created.id } })
   } catch (cause) {
     if (cause instanceof ApiError && cause.code === 'ids_exist') {
@@ -255,8 +286,45 @@ async function runImport(newIds: boolean) {
         />
       </label>
 
-      <div v-if="importSummary" class="import-summary" data-testid="import-summary">
+      <h3 id="import-notion">Umzug aus Notion</h3>
+      <p class="muted">
+        In Notion unter <strong>Einstellungen → Export → „Markdown &amp; CSV“</strong> (mit
+        Unterseiten und Dateien) exportieren und die ZIP-Datei hier wählen. Seiten, Unterseiten,
+        Bilder, Dateien, Links, To-dos, Toggles und Hinweise werden übernommen; was es hier nicht
+        gibt, wird vereinfacht und vor dem Import aufgelistet.
+      </p>
+      <label>
+        Notion-Export (ZIP)
+        <input
+          type="file"
+          accept=".zip,application/zip"
+          :disabled="importing"
+          data-testid="import-notion-file"
+          @change="chooseNotionFile"
+        />
+      </label>
+
+      <div v-if="notionReport" class="import-summary" data-testid="notion-report">
         <p>
+          {{ plural(notionReport.pages, 'Seite', 'Seiten') }},
+          {{ plural(notionReport.blocks, 'Block', 'Blöcke') }},
+          {{ plural(notionReport.attachments, 'Anhang', 'Anhänge')
+          }}<template v-if="notionReport.databases"
+            >, {{ plural(notionReport.databases, 'Datenbank', 'Datenbanken') }}</template
+          >.
+        </p>
+        <template v-if="Object.keys(notionReport.simplified).length">
+          <p>Vereinfacht:</p>
+          <ul>
+            <li v-for="(count, what) in notionReport.simplified" :key="what">
+              {{ what }} ({{ count }}×)
+            </li>
+          </ul>
+        </template>
+      </div>
+
+      <div v-if="importSummary" class="import-summary" data-testid="import-summary">
+        <p v-if="!notionReport">
           Export vom {{ importSummary.exportedAt }}:
           {{ plural(importSummary.pages, 'Seite', 'Seiten')
           }}<template v-if="importSummary.trashed"

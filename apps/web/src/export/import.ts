@@ -1,8 +1,11 @@
 import {
+  convertNotionExport,
   type ExportManifest,
   type ImportInput,
   type JsonExport,
   migrateExport,
+  type NotionImportReport,
+  readNotionArchive,
   remapExportIds,
   verifyExportArchive,
   type Workspace,
@@ -36,6 +39,23 @@ export async function readImportFile(file: Blob): Promise<ImportSource> {
     throw new Error('Die Datei ist weder ein ZIP- noch ein JSON-Export.')
   }
   return { data: migrateExport(parsed), attachments: new Map(), manifest: null }
+}
+
+/**
+ * Reads the ZIP of Notion's "Export → Markdown & CSV" (#137) and converts it into an import with
+ * fresh ids, plus a report of what was simplified. Works offline; only importing needs the server.
+ */
+export async function readNotionImportFile(
+  file: Blob,
+  name: string,
+): Promise<ImportSource & { report: NotionImportReport }> {
+  const files = await readNotionArchive(new Uint8Array(await file.arrayBuffer()))
+  const { data, attachments, report } = await convertNotionExport(files, {
+    workspace: { id: crypto.randomUUID(), name },
+    newId: () => crypto.randomUUID(),
+    now: new Date(),
+  })
+  return { data, attachments, manifest: null, report }
 }
 
 /**

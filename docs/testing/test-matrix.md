@@ -65,6 +65,7 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | --- | --- | --- | --- | --- |
 | T-EXP-01 | Vollständiger Export (MD, JSON, ZIP) | Alle Dokumente, Tags, Links, Anhänge enthalten | AC-04 | ☑ ¹² |
 | T-EXP-02 | Export → Import in frische Installation | Round-Trip ohne Verlust | AC-05 | ☑ ¹³ |
+| T-EXP-03 | Import des Notion-Exports „Markdown & CSV“ | Seitenbaum, Bilder, Dateien, Links, To-dos, Toggles, Hinweise übernommen; Vereinfachtes im Bericht; fremde Datei mit Meldung abgelehnt | – | ☑ ²¹ |
 
 ## PWA / Push
 
@@ -129,3 +130,5 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ¹⁹ `apps/web/src/local/offline-attachments.test.ts` (nur fehlende Inhalte, Fortschritt, Prüfsumme, noch nicht hochgeladen, Netzverlust, Abbruch, Speicher voll), E2E `apps/web/e2e/attachments.spec.ts` (zweites Gerät lädt alle Anhänge über die Kontoseite und zeigt sie danach ohne Server).
 
 ²⁰ ADR 0017 (Inhalte bei Bedarf): `apps/web/src/sync/on-demand.test.ts` (Erstsync ohne Blöcke, Laden beim Öffnen mit späterem Pull, Seiten anderer Geräte, offline und Server nicht erreichbar, Re-Sync lädt geladene Seiten einzeln neu, verlorener Block nach Restore wird erneut gesendet, Abbruch und Fortsetzen, Netzverlust, Export online und offline, Upgrade von Dexie-Version 4), `apps/server/test/sync-snapshot.test.ts` (`content=false` ganz und seitenweise, Einzelabruf einer Seite mit `seq`, fremde Workspaces).
+
+²¹ #137: `packages/shared/src/notion-import.test.ts` (anonymisiertes Beispiel im Aufbau des Exports: Titel ohne ID, Unterseiten aus Ordnern, Datenbank als Seite mit Zeilen und CSV, alle Blocktypen, Links, Bild, vereinfachte Teile, verschachtelte ZIPs, fremde Datei), `packages/shared/src/zip-compressed.test.ts` (Deflate, Größenlimit), `apps/server/test/import.test.ts` (Server nimmt das Ergebnis an, Anhang-Upload), `apps/web/e2e/notion-import.spec.ts`.
