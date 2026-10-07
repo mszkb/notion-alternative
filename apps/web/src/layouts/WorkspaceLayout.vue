@@ -5,6 +5,15 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
+import {
+  isSidebarShortcut,
+  setSidebarCollapsed,
+  setSidebarWidth,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  sidebarCollapsed,
+  sidebarWidth,
+} from '../composables/sidebar'
 import { expanded } from '../composables/tree-state'
 import {
   displayTitle,
@@ -265,10 +274,61 @@ watch(
   () => route.fullPath,
   () => (sidebarOpen.value = false),
 )
+
+// ---------------------------------------------------------------- sidebar (#132)
+
+const NARROW = '(max-width: 760px)'
+
+/** Ctrl/⌘ + \ shows or hides the sidebar; on narrow screens it opens the overlay. */
+function toggleSidebar() {
+  if (globalThis.matchMedia?.(NARROW).matches) sidebarOpen.value = !sidebarOpen.value
+  else setSidebarCollapsed(!sidebarCollapsed.value)
+}
+
+function onShortcut(event: KeyboardEvent) {
+  if (!isSidebarShortcut(event)) return
+  event.preventDefault()
+  toggleSidebar()
+}
+onMounted(() => window.addEventListener('keydown', onShortcut))
+onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
+
+/** Width by dragging the edge, or with the arrow keys on the focused edge. */
+function startResize(event: PointerEvent) {
+  event.preventDefault()
+  const handle = event.currentTarget as HTMLElement
+  handle.setPointerCapture?.(event.pointerId)
+  const move = (e: PointerEvent) => (sidebarWidth.value = Math.round(e.clientX))
+  const end = () => {
+    handle.removeEventListener('pointermove', move)
+    handle.removeEventListener('pointerup', end)
+    handle.removeEventListener('pointercancel', end)
+    setSidebarWidth(sidebarWidth.value)
+  }
+  handle.addEventListener('pointermove', move)
+  handle.addEventListener('pointerup', end)
+  handle.addEventListener('pointercancel', end)
+}
+
+function resizeByKey(event: KeyboardEvent) {
+  const step = event.shiftKey ? 64 : 16
+  if (event.key === 'ArrowLeft') setSidebarWidth(sidebarWidth.value - step)
+  else if (event.key === 'ArrowRight') setSidebarWidth(sidebarWidth.value + step)
+  else return
+  event.preventDefault()
+}
+
+const shellStyle = computed(() => ({
+  '--sidebar-width': `${Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, sidebarWidth.value))}px`,
+}))
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'sidebar-open': sidebarOpen }">
+  <div
+    class="app-shell"
+    :class="{ 'sidebar-open': sidebarOpen, 'sidebar-collapsed': sidebarCollapsed }"
+    :style="shellStyle"
+  >
     <button
       type="button"
       class="sidebar-toggle"
@@ -278,12 +338,33 @@ watch(
     >
       ☰ <span class="visually-hidden">Navigation</span>
     </button>
+    <button
+      v-if="sidebarCollapsed"
+      type="button"
+      class="icon sidebar-expand"
+      aria-label="Seitenleiste einblenden"
+      title="Seitenleiste einblenden (Strg/⌘ + \)"
+      data-testid="sidebar-expand"
+      @click="setSidebarCollapsed(false)"
+    >
+      »
+    </button>
 
     <aside id="sidebar" class="sidebar" aria-label="Navigation">
       <header class="sidebar-header">
         <RouterLink class="workspace-name" :to="{ name: 'home', query: { choose: '1' } }">
           {{ workspace?.name ?? 'Workspace' }}
         </RouterLink>
+        <button
+          type="button"
+          class="icon sidebar-collapse"
+          aria-label="Seitenleiste ausblenden"
+          title="Seitenleiste ausblenden (Strg/⌘ + \)"
+          data-testid="sidebar-collapse"
+          @click="setSidebarCollapsed(true)"
+        >
+          «
+        </button>
       </header>
 
       <input
@@ -452,6 +533,19 @@ watch(
         </p>
       </footer>
     </aside>
+    <div
+      v-if="!sidebarCollapsed"
+      class="sidebar-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Breite der Seitenleiste"
+      :aria-valuenow="sidebarWidth"
+      :aria-valuemin="SIDEBAR_MIN_WIDTH"
+      :aria-valuemax="SIDEBAR_MAX_WIDTH"
+      tabindex="0"
+      @pointerdown="startResize"
+      @keydown="resizeByKey"
+    ></div>
 
     <main class="content">
       <RouterView :key="String(route.params.documentId ?? route.params.tagId ?? '')" />

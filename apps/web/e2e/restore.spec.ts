@@ -37,6 +37,7 @@ test('a deleted page comes back from the trash with its subpage, also elsewhere'
     .getByRole('link', { name: 'Elternseite' })
     .click()
   page.once('dialog', (dialog) => void dialog.accept())
+  await page.getByRole('button', { name: 'Seitenmenü' }).click()
   await page.getByRole('button', { name: 'Löschen' }).click()
   await expect(page.getByRole('tree')).not.toContainText('Elternseite')
 
@@ -80,6 +81,7 @@ test('an older version is restored as new changes and reaches other devices', as
 
   await refocus(page)
   await expect(blockInput(page, 0)).toHaveText('Original geändert', { timeout: 10_000 })
+  await page.getByRole('button', { name: 'Seitenmenü' }).click()
   await page.getByRole('link', { name: 'Verlauf', exact: true }).click()
   const versions = page.getByRole('list', { name: 'Versionen' }).getByRole('listitem')
   await versions.nth(1).getByRole('button').click()

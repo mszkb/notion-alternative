@@ -18,10 +18,10 @@ Die Produktprinzipien gelten unverändert: Jede Bedienung funktioniert offline, 
 
 | Muster (wie in Notion) | Unsere Umsetzung | Stand |
 | --- | --- | --- |
-| Seitenleiste links: Suche, Favoriten, Seitenbaum, Papierkorb, Einstellungen unten | `WorkspaceLayout.vue` | vorhanden; einklappbar und in der Breite änderbar: [#132](https://github.com/mszkb/notion-alternative/issues/132) |
-| Seitenbaum mit Auf-/Zuklappen, „+“ bei Hover für eine Unterseite, Ziehen zum Verschieben | `TreeNode.vue` | vorhanden, angleichen in #132 |
+| Seitenleiste links: Suche, Favoriten, Seitenbaum, Papierkorb, Einstellungen unten | `WorkspaceLayout.vue`, `composables/sidebar.ts` | umgesetzt: einklappbar (`Strg/⌘ + \`), Breite per Ziehen oder Pfeiltasten am Rand, beides pro Gerät gemerkt; schmal als Overlay (#132) |
+| Seitenbaum mit Auf-/Zuklappen, „+“ bei Hover für eine Unterseite, Ziehen zum Verschieben | `TreeNode.vue` | vorhanden |
 | Zentrierte Inhaltsspalte, großer Seitentitel, viel Weißraum | `.page`, `--content-width` | vorhanden |
-| Kopfzeile mit Breadcrumbs und Seitenmenü | `PageView.vue` | vorhanden, Menü und „Zuletzt bearbeitet“ in #132 |
+| Kopfzeile mit Breadcrumbs und Seitenmenü | `PageView.vue` | umgesetzt: „Bearbeitet …“, Favorit, Seitenmenü ⋯ (Unterseite, Verlauf, Export, Löschen) (#132) |
 | Steuerelemente erscheinen erst bei Hover bzw. Fokus | Blockgriff, „+“ im Baum | teilweise, #132/#133 |
 | `/` öffnet ein Menü für Blocktypen, Markdown-Kürzel beim Tippen | Block-Editor (ADR 0008) | [#133](https://github.com/mszkb/notion-alternative/issues/133) |
 | Schnellsuche mit `Strg/⌘+K` bzw. `Strg/⌘+P` | Befehlspalette | [#134](https://github.com/mszkb/notion-alternative/issues/134) |

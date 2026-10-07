@@ -119,7 +119,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 Folgt aus der Zielgruppe ([`vision.md`](docs/product/vision.md)); Epic [#130](https://github.com/mszkb/notion-alternative/issues/130), Leitlinie [`ux-guide.md`](docs/product/ux-guide.md).
 
 - [x] Design-Leitlinie und Design-Tokens, hell/dunkel umschaltbar ([#131](https://github.com/mszkb/notion-alternative/issues/131))
-- [ ] Einklappbare Seitenleiste, Breadcrumbs, Seitenkopf ([#132](https://github.com/mszkb/notion-alternative/issues/132))
+- [x] Einklappbare Seitenleiste, Breadcrumbs, Seitenkopf ([#132](https://github.com/mszkb/notion-alternative/issues/132))
 - [ ] Slash-Menü, Markdown-Kürzel, Blockgriff ([#133](https://github.com/mszkb/notion-alternative/issues/133))
 - [ ] Schnellsuche und Tastenkürzel ([#134](https://github.com/mszkb/notion-alternative/issues/134))
 - [ ] Blocktypen To-do, Toggle, Callout, Trenner ([#135](https://github.com/mszkb/notion-alternative/issues/135))

@@ -275,6 +275,56 @@ button.danger,
   display: none;
 }
 
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Collapse control and resize edge appear on hover or focus (ux-guide.md). */
+.sidebar-collapse {
+  opacity: 0;
+}
+
+.sidebar:hover .sidebar-collapse,
+.sidebar-collapse:focus-visible {
+  opacity: 1;
+}
+
+.sidebar-resizer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sidebar-width) - 3px);
+  z-index: 10;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer:focus-visible {
+  background: var(--accent);
+  outline: none;
+  opacity: 0.4;
+}
+
+/* The hidden sidebar takes no grid cell: the content is the only column. */
+.sidebar-collapsed {
+  grid-template-columns: 1fr;
+}
+
+.sidebar-collapsed .sidebar {
+  display: none;
+}
+
+.sidebar-expand {
+  position: fixed;
+  top: var(--space-sm);
+  left: var(--space-sm);
+  z-index: 30;
+}
+
 .workspace-name {
   display: block;
   padding: var(--space-xs) var(--space-sm);
@@ -489,6 +539,34 @@ button.danger,
   display: flex;
   gap: var(--space-sm);
   align-items: center;
+}
+
+.page-menu {
+  position: relative;
+}
+
+.page-menu .page-menu-list {
+  top: 2rem;
+  right: 0;
+  left: auto;
+}
+
+.page-menu-list a {
+  display: block;
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.page-menu-list a:hover,
+.page-menu-list a:focus-visible {
+  background: var(--hover);
+}
+
+.page-actions .edited {
+  font-size: var(--text-xs);
 }
 
 .page-title {
@@ -833,6 +911,17 @@ kbd {
 
   .sidebar-open .sidebar {
     transform: none;
+  }
+
+  /* The overlay replaces collapsing and resizing. */
+  .sidebar-collapsed .sidebar {
+    display: flex;
+  }
+
+  .sidebar-collapse,
+  .sidebar-expand,
+  .sidebar-resizer {
+    display: none;
   }
 
   .content {

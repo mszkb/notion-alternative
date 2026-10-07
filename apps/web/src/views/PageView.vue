@@ -115,6 +115,25 @@ onBeforeUnmount(() => {
   stopPendingTitle()
 })
 
+// ---------------------------------------------------------------- header (#132)
+
+const editedFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+const edited = computed(() =>
+  document.value ? editedFormat.format(new Date(document.value.updatedAt)) : '',
+)
+
+const menuOpen = ref(false)
+const menuRoot = ref<HTMLElement | null>(null)
+
+function closeMenuOutside(event: PointerEvent) {
+  if (menuRoot.value && !menuRoot.value.contains(event.target as Node)) menuOpen.value = false
+}
+watch(menuOpen, (open) => {
+  if (open) window.addEventListener('pointerdown', closeMenuOutside)
+  else window.removeEventListener('pointerdown', closeMenuOutside)
+})
+onBeforeUnmount(() => window.removeEventListener('pointerdown', closeMenuOutside))
+
 // ---------------------------------------------------------------- actions
 
 async function toggleFavorite() {
@@ -169,6 +188,7 @@ async function deletePage() {
         <span>{{ displayTitle(document) }}</span>
       </nav>
       <div class="page-actions">
+        <span class="muted edited" data-testid="page-edited">Bearbeitet {{ edited }}</span>
         <button
           type="button"
           class="icon"
@@ -179,14 +199,31 @@ async function deletePage() {
         >
           {{ document.favorite ? '★' : '☆' }}
         </button>
-        <button type="button" class="secondary" @click="addChild">+ Unterseite</button>
-        <RouterLink
-          class="secondary"
-          :to="{ name: 'history', params: { workspaceId, documentId } }"
-        >
-          Verlauf
-        </RouterLink>
-        <button type="button" class="secondary danger" @click="deletePage">Löschen</button>
+        <div ref="menuRoot" class="page-menu" @keydown.escape="menuOpen = false">
+          <button
+            type="button"
+            class="icon"
+            aria-label="Seitenmenü"
+            title="Seitenmenü"
+            aria-haspopup="true"
+            :aria-expanded="menuOpen"
+            data-testid="page-menu"
+            @click="menuOpen = !menuOpen"
+          >
+            ⋯
+          </button>
+          <div v-if="menuOpen" class="block-menu page-menu-list" @click="menuOpen = false">
+            <button type="button" @click="addChild">Unterseite anlegen</button>
+            <RouterLink :to="{ name: 'history', params: { workspaceId, documentId } }">
+              Verlauf
+            </RouterLink>
+            <RouterLink :to="{ name: 'export', params: { workspaceId } }">
+              Export & Import
+            </RouterLink>
+            <div class="separator" role="separator"></div>
+            <button type="button" class="danger" @click="deletePage">Löschen</button>
+          </div>
+        </div>
       </div>
     </header>
 
