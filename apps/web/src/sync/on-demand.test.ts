@@ -11,6 +11,8 @@ import {
 import { Dexie } from 'dexie'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ApiError } from '../api'
+import { buildArchiveExport } from '../export/archive'
+import { buildJsonExport } from '../export/json'
 import { LocalDb } from '../local/db'
 import { LocalStore } from '../local/store'
 import { connection } from '../session'
@@ -335,5 +337,30 @@ describe('upgrade of the local database (T-MIG-02)', () => {
     const store = await LocalStore.open(db)
     expect(await store.offlineMode()).toBe('all')
     expect(await store.syncCursor(WS)).toBe(7)
+  })
+})
+
+describe('export with pages not on this device (principle 3)', () => {
+  it('loads missing pages before exporting, and names those it cannot load', async () => {
+    const { doc: first } = await pageWithText('Eins', 'erster Inhalt')
+    const { doc: second } = await pageWithText('Zwei', 'zweiter Inhalt')
+    await syncA()
+    await syncWorkspace(b, WS, server)
+
+    // Offline (no fetch): exported without content, named in the result.
+    const offline = await buildArchiveExport(b, { id: WS, name: 'W' })
+    expect(offline.manifest.missing_documents?.map((d) => d.title).sort()).toEqual(['Eins', 'Zwei'])
+
+    // Online: the content is loaded first and stays on the device.
+    const online = await buildJsonExport(
+      b,
+      { id: WS, name: 'W' },
+      { fetchDocument: server.document },
+    )
+    expect(online.missingDocuments).toEqual([])
+    expect(await b.isDocumentLoaded(first.id)).toBe(true)
+    expect((await b.listBlocks(second.id)).map((x) => x.content)).toEqual(['zweiter Inhalt'])
+    const text = await online.blob.text()
+    expect(text).toContain('erster Inhalt')
   })
 })

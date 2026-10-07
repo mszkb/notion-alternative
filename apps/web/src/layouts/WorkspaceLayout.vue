@@ -112,6 +112,12 @@ watch(
 
 const query = ref('')
 const hits = ref<SearchHit[]>([])
+/** Pages whose content is not on this device (ADR 0017): offline, search covers only titles. */
+const unloadedCount = useLiveQuery(
+  async () => (await store.unloadedDocuments(workspaceId.value)).length,
+  0,
+  workspaceId,
+)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 watch([query, documents], () => {
@@ -301,6 +307,14 @@ watch(
         </ul>
         <p v-if="hits.length === 0 && extraServerHits.length === 0" class="muted empty">
           Keine Treffer
+        </p>
+        <p
+          v-if="connection !== 'online' && unloadedCount"
+          class="muted empty"
+          data-testid="search-partial"
+        >
+          Offline wird nur der Inhalt von Seiten auf diesem Gerät durchsucht; bei
+          {{ unloadedCount.toLocaleString('de-DE') }} weiteren nur der Titel.
         </p>
         <template v-if="extraServerHits.length">
           <h2 id="nav-server-hits">Weitere Treffer vom Server</h2>

@@ -22,6 +22,8 @@ const running = ref(false)
 const progress = ref<string | null>(null)
 const result = ref<string | null>(null)
 const missing = ref<string[]>([])
+/** Pages exported without content because it is not on this device (ADR 0017). */
+const missingPages = ref<string[]>([])
 const error = ref<string | null>(null)
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -32,6 +34,7 @@ async function run(task: (options: { history: boolean; download: boolean }) => P
   result.value = null
   error.value = null
   missing.value = []
+  missingPages.value = []
   try {
     await task({ history: withHistory.value && online.value, download: online.value })
   } catch (cause) {
@@ -47,6 +50,7 @@ const exportArchive = () =>
     const exported = await buildArchiveExport(store, workspace.value, {
       download: download ? downloadAttachment : undefined,
       syncLog: history ? api.syncLog : undefined,
+      fetchDocument: download ? api.syncDocument : undefined,
       onProgress: (message) => (progress.value = message),
     })
     saveFile(exported.fileName, exported.blob)
@@ -57,14 +61,17 @@ const exportArchive = () =>
       `${plural(manifest.attachments.length, 'Anhang', 'Anhänge')} exportiert` +
       (manifest.history ? ', mit Verlauf.' : ', ohne Verlauf.')
     missing.value = manifest.missing_attachments.map((a) => a.name)
+    missingPages.value = (manifest.missing_documents ?? []).map((d) => d.title || 'Unbenannt')
   })
 
 const exportMarkdownZip = () =>
   run(async ({ download }) => {
     const exported = await buildMarkdownExport(store, workspace.value.id, workspace.value.name, {
       download: download ? downloadAttachment : undefined,
+      fetchDocument: download ? api.syncDocument : undefined,
     })
     saveFile(exported.fileName, exported.data)
+    missingPages.value = exported.missingDocuments.map((d) => d.title || 'Unbenannt')
     result.value =
       `${plural(exported.pages, 'Seite', 'Seiten')} exportiert.` +
       (exported.missingAttachments
@@ -73,11 +80,13 @@ const exportMarkdownZip = () =>
   })
 
 const exportJson = () =>
-  run(async ({ history }) => {
+  run(async ({ history, download }) => {
     const exported = await buildJsonExport(store, workspace.value, {
       syncLog: history ? api.syncLog : undefined,
+      fetchDocument: download ? api.syncDocument : undefined,
     })
     saveFile(exported.fileName, exported.blob)
+    missingPages.value = exported.missingDocuments.map((d) => d.title || 'Unbenannt')
     result.value =
       `${plural(exported.documents, 'Seite', 'Seiten')} exportiert` +
       (exported.changes === null
@@ -211,6 +220,16 @@ async function runImport(newIds: boolean) {
       </p>
       <ul>
         <li v-for="name in missing" :key="name">{{ name }}</li>
+      </ul>
+    </div>
+    <div v-if="missingPages.length" class="error" data-testid="export-missing-pages">
+      <p>
+        Der Inhalt von {{ plural(missingPages.length, 'Seite', 'Seiten') }} ist nicht auf diesem
+        Gerät und konnte ohne Serververbindung nicht geladen werden. Exportiert sind nur Titel und
+        Metadaten (im ZIP in <code>manifest.json</code> unter <code>missing_documents</code>):
+      </p>
+      <ul>
+        <li v-for="(title, i) in missingPages" :key="i">{{ title }}</li>
       </ul>
     </div>
     <p v-if="error" class="error">{{ error }}</p>

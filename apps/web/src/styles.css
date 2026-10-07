@@ -120,6 +120,15 @@ button.link {
   color: var(--error);
 }
 
+/* Information that is not an error, e.g. content not on this device (ADR 0017). */
+.notice {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
 .switch {
   margin: 1.5rem 0 0;
   text-align: center;

@@ -7,6 +7,8 @@ import {
   type SyncLogResponse,
 } from '@notion-alt/shared'
 import type { LocalStore } from '../local/store'
+import type { DocumentFetch } from '../sync/resync'
+import { loadContentForExport } from './content'
 import { exportFileName } from './markdown'
 
 export interface JsonExportResult {
@@ -14,6 +16,8 @@ export interface JsonExportResult {
   blob: Blob
   documents: number
   changes: number | null
+  /** Pages exported without content: not on this device and not loadable now (ADR 0017). */
+  missingDocuments: { id: string; title: string }[]
 }
 
 /** Reads the whole change log of the workspace from the server, page by page. */
@@ -41,10 +45,13 @@ export async function buildJsonExport(
   options: {
     /** Omit to export without history. */
     syncLog?: (query: SyncLogQuery) => Promise<SyncLogResponse>
+    /** Loads pages whose content is not on this device (ADR 0017). Omitted when offline. */
+    fetchDocument?: DocumentFetch
     now?: Date
   } = {},
 ): Promise<JsonExportResult> {
   const now = options.now ?? new Date()
+  const missingDocuments = await loadContentForExport(store, workspace.id, options.fetchDocument)
   const input = await store.exportData(workspace.id)
   const history = options.syncLog ? await fetchHistory(workspace.id, options.syncLog) : null
   const data = createJsonExport(input, {
@@ -57,5 +64,6 @@ export async function buildJsonExport(
     blob: new Blob([...jsonExportChunks(data)], { type: 'application/json' }),
     documents: data.documents.filter((d) => !d.deletedAt).length,
     changes: history?.changes.length ?? null,
+    missingDocuments,
   }
 }

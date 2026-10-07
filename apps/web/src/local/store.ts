@@ -1677,6 +1677,16 @@ export class LocalStore {
     return rows.map((row) => ({ id: row.documentId, workspaceId: row.workspaceId }))
   }
 
+  /** Pages (not in the trash) on this device, and how many of them have their content here. */
+  async documentCounts(): Promise<{ loaded: number; total: number }> {
+    const unloaded = new Set((await this.unloadedDocuments()).map((d) => d.id))
+    const active = (await this.db.documents.toArray()).filter((d) => !d.deletedAt)
+    return {
+      loaded: active.filter((d) => !unloaded.has(d.id)).length,
+      total: active.length,
+    }
+  }
+
   /** Pages of a workspace whose content is on this device, tombstones included. */
   async loadedDocumentIds(workspaceId: string): Promise<string[]> {
     const unloaded = new Set((await this.unloadedDocuments(workspaceId)).map((d) => d.id))

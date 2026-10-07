@@ -20,6 +20,8 @@ import {
 } from '../push-notifications'
 import { resetAppCache } from '../pwa'
 import { requestSync, syncState } from '../sync/engine'
+import { loadAllDocuments, type MakeOfflineProgress, type MakeOfflineResult } from '../sync/offline'
+import type { OfflineMode } from '../local/db'
 
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -142,6 +144,72 @@ async function resync() {
   } finally {
     resyncing.value = false
   }
+}
+
+// ------------------------------------------------------------------ offline pages (ADR 0017)
+
+const offlineMode = ref<OfflineMode | null>(null)
+const pageCounts = ref<{ loaded: number; total: number } | null>(null)
+/** Running "make everything available offline": pages first, then attachments. */
+const makeOffline = ref<
+  { phase: 'pages'; progress: MakeOfflineProgress } | { phase: 'attachments' } | null
+>(null)
+const makeOfflineResult = ref<string | null>(null)
+let makeOfflineAbort: AbortController | null = null
+
+async function loadOfflineState() {
+  const store = requireStore()
+  offlineMode.value = await store.offlineMode()
+  pageCounts.value = await store.documentCounts()
+}
+onMounted(loadOfflineState)
+
+const PAGES_STOPPED: Record<NonNullable<MakeOfflineResult['stopped']>, string> = {
+  cancelled: 'Abgebrochen. Bereits geladene Seiten bleiben auf diesem Gerät.',
+  offline: 'Verbindung unterbrochen. Bereits geladene Seiten bleiben auf diesem Gerät.',
+}
+
+async function makeEverythingOffline() {
+  const store = requireStore()
+  makeOfflineResult.value = null
+  attachmentResult.value = null
+  makeOfflineAbort = new AbortController()
+  const signal = makeOfflineAbort.signal
+  try {
+    makeOffline.value = { phase: 'pages', progress: { done: 0, total: 0 } }
+    const pages = await loadAllDocuments(store, {
+      signal,
+      onProgress: (progress) => (makeOffline.value = { phase: 'pages', progress }),
+    })
+    if (pages.stopped) {
+      makeOfflineResult.value = PAGES_STOPPED[pages.stopped]
+      return
+    }
+    makeOffline.value = { phase: 'attachments' }
+    attachmentAbort = makeOfflineAbort
+    const attachments = await downloadAllAttachments(store, {
+      onProgress: (progress) => (attachmentProgress.value = progress),
+      signal,
+    })
+    attachmentResult.value = attachments
+    makeOfflineResult.value = 'Alle Seiten sind auf diesem Gerät.'
+  } catch (error) {
+    makeOfflineResult.value = `Laden fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`
+  } finally {
+    makeOfflineAbort = null
+    attachmentAbort = null
+    attachmentProgress.value = null
+    makeOffline.value = null
+    await loadOfflineState()
+    await loadAttachmentTotals()
+    usage.value = await storageUsage()
+  }
+}
+
+async function loadOnDemand() {
+  await requireStore().setOfflineModeOnDemand()
+  makeOfflineResult.value = null
+  await loadOfflineState()
 }
 
 // ------------------------------------------------------------------ offline attachments
@@ -344,9 +412,57 @@ async function changePassword() {
     </p>
 
     <h2>Offline verfügbar</h2>
-    <p class="muted">
-      Seiten sind vollständig auf diesem Gerät. Anhänge lädt die App, sobald eine Seite sie zeigt;
-      hier lassen sich alle auf einmal laden, z. B. vor einer Reise.
+    <p class="muted" data-testid="offline-mode">
+      <template v-if="offlineMode === 'all'">
+        Dieses Gerät hält alle Seiten offline bereit, auch neue von anderen Geräten.
+      </template>
+      <template v-else>
+        Dieses Gerät lädt den Inhalt einer Seite, sobald sie geöffnet wird; geöffnete Seiten bleiben
+        offline verfügbar. Anhänge lädt die App, sobald eine Seite sie zeigt. Vor einer Reise lässt
+        sich alles auf einmal laden.
+      </template>
+    </p>
+    <p v-if="pageCounts" data-testid="offline-pages">
+      {{ pageCounts.loaded.toLocaleString('de-DE') }} von
+      {{ pageCounts.total.toLocaleString('de-DE') }} Seiten auf diesem Gerät.
+    </p>
+    <template v-if="!makeOffline">
+      <button
+        v-if="offlineMode !== 'all'"
+        type="button"
+        :disabled="connection !== 'online'"
+        data-testid="make-offline"
+        @click="makeEverythingOffline"
+      >
+        Alles offline verfügbar machen
+      </button>
+      <button
+        v-else
+        type="button"
+        class="secondary"
+        data-testid="load-on-demand"
+        @click="loadOnDemand"
+      >
+        Nur bei Bedarf laden
+      </button>
+    </template>
+    <template v-else>
+      <p v-if="makeOffline.phase === 'pages'" class="muted" data-testid="make-offline-progress">
+        <progress :value="makeOffline.progress.done" :max="makeOffline.progress.total || 1" />
+        {{ makeOffline.progress.done.toLocaleString('de-DE') }} von
+        {{ makeOffline.progress.total.toLocaleString('de-DE') }} Seiten geladen
+      </p>
+      <button
+        v-if="makeOffline.phase === 'pages'"
+        type="button"
+        data-testid="make-offline-cancel"
+        @click="makeOfflineAbort?.abort()"
+      >
+        Abbrechen
+      </button>
+    </template>
+    <p v-if="makeOfflineResult" role="status" data-testid="make-offline-result">
+      {{ makeOfflineResult }}
     </p>
     <p v-if="attachmentTotals" data-testid="offline-attachments">
       {{ attachmentTotals.local.toLocaleString('de-DE') }} von
@@ -356,7 +472,7 @@ async function changePassword() {
       von {{ formatBytes(attachmentTotals.bytes) }}).
     </p>
     <button
-      v-if="!attachmentProgress"
+      v-if="!attachmentProgress && !makeOffline"
       type="button"
       :disabled="
         connection !== 'online' ||
@@ -367,7 +483,7 @@ async function changePassword() {
     >
       Alle Anhänge offline verfügbar machen
     </button>
-    <template v-else>
+    <template v-else-if="attachmentProgress">
       <p class="muted" data-testid="offline-attachments-progress">
         <progress :value="attachmentProgress.bytes" :max="attachmentProgress.totalBytes || 1" />
         {{ attachmentProgress.done.toLocaleString('de-DE') }} von

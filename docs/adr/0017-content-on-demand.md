@@ -65,7 +65,7 @@ Angenommen am 2026-10-07 ([#112](https://github.com/mszkb/notion-alternative/iss
   - Der Editor zeigt „Inhalt ist nicht auf diesem Gerät. Er wird geladen, sobald der Server erreichbar ist.“
   - Nichts lässt sich bearbeiten, keine leere Seite täuscht Inhalt vor.
 - **Einstellungen, Abschnitt „Offline verfügbar“:**
-  - Der Knopf „Alles offline verfügbar machen“ lädt alle Seiteninhalte (seitenweiser Snapshot wie heute) und alle Anhänge, mit Fortschrittsbalken. Erst wenn alles geladen ist, steht das Gerät auf `offlineMode = all`.
+  - Der Knopf „Alles offline verfügbar machen“ lädt alle fehlenden Seiteninhalte Seite für Seite (`GET /api/sync/documents/:id`, damit Abbrechen und Fortsetzen ohne erneuten Gesamtdownload gehen) und alle Anhänge, mit Fortschrittsbalken. Erst wenn alles geladen ist, steht das Gerät auf `offlineMode = all`.
   - „Abbrechen“ beendet das Laden sofort. Was bis dahin geladen ist, bleibt geladen; das Gerät bleibt bei „bei Bedarf“. Ein erneuter Klick setzt fort und lädt nur, was noch fehlt.
   - „Nur bei Bedarf laden“ stellt zurück, Geladenes bleibt.
   - Angezeigt wird, wie viele Seiten geladen sind und wie viel Speicher das belegt.
@@ -73,7 +73,7 @@ Angenommen am 2026-10-07 ([#112](https://github.com/mszkb/notion-alternative/iss
 - **Suche:**
   - Online ergänzt die Serversuche (FTS5) die lokale Suche.
   - Offline sagt ein Hinweis, dass nur geladene Seiten durchsucht werden.
-  - Backlinks kommen online vom Server, offline aus dem lokalen Index, mit demselben Hinweis.
+  - Backlinks kommen aus dem lokalen Index und zeigen einen Hinweis, solange Seiten nicht geladen sind. Backlinks vom Server folgen bei Bedarf als eigene Aufgabe.
 - **Export:**
   - Online lädt der Export fehlende Seiten vorher (wie heute schon fehlende Anhänge).
   - Offline nennt er die nicht geladenen Seiten im Manifest, statt sie still wegzulassen.

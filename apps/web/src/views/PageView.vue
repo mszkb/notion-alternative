@@ -7,6 +7,8 @@ import { useLiveQuery } from '../composables/live-query'
 import { displayTitle, NO_CHILDREN, useWorkspace } from '../composables/workspace'
 import PageEditor from '../editor/PageEditor.vue'
 import { registerPendingEdits } from '../pending-edits'
+import { connection } from '../session'
+import { ensureDocumentLoaded, type OpenOutcome } from '../sync/offline'
 
 const { store, workspaceId, documentsById, childrenByParent } = useWorkspace()
 const route = useRoute()
@@ -35,7 +37,35 @@ const ancestors = computed(() => {
   return chain
 })
 const children = computed(() => childrenByParent.value.get(documentId) ?? NO_CHILDREN)
+
+// ---------------------------------------------------------------- content on demand (ADR 0017)
+
+/** Whether the page's content is on this device; `loading` while it is fetched. */
+const content = ref<OpenOutcome | 'loading' | 'error'>('loading')
+let loading = false
+
+async function loadContent() {
+  if (loading) return
+  loading = true
+  try {
+    content.value = await ensureDocumentLoaded(store, workspaceId.value, documentId)
+  } catch {
+    content.value = 'error'
+  } finally {
+    loading = false
+  }
+}
+void loadContent()
+// Try again as soon as the server is reachable.
+watch(connection, (state) => {
+  if (state === 'online' && content.value !== 'loaded') void loadContent()
+})
 const backlinks = useLiveQuery(() => store.backlinks(documentId), [])
+/** Backlinks come from pages whose content is on this device (ADR 0017). */
+const unloadedCount = useLiveQuery(
+  async () => (await store.unloadedDocuments(workspaceId.value)).length,
+  0,
+)
 const conflicts = useLiveQuery(
   async () =>
     (await store.openConflicts(workspaceId.value)).filter((c) => c.documentId === documentId),
@@ -166,15 +196,34 @@ async function deletePage() {
       class="page-title"
       placeholder="Unbenannt"
       aria-label="Titel"
+      :readonly="content !== 'loaded'"
       :maxlength="DOCUMENT_TITLE_MAX_LENGTH"
       @input="onTitleInput"
       @blur="saveTitle"
       @keydown.enter.prevent="focusFirstBlock"
     />
 
-    <TagBar :document-id="document.id" />
-
-    <PageEditor :document-id="document.id" />
+    <template v-if="content === 'loaded'">
+      <TagBar :document-id="document.id" />
+      <PageEditor :document-id="document.id" />
+    </template>
+    <p v-else-if="content === 'loading'" class="muted" data-testid="page-content-loading">
+      Inhalt wird geladen …
+    </p>
+    <p v-else class="notice" role="status" data-testid="page-content-unavailable">
+      <template v-if="content === 'offline'">
+        Der Inhalt dieser Seite ist nicht auf diesem Gerät. Er wird geladen, sobald der Server
+        erreichbar ist. Damit alle Seiten auch ohne Verbindung da sind:
+        <RouterLink :to="{ name: 'account' }">Konto → Offline verfügbar</RouterLink>.
+      </template>
+      <template v-else-if="content === 'missing'">
+        Der Inhalt dieser Seite ist auf dem Server nicht verfügbar.
+      </template>
+      <template v-else>
+        Der Inhalt dieser Seite konnte nicht geladen werden.
+        <button type="button" class="secondary" @click="loadContent">Erneut versuchen</button>
+      </template>
+    </p>
 
     <section v-if="children.length" class="page-section" aria-labelledby="subpages">
       <h2 id="subpages">Unterseiten</h2>
@@ -197,6 +246,12 @@ async function deletePage() {
         </li>
       </ul>
       <p v-else class="muted">Keine Seite verlinkt hierher. Mit <kbd>[[</kbd> im Text verlinken.</p>
+      <p v-if="unloadedCount" class="muted" data-testid="backlinks-partial">
+        Berücksichtigt sind Seiten, deren Inhalt auf diesem Gerät ist ({{
+          unloadedCount.toLocaleString('de-DE')
+        }}
+        weitere nicht).
+      </p>
     </section>
   </article>
 
