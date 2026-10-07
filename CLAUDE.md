@@ -21,6 +21,7 @@ Entschieden (`Accepted`):
 - **Bibliotheken** ([ADR 0007](docs/adr/0007-foundation-libraries.md)): pnpm, Kysely + better-sqlite3, zod, esbuild, Vitest, ESLint + Prettier, nginx.
 - **Editor** ([ADR 0008](docs/adr/0008-block-editor.md)): eigener Block-Editor (ein `contenteditable` pro Block); `Block.content` ist Markdown-Inline, Seitenlinks `[Titel](page:<uuid>)`, kursiv wird als `_x_` geschrieben.
 - **Lokale Datenschicht** ([ADR 0009](docs/adr/0009-local-data-layer.md)): eine Dexie-DB pro Benutzer, Operationen in derselben Transaktion, Entität `document_tag`, Feldnamen camelCase, MiniSearch für die lokale Suche, Offline-Start mit zwischengespeichertem Benutzer.
+- **Inhalte bei Bedarf** ([ADR 0017](docs/adr/0017-content-on-demand.md)): neue Geräte laden Seitenbaum und Metadaten, Seiteninhalte beim Öffnen; `unloadedDocuments` (Dexie v5) markiert fehlende Inhalte, „Alles offline verfügbar machen“ stellt auf `offlineMode = all`.
 - **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. Kein dritter Container.
 - **HTTPS für Smartphones** ([ADR 0011](docs/adr/0011-https-for-mobile-devices.md)): Home-Lab/Raspberry Pi per `tailscale serve`, sonst Webhosting bzw. vorhandener Reverse Proxy; keine Code-Änderung, `COOKIE_SECURE=true`.
 
@@ -36,7 +37,7 @@ Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaff
 | `docs/adr/` | Architecture Decision Records (Vorlage: `0000-template.md`) |
 | `docs/process/` | Definition of Done, Aufgabenzerlegung für den Roadmap-Agenten |
 | `docs/testing/` | Testmatrix (offline/online, Mehrgeräte, Konflikte, Backups, Migrationen) |
-| `docs/user/` | Anleitungen für Nutzer (z. B. App installieren) |
+| `docs/user/` | Anleitungen für Nutzer (App installieren, Seiten bearbeiten, Export und Import) |
 | `docs/privacy/` | Datenschutz, z. B. Datenkatalog der Opt-in-Telemetrie |
 
 Bei Fragen zu Scope oder Architektur zuerst dort nachlesen, nicht raten.
@@ -107,7 +108,8 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Exportformat (`jsonExportSchema`) ändern: `EXPORT_SCHEMA_VERSION` erhöhen, Migration in `packages/shared/src/import.ts` ergänzen, JSON Schema und Fixture neu erzeugen (siehe `apps/server/test/fixtures/exports/README.md`); bestehende Fixtures nie ändern.
 - Lokales Schema ändern: neue `this.version(n + 1)` in `apps/web/src/local/db.ts` mit Upgrade; bestehende Versionen nie ändern (T-MIG-02).
 - Neue Abhängigkeiten im Server-Image müssen auf `linux/arm64` ohne Compiler installierbar sein (Prebuild im Paket); der arm64-Build im Gitea-Nightly (`msz/gitea-workflows`, 22:00) prüft das.
-- Editor: Neue strukturelle Schritte in `PageEditor.vue` rufen vorher `checkpoint()` auf, sonst fehlen sie im blockübergreifenden Undo (ADR 0008).
+- Editor: Neue strukturelle Schritte in `PageEditor.vue` rufen vorher `checkpoint()` auf, sonst fehlen sie im blockübergreifenden Undo (ADR 0008). Kinder eines Toggles sind die folgenden Blöcke mit größerem `attrs.indent` (ADR 0019, Proposed).
+- Oberfläche: Farben, Abstände, Schriftgrößen, Radien und Schatten nur über die Tokens in `apps/web/src/styles.css` (`docs/product/ux-guide.md`).
 - Service Worker: `apps/web/src/sw/service-worker.ts`, gebaut von `apps/web/service-worker.plugin.ts` (Precache-Liste, Version) – nur im Production-Build. PWA-E2E (`e2e/pwa-*.spec.ts`) laufen im Playwright-Projekt `pwa` gegen `vite preview`. Komponenten mit entprellten Eingaben melden ihren Flush über `registerPendingEdits` an (Update-Neuladen).
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
 - Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.
