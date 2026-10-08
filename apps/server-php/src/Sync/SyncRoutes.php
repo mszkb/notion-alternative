@@ -14,6 +14,7 @@ use NotionAlt\Http\AfterResponse;
 use NotionAlt\Http\HttpError;
 use NotionAlt\Http\Json;
 use NotionAlt\Http\JsonBodyMiddleware;
+use NotionAlt\Metrics\Metrics;
 use NotionAlt\Push\PushNotifier;
 use NotionAlt\Push\PushRoutes;
 use NotionAlt\Search\SearchIndex;
@@ -36,15 +37,16 @@ final class SyncRoutes
         private readonly AttachmentsConfig $attachments,
         private readonly PushConfig $push,
         private readonly AfterResponse $after,
+        private readonly Metrics $metrics,
     ) {}
 
     /**
      * @param RouteCollectorProxyInterface<null> $api
      * @param \Closure(): \PDO                   $db
      */
-    public static function register(RouteCollectorProxyInterface $api, \Closure $db, AttachmentsConfig $attachments, PushConfig $push, AfterResponse $after): void
+    public static function register(RouteCollectorProxyInterface $api, \Closure $db, AttachmentsConfig $attachments, PushConfig $push, AfterResponse $after, Metrics $metrics): void
     {
-        $routes = new self($db, $attachments, $push, $after);
+        $routes = new self($db, $attachments, $push, $after, $metrics);
         $auth = new RequireAuth($db);
         $api->post('/sync/push', $routes->push(...))->add($auth);
         $api->get('/sync/pull', $routes->pull(...))->add($auth);
@@ -80,12 +82,22 @@ final class SyncRoutes
         }
         // Tell the owner's other devices that changes are waiting (a hint only, ADR 0005).
         $changed = [];
+        $statuses = [];
         foreach ($applied as $i => $result) {
+            $status = (string) ($result['status'] ?? '');
+            $statuses[$status] = ($statuses[$status] ?? 0) + 1;
             if (\in_array($result['status'] ?? null, ['applied', 'merged', 'conflict'], true)) {
                 $changed[$operations[$i]->workspaceId] = $operations[$i]->deviceId;
             }
         }
         PushRoutes::afterChanges($db, $this->push, $this->after, $changed);
+        if ($this->metrics->enabled) {
+            $this->after->add(function () use ($statuses): void {
+                foreach ($statuses as $status => $count) {
+                    $this->metrics->inc('sync_push_operations_total', ['status' => (string) $status], $count);
+                }
+            });
+        }
 
         return Json::respond($response, ['results' => $results]);
     }

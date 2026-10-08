@@ -17,6 +17,9 @@ use NotionAlt\Http\JsonBodyMiddleware;
 use NotionAlt\Http\RequestLogMiddleware;
 use NotionAlt\Import\ImportRoutes;
 use NotionAlt\Logging\Logger;
+use NotionAlt\Metrics\Metrics;
+use NotionAlt\Metrics\MetricsMiddleware;
+use NotionAlt\Metrics\MetricsRoutes;
 use NotionAlt\Push\PushRoutes;
 use NotionAlt\Search\SearchRoutes;
 use NotionAlt\Sync\SyncRoutes;
@@ -40,24 +43,31 @@ final class AppFactory
         $responseFactory = new ResponseFactory();
         $app = new App($responseFactory);
         $app->setBasePath($basePath);
-
-        // Slim runs the middleware added last first: log → errors → routing → body → route.
-        $app->add(new JsonBodyMiddleware());
-        $app->addRoutingMiddleware();
-        $errors = $app->addErrorMiddleware(false, false, false);
-        $errors->setDefaultErrorHandler(new ErrorHandler($responseFactory, $logger));
-        $app->add(new RequestLogMiddleware($logger));
-
         // Cheap to build: no I/O until a request needs it.
         $store ??= ContentStore::fromConfig($config->attachments);
         $after ??= new AfterResponse();
 
-        $app->group('/api', /** @param RouteCollectorProxyInterface<null> $api */ static function (RouteCollectorProxyInterface $api) use ($db, $logger, $config, $store, $after): void {
+        // Slim runs the middleware added last first: log → metrics → errors → routing → body →
+        // metrics (route template) → route.
+        $metrics = new Metrics($config->metricsEnabled, $db, $config->databasePath, $logger);
+        $app->add(new MetricsMiddleware($metrics, $after, inner: true));
+        $app->add(new JsonBodyMiddleware());
+        $app->addRoutingMiddleware();
+        $errors = $app->addErrorMiddleware(false, false, false);
+        $errors->setDefaultErrorHandler(new ErrorHandler($responseFactory, $logger));
+        $app->add(new MetricsMiddleware($metrics, $after));
+        $app->add(new RequestLogMiddleware($logger));
+
+
+        $app->group('/api', /** @param RouteCollectorProxyInterface<null> $api */ static function (RouteCollectorProxyInterface $api) use ($db, $logger, $config, $store, $after, $metrics): void {
             HealthRoutes::register($api, $db, $logger);
             AuthRoutes::register($api, $db, $config, $logger);
             WorkspaceRoutes::register($api, $db);
             DeviceRoutes::register($api, $db, $logger);
-            SyncRoutes::register($api, $db, $config->attachments, $config->push, $after);
+            if ($config->metricsEnabled) {
+                MetricsRoutes::register($api, $metrics);
+            }
+            SyncRoutes::register($api, $db, $config->attachments, $config->push, $after, $metrics);
             SearchRoutes::register($api, $db);
             AttachmentRoutes::register($api, $db, $config->attachments, $store);
             HistoryRoutes::register($api, $db);

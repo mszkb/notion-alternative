@@ -41,6 +41,8 @@ final class Server
                 $response = $response->withHeader('Content-Length', (string) $size);
             }
         }
+        // Fastify sends no such header; it only tells attackers the PHP version.
+        header_remove('X-Powered-By');
         (new ResponseEmitter())->emit($response);
         $after->run($logger);
     }
