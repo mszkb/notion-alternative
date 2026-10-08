@@ -86,6 +86,25 @@ final class AttemptLimiterTest extends TestCase
         );
     }
 
+    /** A flood of new keys pushes out the oldest, per limiter (security review L3). */
+    public function testHoldsAtMostMaxEntriesPerLimiter(): void
+    {
+        $emails = new AttemptLimiter($this->db, 'login_email', 3, 60_000, fn(): int => $this->now, 5);
+        $ips = $this->limiter(3);
+        $ips->record('10.0.0.1');
+        for ($i = 0; $i < 12; ++$i) {
+            ++$this->now;
+            $emails->record("user{$i}@example.com");
+        }
+        $emails->record('user11@example.com');
+
+        $keys = array_column(Sql::rows($this->db, 'select key from auth_attempts order by key'), 'key');
+        self::assertSame(
+            ['login_email:user10@example.com', 'login_email:user11@example.com', 'login_email:user7@example.com', 'login_email:user8@example.com', 'login_email:user9@example.com', 'login_ip:10.0.0.1'],
+            $keys,
+        );
+    }
+
     private function limiter(int $max, string $name = 'login_ip'): AttemptLimiter
     {
         return new AttemptLimiter($this->db, $name, $max, 60_000, fn(): int => $this->now);
