@@ -16,7 +16,7 @@ Für gewöhnliches Webhosting mit PHP, HTTPS und Cron, ohne Docker ([ADR 0018](.
 2. Den **Inhalt** des Ordners `notion-alt/` in das Webverzeichnis der Domain hochladen (oft `public_html/` oder `htdocs/`). Versteckte Dateien (`.htaccess`) mit hochladen.
 3. Einen Ordner für die Daten **außerhalb** des Webverzeichnisses anlegen, z. B. `/home/<Benutzer>/notion-data`.
 4. `api/app/config.example.php` als `api/app/config.php` kopieren und anpassen: `DATA_DIR` auf den Datenordner, `COOKIE_SECURE` auf `true`, zum Anlegen des ersten Kontos `ALLOW_REGISTRATION` auf `true`.
-5. `https://<Domain>/api/check.php` öffnen. Die Seite prüft PHP-Version, Erweiterungen, FTS5, Schreibrechte, Lage des Datenordners und das Speicherlimit. Sind alle Punkte grün, `api/check.php` löschen.
+5. `https://<Domain>/api/check.php` öffnen. Die Seite prüft PHP-Version, Erweiterungen, FTS5, Schreibrechte, Lage des Datenordners und das Speicherlimit. Sind alle Punkte grün, `api/check.php` löschen. Sobald das erste Konto angelegt ist, zeigt die Seite ohnehin nichts mehr außer diesem Hinweis.
 6. Den Cron-Eintrag anlegen, alle 5 Minuten:
 
    ```sh

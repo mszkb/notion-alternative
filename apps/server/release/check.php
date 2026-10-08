@@ -2,7 +2,8 @@
 
 // Setup check of the shared-hosting package (#128): open https://<host>/api/check.php after the
 // upload. Shows only yes/no results, no paths or values from the configuration. Delete the file
-// once everything is green. Written without PHP 8 syntax, so it also explains an outdated PHP.
+// once everything is green; once an account exists it shows nothing but that hint (404).
+// Written without PHP 8 syntax, so it also explains an outdated PHP.
 
 declare(strict_types=1);
 
@@ -52,6 +53,24 @@ if ($modernPhp && is_file($autoload)) {
         notionAltCheck($checks, 'Konfiguration gültig (app/config.php)', true);
     } catch (Throwable $error) {
         notionAltCheck($checks, 'Konfiguration gültig (app/config.php)', false, 'Die Werte in app/config.php prüfen (siehe config.example.php).');
+    }
+}
+if ($config !== null && is_file($config->databasePath)) {
+    try {
+        $existing = NotionAlt\Database\Database::open($config->databasePath);
+        $users = $existing->query('select count(*) from users');
+        $setUp = $users !== false && (int) $users->fetchColumn() > 0;
+    } catch (Throwable $error) {
+        $setUp = false;
+    }
+    if ($setUp) {
+        // In use: no details for anonymous visitors.
+        http_response_code(404);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo "Die Einrichtung ist abgeschlossen. Bitte api/check.php löschen.\n";
+
+        exit;
     }
 }
 if ($config !== null) {
