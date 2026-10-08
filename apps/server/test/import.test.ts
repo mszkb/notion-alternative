@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
+  convertNotionExport,
   createJsonExport,
   type JsonExport,
   type Operation,
@@ -240,6 +241,45 @@ describe('POST /api/import', () => {
     )
   })
 
+  it('#137: accepts a converted Notion export with pages, links, to-dos and an image', async () => {
+    const id = (n: number) => n.toString(16).padStart(32, 'b')
+    const enc = (text: string) => new TextEncoder().encode(text)
+    const { data, attachments } = await convertNotionExport(
+      [
+        {
+          path: `Start ${id(1)}.md`,
+          data: enc(
+            `# Start\n\n- [x] erledigt\n\nSiehe [Unter](Start%20${id(1)}/Unter%20${id(2)}.md)\n\n![Bild](Start%20${id(1)}/bild.png)\n`,
+          ),
+        },
+        { path: `Start ${id(1)}/bild.png`, data: new Uint8Array(PNG) },
+        { path: `Start ${id(1)}/Unter ${id(2)}.md`, data: enc('# Unter\n\nText\n') },
+      ],
+      { workspace: { id: randomUUID(), name: 'Aus Notion' }, newId: randomUUID, now: new Date() },
+    )
+    const response = await importInto(target, data, 'Aus Notion')
+    expect(response.statusCode).toBe(201)
+    const workspaceId = response.json().workspace.id
+    const snapshot = (
+      await target.app.inject({
+        url: `/api/sync/snapshot?workspaceId=${workspaceId}`,
+        headers: { cookie: target.cookie },
+      })
+    ).json() as SyncSnapshotResponse
+    expect(snapshot.documents.map((d) => d.title).sort()).toEqual(['Start', 'Unter'])
+    const unter = snapshot.documents.find((d) => d.title === 'Unter')!
+    expect(snapshot.blocks.map((b) => b.content)).toContain(`Siehe [Unter](page:${unter.id})`)
+    expect(snapshot.blocks.find((b) => b.type === 'todo')!.attrs).toEqual({ checked: true })
+    const [image] = snapshot.attachments
+    const upload = await target.app.inject({
+      method: 'PUT',
+      url: `/api/attachments/${image!.id}/content`,
+      headers: { cookie: target.cookie, 'content-type': 'application/octet-stream' },
+      payload: Buffer.from(attachments.get(image!.id)!),
+    })
+    expect(upload.statusCode).toBe(204)
+  })
+
   it('validates references, schema and limits', async () => {
     const data = await exportFrom(source)
     const orphan = {
@@ -271,7 +311,7 @@ describe('POST /api/import', () => {
     })
     expect(self.statusCode).toBe(400)
 
-    const wrongVersion = await importInto(target, { ...data, schema_version: 2 } as never)
+    const wrongVersion = await importInto(target, { ...data, schema_version: 4 } as never)
     expect(wrongVersion.statusCode).toBe(400)
 
     const huge = {

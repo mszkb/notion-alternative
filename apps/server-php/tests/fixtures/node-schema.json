@@ -297,7 +297,7 @@
     "type": "table",
     "name": "documents",
     "tbl_name": "documents",
-    "sql": "CREATE TABLE \"documents\" (\"id\" text primary key, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"parent_id\" text, \"title\" text not null, \"sort_key\" text not null, \"favorite\" integer not null, \"created_at\" text not null, \"updated_at\" text not null, \"revision\" integer not null, \"deleted_at\" text)"
+    "sql": "CREATE TABLE \"documents\" (\"id\" text primary key, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"parent_id\" text, \"title\" text not null, \"sort_key\" text not null, \"favorite\" integer not null, \"created_at\" text not null, \"updated_at\" text not null, \"revision\" integer not null, \"deleted_at\" text, \"icon\" text, \"cover\" text)"
   },
   {
     "type": "table",

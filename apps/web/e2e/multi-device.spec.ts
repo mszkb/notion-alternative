@@ -83,6 +83,7 @@ test('T-DEL-02: an edit on a page another device deleted is kept and can be rest
   await waitForSaved(other)
 
   page.once('dialog', (dialog) => void dialog.accept())
+  await page.getByRole('button', { name: 'Seitenmenü' }).click()
   await page.getByRole('button', { name: 'Löschen' }).click()
   await expect(page.getByRole('tree')).not.toContainText('Strittig')
   await synced(page)

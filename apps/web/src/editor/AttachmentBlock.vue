@@ -75,27 +75,27 @@ const placeholder = computed(() => {
 .attachment {
   flex: 1;
   min-width: 0;
-  margin: 0.2rem 0;
+  margin: var(--space-2xs) 0;
 }
 
 .attachment img {
   display: block;
   max-width: 100%;
   max-height: 32rem;
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .attachment-file {
   display: inline-flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   align-items: baseline;
-  padding: 0.35rem 0.6rem;
+  padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .attachment-placeholder {
   margin: 0;
-  padding: 0.35rem 0;
+  padding: var(--space-xs) 0;
 }
 </style>

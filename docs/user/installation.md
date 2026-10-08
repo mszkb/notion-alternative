@@ -34,7 +34,13 @@ In der installierten App erscheinen weder der Button noch der Hinweis.
 
 ## Offline verfügbar machen
 
-Seiten liegen vollständig auf jedem Gerät. Bilder und Dateien lädt die App erst, wenn eine Seite sie zeigt, und behält sie dann. Vor einer Reise oder einem Flug: **Konto → Offline verfügbar → „Alle Anhänge offline verfügbar machen“**. Ein Balken zeigt den Fortschritt, „Abbrechen“ hält an; Geladenes bleibt. Anhänge, die ein anderes Gerät noch nicht hochgeladen hat, kommen beim nächsten Mal.
+Ein neues Gerät lädt zuerst nur den Seitenbaum mit Titeln, Tags und Favoriten. Den Inhalt einer Seite lädt die App, sobald sie geöffnet wird, und behält ihn dann; die Seite ist ab da auch offline verfügbar. Bilder und Dateien lädt die App, wenn eine Seite sie zeigt.
+
+Vor einer Reise oder einem Flug: **Konto → Offline verfügbar → „Alles offline verfügbar machen“**. Die App lädt dann alle Seiten und Anhänge; ein Balken zeigt den Fortschritt. „Abbrechen“ hält jederzeit an, Geladenes bleibt, ein erneuter Klick setzt fort. Danach hält das Gerät alle Seiten offline bereit, auch neue von anderen Geräten. „Nur bei Bedarf laden“ stellt zurück.
+
+Nur die Anhänge laden: „Alle Anhänge offline verfügbar machen“. Anhänge, die ein anderes Gerät noch nicht hochgeladen hat, kommen beim nächsten Mal.
+
+Wird ohne Verbindung eine Seite geöffnet, deren Inhalt nicht auf dem Gerät ist, zeigt die App einen Hinweis statt einer leeren Seite. Geräte, die schon vor diesem Update eingerichtet waren, halten weiterhin alle Seiten offline bereit.
 
 ## Prüfliste T-PWA-01 (manuell)
 

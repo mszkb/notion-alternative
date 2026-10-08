@@ -96,6 +96,10 @@ test('all attachments can be made available offline at once, with progress', asy
     other.getByRole('button', { name: 'Alle Anhänge offline verfügbar machen' }),
   ).toBeDisabled()
 
+  // Pages load on demand too (ADR 0017): make everything available before going offline.
+  await other.getByTestId('make-offline').click()
+  await expect(other.getByTestId('make-offline-result')).toContainText('Alle Seiten')
+
   // Without the server, the page shows its image from this device.
   await takeServerDown(other)
   await other.goto('/')

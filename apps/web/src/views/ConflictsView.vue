@@ -191,26 +191,26 @@ async function resolve(conflict: Conflict, resolution: 'local' | 'remote' | 'man
 <style scoped>
 .conflict {
   display: grid;
-  gap: 0.75rem;
-  margin: 1.5rem 0;
-  padding: 1rem;
+  gap: var(--space-md);
+  margin: var(--space-xl) 0;
+  padding: var(--space-lg);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .conflict h2 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
 }
 
 .conflict header p {
-  margin: 0.25rem 0 0;
+  margin: var(--space-xs) 0 0;
 }
 
 .versions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 figure {
@@ -218,31 +218,31 @@ figure {
 }
 
 figcaption {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
 blockquote {
-  margin: 0.35rem 0 0;
-  padding: 0.6rem 0.75rem;
+  margin: var(--space-xs) 0 0;
+  padding: var(--space-sm) var(--space-md);
   white-space: pre-wrap;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-md);
   align-items: center;
 }
 
 textarea {
-  padding: 0.6rem 0.75rem;
+  padding: var(--space-sm) var(--space-md);
   font: inherit;
   color: inherit;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 </style>

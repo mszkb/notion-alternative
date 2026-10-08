@@ -29,6 +29,8 @@ import AttachmentBlock from './AttachmentBlock.vue'
 import { EditHistory } from './history'
 import { renderInline, serializeDom } from './inline-dom'
 import PagePicker, { type PickerChoice } from './PagePicker.vue'
+import { opensSlashMenu, type SlashOption } from './slash'
+import SlashMenu from './SlashMenu.vue'
 
 const props = defineProps<{ documentId: string }>()
 
@@ -613,16 +615,84 @@ function neighbour(id: string, delta: -1 | 1): Block | undefined {
   return index === -1 ? undefined : list[index + delta]
 }
 
-/** Image and file blocks have no text field (ADR 0012). */
+/** Image, file and divider blocks have no text field (ADR 0012, ADR 0019). */
 function isAtom(block: Block | undefined): boolean {
-  return block?.type === 'image' || block?.type === 'file'
+  return block?.type === 'image' || block?.type === 'file' || block?.type === 'divider'
 }
 
-/** Nearest block with a text field in the given direction (skips images and files). */
+/** Nearest visible block with a text field in the given direction. */
 function editableNeighbour(id: string, delta: -1 | 1): Block | undefined {
   let next = neighbour(id, delta)
-  while (next && isAtom(next)) next = neighbour(next.id, delta)
+  while (next && (isAtom(next) || hiddenBlocks.value.has(next.id))) {
+    next = neighbour(next.id, delta)
+  }
   return next
+}
+
+// ------------------------------------------------------------------ toggles, to-dos (ADR 0019)
+
+const COLLAPSED_KEY = 'notion-alt.collapsed-toggles'
+
+function loadCollapsed(): Set<string> {
+  try {
+    const value = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]')
+    return new Set(Array.isArray(value) ? value : [])
+  } catch {
+    return new Set()
+  }
+}
+
+/** Collapsed toggles, per device (not synchronised, like in Notion). */
+const collapsedToggles = ref(loadCollapsed())
+
+function toggleCollapsed(id: string) {
+  const next = new Set(collapsedToggles.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  collapsedToggles.value = next
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next].slice(-500)))
+  } catch {
+    // Not remembered; applies until reload.
+  }
+}
+
+/** Children of collapsed toggles: the following blocks with a larger indent. */
+const hiddenBlocks = computed(() => {
+  const hidden = new Set<string>()
+  let hideAbove: number | null = null
+  for (const block of blocks.value ?? []) {
+    const indent = block.attrs.indent ?? 0
+    if (hideAbove !== null && indent > hideAbove) {
+      hidden.add(block.id)
+      continue
+    }
+    hideAbove = null
+    if (block.type === 'toggle' && collapsedToggles.value.has(block.id)) hideAbove = indent
+  }
+  return hidden
+})
+
+async function toggleChecked(block: Block) {
+  checkpoint()
+  const attrs = { ...block.attrs }
+  if (attrs.checked) delete attrs.checked
+  else attrs.checked = true
+  await setType(block, 'todo', attrs)
+}
+
+async function changeIcon(block: Block) {
+  const icon = window.prompt('Symbol (Emoji)', block.attrs.icon ?? '💡')?.trim()
+  if (!icon || icon === block.attrs.icon) return
+  checkpoint()
+  await setType(block, 'callout', { ...block.attrs, icon: [...icon].slice(0, 4).join('') })
+}
+
+/** Turns a block into a divider and continues with an empty paragraph after it. */
+async function makeDivider(block: Block) {
+  checkpoint()
+  await setType(block, 'divider', {}, 0)
+  await insertParagraphAfter(block.id)
 }
 
 /** Current (possibly unsaved) content of a block. */
@@ -660,9 +730,13 @@ async function splitAtCaret(block: Block, el: HTMLElement) {
   const range = selection.getRangeAt(0)
   if (!el.contains(range.startContainer) && range.startContainer !== el) return
 
-  // Enter on an empty list item or quote leaves the list/quote.
-  if ((block.type === 'list_item' || block.type === 'quote') && textLength(el) === 0) {
-    await setType(block, 'paragraph', {}, 0)
+  const indent = block.attrs.indent ?? 0
+  // Enter on an empty list item, to-do, quote, toggle or callout leaves it.
+  if (
+    ['list_item', 'todo', 'quote', 'toggle', 'callout'].includes(block.type) &&
+    textLength(el) === 0
+  ) {
+    await setType(block, 'paragraph', indent ? { indent } : {}, 0)
     return
   }
   range.deleteContents()
@@ -674,11 +748,8 @@ async function splitAtCaret(block: Block, el: HTMLElement) {
   el.classList.toggle('is-empty', textLength(el) === 0)
   cancelTimer(block.id)
   rendered.set(block.id, head)
-  const created = draftBlock({
-    type: block.type === 'list_item' ? 'list_item' : 'paragraph',
-    attrs: block.type === 'list_item' ? { ...block.attrs } : {},
-    content: tail,
-  })
+  const created = draftBlock(nextBlockAfterEnter(block, tail))
+  if (block.type === 'toggle' && collapsedToggles.value.has(block.id)) toggleCollapsed(block.id)
   pendingFocus = { id: created.id, offset: 0 }
   await structural(
     block.id,
@@ -689,12 +760,18 @@ async function splitAtCaret(block: Block, el: HTMLElement) {
 
 async function backspaceAtStart(block: Block, el: HTMLElement) {
   checkpoint()
-  if (block.type === 'list_item' && (block.attrs.indent ?? 0) > 0) {
+  const indent = block.attrs.indent ?? 0
+  if ((block.type === 'list_item' || block.type === 'todo') && indent > 0) {
     await setIndent(block, -1)
     return
   }
   if (block.type !== 'paragraph') {
-    await setType(block, 'paragraph', {}, 0)
+    await setType(block, 'paragraph', indent ? { indent } : {}, 0)
+    return
+  }
+  if (indent > 0) {
+    // Leaves the toggle level by level before merging.
+    await setIndent(block, -1)
     return
   }
   const previous = neighbour(block.id, -1)
@@ -746,7 +823,40 @@ async function setIndent(block: Block, delta: number) {
   checkpoint()
   const indent = Math.min(MAX_LIST_INDENT, Math.max(0, (block.attrs.indent ?? 0) + delta))
   if (indent === (block.attrs.indent ?? 0)) return
-  await setType(block, 'list_item', { ...block.attrs, indent })
+  const attrs = { ...block.attrs, indent }
+  // A paragraph indented on its own becomes a list item; inside a toggle it keeps its type.
+  const keep = block.type !== 'paragraph' || inToggle(block) || delta < 0
+  await setType(block, keep ? block.type : 'list_item', attrs)
+}
+
+/** Whether a Tab would make the block a child of a toggle above it (ADR 0019). */
+function inToggle(block: Block): boolean {
+  const previous = neighbour(block.id, -1)
+  if (!previous) return false
+  const depth = previous.attrs.indent ?? 0
+  return (
+    (previous.type === 'toggle' && (block.attrs.indent ?? 0) <= depth) ||
+    ((block.attrs.indent ?? 0) > 0 && previous.type !== 'list_item')
+  )
+}
+
+/** Type of the block Enter creates after `block`. */
+function nextBlockAfterEnter(block: Block, content: string) {
+  const indent = block.attrs.indent ?? 0
+  if (block.type === 'list_item')
+    return { type: 'list_item' as const, attrs: { ...block.attrs }, content }
+  if (block.type === 'todo') {
+    return { type: 'todo' as const, attrs: indent ? { indent } : {}, content }
+  }
+  // After a toggle the new block is its first child.
+  if (block.type === 'toggle') {
+    return {
+      type: 'paragraph' as const,
+      attrs: { indent: Math.min(MAX_LIST_INDENT, indent + 1) },
+      content,
+    }
+  }
+  return { type: 'paragraph' as const, attrs: indent ? { indent } : {}, content }
 }
 
 async function move(block: Block, direction: -1 | 1) {
@@ -812,6 +922,8 @@ const SHORTCUTS: [RegExp, BlockType, BlockAttrs][] = [
   [/^1[.)] /, 'list_item', { list: 'ordered', indent: 0 }],
   [/^> /, 'quote', {}],
   [/^```/, 'code', {}],
+  [/^\[\]? ?\] /, 'todo', {}],
+  [/^---$/, 'divider', {}],
 ]
 
 /** Removes the first `count` characters (a typed shortcut prefix) from the element's text. */
@@ -834,6 +946,11 @@ function applyShortcut(block: Block, el: HTMLElement): boolean {
     if (!match || getCaretOffset(el) !== match[0].length) continue
     checkpoint()
     deleteLeadingText(el, match[0].length)
+    if (type === 'divider') {
+      if (textLength(el) > 0) return false
+      void makeDivider(block)
+      return true
+    }
     void setType({ ...block, content: serializeDom(el) }, type, attrs, 0)
     return true
   }
@@ -850,6 +967,12 @@ function onInput(block: Block, event: Event) {
     const input = event as InputEvent
     if (input.inputType === 'insertText' && input.data === '[' && textBeforeCaret(2) === '[[') {
       openPicker(block, el, 'page', 2)
+    } else if (
+      input.inputType === 'insertText' &&
+      input.data === '/' &&
+      opensSlashMenu(textBeforeCaret(2))
+    ) {
+      openSlash(block, el)
     }
   }
   scheduleSave(block.id)
@@ -960,7 +1083,12 @@ function onKeydown(block: Block, event: KeyboardEvent) {
       }
       return
     case 'Tab':
-      if (block.type === 'list_item') {
+      if (
+        block.type === 'list_item' ||
+        block.type === 'todo' ||
+        (block.attrs.indent ?? 0) > 0 ||
+        (!event.shiftKey && inToggle(block))
+      ) {
         event.preventDefault()
         void setIndent(block, event.shiftKey ? -1 : 1)
       }
@@ -1105,6 +1233,112 @@ function closePicker(refocus: boolean) {
   if (state && refocus) elements.get(state.blockId)?.focus()
 }
 
+// ------------------------------------------------------------------ slash menu (#133)
+
+const slash = ref<{
+  blockId: string
+  /** Caret offset in characters right after the typed "/" (survives re-rendering). */
+  offset: number
+  position: { top: number; left: number }
+} | null>(null)
+
+function openSlash(block: Block, el: HTMLElement) {
+  const selection = document.getSelection()
+  if (!selection?.rangeCount) return
+  const range = selection.getRangeAt(0)
+  if (!el.contains(range.startContainer) && range.startContainer !== el) return
+  const rect = range.getBoundingClientRect()
+  const box = el.getBoundingClientRect()
+  slash.value = {
+    blockId: block.id,
+    offset: getCaretOffset(el) ?? 0,
+    position: {
+      top: (rect.bottom || box.bottom) + 6,
+      left: Math.min(rect.left || box.left, window.innerWidth - 320),
+    },
+  }
+}
+
+function closeSlash(refocus: boolean) {
+  const state = slash.value
+  slash.value = null
+  const el = state ? elements.get(state.blockId) : undefined
+  if (!state || !el || !refocus) return
+  el.focus()
+  setCaretOffset(el, Math.min(state.offset, textLength(el)))
+}
+
+/** Removes the typed "/" (the character before `offset`) and puts the caret there. */
+function removeSlash(state: { offset: number }, el: HTMLElement) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+  let seen = 0
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    if (seen + node.data.length >= state.offset) {
+      const at = state.offset - seen - 1
+      if (at >= 0 && node.data[at] === '/') node.deleteData(at, 1)
+      break
+    }
+    seen += node.data.length
+  }
+  el.classList.toggle('is-empty', textLength(el) === 0)
+  el.focus()
+  setCaretOffset(el, Math.max(0, state.offset - 1))
+}
+
+async function chooseSlash(option: SlashOption) {
+  const state = slash.value
+  slash.value = null
+  const block = state ? blockById.value.get(state.blockId) : undefined
+  const el = state ? elements.get(state.blockId) : undefined
+  if (!state || !block || !el) return
+  checkpoint()
+  removeSlash(state, el)
+  scheduleSave(block.id)
+  if (option.kind === 'type' && option.type === 'divider') {
+    if (textLength(el) === 0) {
+      await makeDivider(block)
+    } else {
+      await flush(block.id)
+      const divider = draftBlock({ type: 'divider', attrs: {}, content: '' })
+      await structural(
+        divider.id,
+        (list) => insertAfter(list, block.id, divider),
+        () => store.createBlock(props.documentId, divider, { afterId: block.id }),
+      )
+      await insertParagraphAfter(divider.id)
+    }
+  } else if (option.kind === 'type') {
+    if (textLength(el) === 0 || block.type === option.type) {
+      // An empty block turns into the chosen type, as in Notion.
+      await setType(block, option.type, option.attrs, 0)
+    } else {
+      await flush(block.id)
+      await insertBlockAfter(block.id, option.type, option.attrs, '')
+    }
+  } else if (option.kind === 'file') {
+    chooseFiles(block.id)
+  } else {
+    openPicker(block, el, 'page', 0)
+  }
+}
+
+async function insertBlockAfter(
+  afterId: string | null,
+  type: BlockType,
+  attrs: BlockAttrs,
+  content: string,
+) {
+  checkpoint()
+  const created = draftBlock({ type, attrs, content })
+  pendingFocus = { id: created.id, offset: 'end' }
+  await structural(
+    created.id,
+    (list) => insertAfter(list, afterId, created),
+    () => store.createBlock(props.documentId, created, { afterId }),
+  )
+}
+
 /** Block whose saved range is in use while a chosen link is inserted (keeps it from re-rendering). */
 const linking = ref<string | null>(null)
 
@@ -1235,6 +1469,9 @@ const TYPE_OPTIONS: { label: string; type: BlockType; attrs: BlockAttrs }[] = [
   { label: 'Überschrift 3', type: 'heading', attrs: { level: 3 } },
   { label: 'Aufzählung', type: 'list_item', attrs: { list: 'bullet', indent: 0 } },
   { label: 'Nummerierte Liste', type: 'list_item', attrs: { list: 'ordered', indent: 0 } },
+  { label: 'To-do', type: 'todo', attrs: {} },
+  { label: 'Toggle', type: 'toggle', attrs: {} },
+  { label: 'Hinweis (Callout)', type: 'callout', attrs: { icon: '💡' } },
   { label: 'Zitat', type: 'quote', attrs: {} },
   { label: 'Code', type: 'code', attrs: {} },
 ]
@@ -1244,6 +1481,142 @@ function closeMenuOnOutsideClick(event: MouseEvent) {
     menuFor.value = null
   }
 }
+
+async function duplicate(block: Block) {
+  await flush(block.id)
+  await insertBlockAfter(block.id, block.type, { ...block.attrs }, currentContent(block))
+}
+
+/** Link to this block: the page's address with `#block-<id>`, opened scrolled to the block. */
+async function copyBlockLink(block: Block) {
+  const href = router.resolve({ hash: `#block-${block.id}` }).href
+  const url = new URL(href, window.location.origin).toString()
+  try {
+    await navigator.clipboard.writeText(url)
+  } catch {
+    window.prompt('Link zum Block', url)
+  }
+}
+
+let scrolledToHash = false
+watch(blocks, async (list) => {
+  if (scrolledToHash || !list) return
+  scrolledToHash = true
+  const id = window.location.hash.startsWith('#block-') ? window.location.hash.slice(7) : null
+  if (!id || !list.some((b) => b.id === id)) return
+  await nextTick()
+  const el = document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(id)}"]`)
+  el?.scrollIntoView({ block: 'center' })
+  el?.classList.add('linked')
+  setTimeout(() => el?.classList.remove('linked'), 2000)
+})
+
+// ------------------------------------------------------------------ drag the handle to move
+
+const BLOCK_DRAG_TYPE = 'application/x-notion-alt-block'
+const dropTarget = ref<{ id: string; after: boolean } | null>(null)
+
+function onHandleDragStart(block: Block, event: DragEvent) {
+  menuFor.value = null
+  event.dataTransfer?.setData(BLOCK_DRAG_TYPE, block.id)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+function onBlockDragOver(block: Block, event: DragEvent) {
+  if (!event.dataTransfer?.types.includes(BLOCK_DRAG_TYPE)) return
+  event.preventDefault()
+  event.stopPropagation()
+  const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  dropTarget.value = { id: block.id, after: event.clientY > box.top + box.height / 2 }
+}
+
+async function onBlockDrop(block: Block, event: DragEvent) {
+  const id = event.dataTransfer?.getData(BLOCK_DRAG_TYPE)
+  if (!id) return
+  event.preventDefault()
+  event.stopPropagation()
+  const target = dropTarget.value
+  dropTarget.value = null
+  const group = withChildren(id)
+  if (!target || group.includes(block.id)) return
+  const list = blocks.value ?? []
+  const index = list.findIndex((b) => b.id === block.id)
+  const afterId = target.after ? block.id : (list[index - 1]?.id ?? null)
+  // Dropped right next to itself: nothing moves.
+  if (afterId !== null && group.includes(afterId)) return
+  await moveTo(group, afterId)
+}
+
+/** A block and, for a toggle, its children: the following blocks with a larger indent. */
+function withChildren(id: string): string[] {
+  const list = blocks.value ?? []
+  const index = list.findIndex((b) => b.id === id)
+  const block = list[index]
+  if (!block) return []
+  if (block.type !== 'toggle') return [id]
+  const depth = block.attrs.indent ?? 0
+  const group = [id]
+  for (const next of list.slice(index + 1)) {
+    if ((next.attrs.indent ?? 0) <= depth) break
+    group.push(next.id)
+  }
+  return group
+}
+
+/** Moves blocks together (in their order) after `afterId`, as one undo step. */
+async function moveTo(ids: string[], afterId: string | null) {
+  const list = blocks.value ?? []
+  const moving = ids.map((id) => list.find((b) => b.id === id)).filter((b) => b !== undefined)
+  if (moving.length === 0) return
+  checkpoint()
+  for (const block of moving) await flush(block.id)
+  const moved = new Set(ids)
+  await structural(
+    moving[0]!.id,
+    (current) => {
+      let next = current.filter((b) => !moved.has(b.id))
+      let previous = afterId
+      for (const block of moving) {
+        next = insertAfter(next, previous, block)
+        previous = block.id
+      }
+      return next
+    },
+    async () => {
+      let previous = afterId
+      for (const block of moving) {
+        await store.moveBlock(block.id, { afterId: previous })
+        previous = block.id
+      }
+    },
+  )
+}
+
+/** Arrow keys move between the entries, Esc closes and returns to the handle (#133). */
+function onMenuKeydown(event: KeyboardEvent) {
+  const menu = event.currentTarget as HTMLElement
+  const items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+  const index = items.indexOf(document.activeElement as HTMLElement)
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const step = event.key === 'ArrowDown' ? 1 : -1
+    items[(index + step + items.length) % items.length]?.focus()
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    const handle = menu.parentElement?.querySelector<HTMLElement>('.block-handle')
+    menuFor.value = null
+    handle?.focus()
+  }
+}
+
+// Opening the menu by keyboard puts the focus on its first entry.
+watch(menuFor, async (id) => {
+  if (!id) return
+  await nextTick()
+  document
+    .querySelector<HTMLElement>(`[data-block-id="${CSS.escape(id)}"] .block-menu [role="menuitem"]`)
+    ?.focus()
+})
 
 async function menuAction(action: () => Promise<void>) {
   menuFor.value = null
@@ -1279,6 +1652,8 @@ function blockClass(block: Block) {
     `block-${block.type.replace('_', '-')}`,
     block.type === 'heading' ? `level-${block.attrs.level ?? 1}` : null,
     block.type === 'list_item' ? `list-${block.attrs.list ?? 'bullet'}` : null,
+    block.type === 'todo' && block.attrs.checked ? 'checked' : null,
+    block.type === 'toggle' && collapsedToggles.value.has(block.id) ? 'collapsed' : null,
   ]
 }
 
@@ -1292,6 +1667,12 @@ function blockLabel(block: Block): string {
       return 'Zitat'
     case 'code':
       return 'Code'
+    case 'todo':
+      return 'To-do'
+    case 'toggle':
+      return 'Toggle'
+    case 'callout':
+      return 'Hinweis'
     default:
       return 'Text'
   }
@@ -1320,20 +1701,31 @@ function blockLabel(block: Block): string {
       class="block"
       :class="[
         blockClass(block),
-        { selected: selectedSet.has(block.id), 'has-conflict': conflicted.has(block.id) },
+        {
+          selected: selectedSet.has(block.id),
+          'has-conflict': conflicted.has(block.id),
+          'drop-before': dropTarget?.id === block.id && !dropTarget.after,
+          'drop-after': dropTarget?.id === block.id && dropTarget.after,
+        },
       ]"
       :title="
         conflicted.has(block.id) ? 'Konflikt: siehe Konflikte in der Seitenleiste' : undefined
       "
       :style="{ '--indent': block.attrs.indent ?? 0 }"
       :data-block-id="block.id"
+      :hidden="hiddenBlocks.has(block.id)"
       :aria-selected="selectedSet.has(block.id) || undefined"
+      @dragover.capture="onBlockDragOver(block, $event)"
+      @drop.capture="onBlockDrop(block, $event)"
     >
       <button
         type="button"
         class="block-handle"
         aria-label="Blockmenü"
-        title="Blockmenü"
+        title="Klicken: Blockmenü · Ziehen: verschieben"
+        draggable="true"
+        @dragstart="onHandleDragStart(block, $event)"
+        @dragend="dropTarget = null"
         @click="menuFor = menuFor === block.id ? null : block.id"
       >
         ⋮⋮
@@ -1341,7 +1733,35 @@ function blockLabel(block: Block): string {
       <span v-if="block.type === 'list_item'" class="list-marker" aria-hidden="true">{{
         block.attrs.list === 'ordered' ? `${listNumbers.get(block.id)}.` : '•'
       }}</span>
-      <AttachmentBlock v-if="isAtom(block)" :block="block" />
+      <input
+        v-if="block.type === 'todo'"
+        type="checkbox"
+        class="todo-check"
+        :checked="!!block.attrs.checked"
+        aria-label="Erledigt"
+        @change="toggleChecked(block)"
+      />
+      <button
+        v-else-if="block.type === 'toggle'"
+        type="button"
+        class="icon toggle-arrow"
+        :aria-expanded="!collapsedToggles.has(block.id)"
+        :aria-label="collapsedToggles.has(block.id) ? 'Aufklappen' : 'Zuklappen'"
+        @click="toggleCollapsed(block.id)"
+      >
+        {{ collapsedToggles.has(block.id) ? '▸' : '▾' }}
+      </button>
+      <button
+        v-else-if="block.type === 'callout'"
+        type="button"
+        class="icon callout-icon"
+        aria-label="Symbol ändern"
+        @click="changeIcon(block)"
+      >
+        {{ block.attrs.icon ?? '💡' }}
+      </button>
+      <hr v-if="block.type === 'divider'" class="divider" />
+      <AttachmentBlock v-else-if="isAtom(block)" :block="block" />
       <textarea
         v-else-if="block.type === 'code'"
         :ref="(el) => setElement(block, el)"
@@ -1376,7 +1796,7 @@ function blockLabel(block: Block): string {
         @click="onClick"
       ></div>
 
-      <ul v-if="menuFor === block.id" class="block-menu" role="menu">
+      <ul v-if="menuFor === block.id" class="block-menu" role="menu" @keydown="onMenuKeydown">
         <li v-for="option in isAtom(block) ? [] : TYPE_OPTIONS" :key="option.label">
           <button
             type="button"
@@ -1394,6 +1814,16 @@ function blockLabel(block: Block): string {
             @click="menuAction(async () => chooseFiles(block.id))"
           >
             Bild/Datei einfügen …
+          </button>
+        </li>
+        <li v-if="!isAtom(block)">
+          <button type="button" role="menuitem" @click="menuAction(() => duplicate(block))">
+            Duplizieren
+          </button>
+        </li>
+        <li>
+          <button type="button" role="menuitem" @click="menuAction(() => copyBlockLink(block))">
+            Link kopieren
           </button>
         </li>
         <li>
@@ -1442,6 +1872,13 @@ function blockLabel(block: Block): string {
       @change="onFilesChosen"
     />
 
+    <SlashMenu
+      v-if="slash"
+      :position="slash.position"
+      @select="chooseSlash"
+      @close="closeSlash(true)"
+      @dismiss="closeSlash(false)"
+    />
     <PagePicker
       v-if="picker"
       :mode="picker.mode"

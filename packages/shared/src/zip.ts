@@ -136,12 +136,20 @@ function checkEntryPath(path: string): void {
   }
 }
 
+interface ScannedEntry {
+  path: string
+  method: number
+  /** Stored or compressed bytes as in the archive. */
+  raw: Uint8Array
+  size: number
+  crc: number
+}
+
 /**
- * Reads a ZIP archive with stored entries (as written by `createZip`); compressed entries
- * are rejected, so the content can never be larger than the archive (no zip bombs). Checks
- * bounds, paths (no zip slip), duplicates and the CRC of every entry.
+ * Walks the central directory: bounds, paths (no zip slip), duplicates, encryption. Entries with
+ * a method other than `allowed` are rejected; directories are skipped.
  */
-export function readZip(archive: Uint8Array): ZipFile[] {
+function scanZip(archive: Uint8Array, allowed: number[]): ScannedEntry[] {
   const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength)
   const fail = (reason: string): never => {
     throw new Error(reason)
@@ -158,7 +166,7 @@ export function readZip(archive: Uint8Array): ZipFile[] {
   let position = view.getUint32(endOffset + 16, true)
   const within = (offset: number, length: number) => offset + length <= archive.length
   const decoder = new TextDecoder('utf-8', { fatal: true })
-  const files: ZipFile[] = []
+  const entries: ScannedEntry[] = []
   const seen = new Set<string>()
   for (let i = 0; i < count; i++) {
     if (!within(position, 46) || view.getUint32(position, true) !== 0x02014b50) {
@@ -183,7 +191,9 @@ export function readZip(archive: Uint8Array): ZipFile[] {
     checkEntryPath(path)
     if (seen.has(path)) fail(`Duplicate entry in ZIP archive: ${path}`)
     seen.add(path)
-    if (method !== 0 || compressed !== size) fail(`Unsupported compression in ${path}`)
+    if (!allowed.includes(method) || (method === 0 && compressed !== size)) {
+      fail(`Unsupported compression in ${path}`)
+    }
     if (flags & 0x1) fail(`Encrypted entry in ${path}`)
     if (!within(localOffset, 30) || view.getUint32(localOffset, true) !== 0x04034b50) {
       fail(`Corrupt entry ${path}`)
@@ -191,11 +201,65 @@ export function readZip(archive: Uint8Array): ZipFile[] {
     const localNameLength = view.getUint16(localOffset + 26, true)
     const localExtraLength = view.getUint16(localOffset + 28, true)
     const start = localOffset + 30 + localNameLength + localExtraLength
-    if (!within(start, size)) fail(`Entry ${path} exceeds the archive`)
-    const data = archive.slice(start, start + size)
-    if (crc32(data) !== crc) fail(`CRC mismatch in ${path}`)
-    if (!path.endsWith('/')) files.push({ path, data })
+    if (!within(start, compressed)) fail(`Entry ${path} exceeds the archive`)
+    if (!path.endsWith('/')) {
+      entries.push({ path, method, raw: archive.slice(start, start + compressed), size, crc })
+    }
     position += 46 + nameLength + extraLength + commentLength
+  }
+  return entries
+}
+
+/**
+ * Reads a ZIP archive with stored entries (as written by `createZip`); compressed entries
+ * are rejected, so the content can never be larger than the archive (no zip bombs). Checks
+ * bounds, paths (no zip slip), duplicates and the CRC of every entry.
+ */
+export function readZip(archive: Uint8Array): ZipFile[] {
+  return scanZip(archive, [0]).map((entry) => {
+    if (crc32(entry.raw) !== entry.crc) throw new Error(`CRC mismatch in ${entry.path}`)
+    return { path: entry.path, data: entry.raw }
+  })
+}
+
+/** Inflates one deflate entry, never beyond the size the directory declares (zip bombs). */
+async function inflate(entry: ScannedEntry): Promise<Uint8Array> {
+  const stream = new Blob([entry.raw as Uint8Array<ArrayBuffer>])
+    .stream()
+    .pipeThrough(new DecompressionStream('deflate-raw'))
+  const out = new Uint8Array(entry.size)
+  let length = 0
+  const reader = stream.getReader()
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (length + value.length > entry.size) {
+      await reader.cancel()
+      throw new Error(`Entry ${entry.path} is larger than declared`)
+    }
+    out.set(value, length)
+    length += value.length
+  }
+  if (length !== entry.size) throw new Error(`Entry ${entry.path} is shorter than declared`)
+  return out
+}
+
+/**
+ * Reads a ZIP archive from other programs: stored and deflate entries (e.g. the Markdown export
+ * of other apps), with the same checks as `readZip`. `maxBytes` bounds the total unpacked size.
+ */
+export async function readZipCompressed(
+  archive: Uint8Array,
+  maxBytes = 2 * 1024 ** 3,
+): Promise<ZipFile[]> {
+  const entries = scanZip(archive, [0, 8])
+  const total = entries.reduce((sum, entry) => sum + entry.size, 0)
+  if (total > maxBytes) throw new Error('ZIP archive is too large when unpacked')
+  const files: ZipFile[] = []
+  for (const entry of entries) {
+    const data = entry.method === 8 ? await inflate(entry) : entry.raw
+    if (crc32(data) !== entry.crc) throw new Error(`CRC mismatch in ${entry.path}`)
+    files.push({ path: entry.path, data })
   }
   return files
 }

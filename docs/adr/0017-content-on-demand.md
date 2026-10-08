@@ -1,7 +1,7 @@
 # 0017 – Seiteninhalte bei Bedarf laden
 
-- **Status:** Proposed
-- **Datum:** 2026-10-05
+- **Status:** Accepted
+- **Datum:** 2026-10-05, angenommen 2026-10-07
 
 ## Kontext
 
@@ -50,9 +50,9 @@ Betroffene Prinzipien und Kriterien:
 1. **Einmal alles laden.** Neue Seiten anderer Geräte kämen danach wieder nur bei Bedarf.
 2. **Gerät auf „alles“ umstellen.** Der Knopf lädt alles (Seiten und Anhänge, mit Fortschritt) und merkt sich den Modus. Danach hält der Pull alle Seiten aktuell, wie heute. Ein zweiter Knopf stellt zurück auf „bei Bedarf“; bereits Geladenes bleibt.
 
-## Entscheidung (Vorschlag)
+## Entscheidung
 
-**Inhalte bei Bedarf (Option 2), Pull filtert der Client (Option 1), der Knopf stellt das Gerät um (Option 2).**
+Angenommen am 2026-10-07 ([#112](https://github.com/mszkb/notion-alternative/issues/112)): **Inhalte bei Bedarf (Option 2), Pull filtert der Client (Option 1), der Knopf stellt das Gerät um (Option 2).** Ergänzung des Maintainers: Das vollständige Laden zeigt einen Fortschrittsbalken und lässt sich jederzeit abbrechen.
 
 - **Erstsync:**
   - `GET /api/sync/snapshot?content=false` liefert alles außer Blöcken.
@@ -65,14 +65,15 @@ Betroffene Prinzipien und Kriterien:
   - Der Editor zeigt „Inhalt ist nicht auf diesem Gerät. Er wird geladen, sobald der Server erreichbar ist.“
   - Nichts lässt sich bearbeiten, keine leere Seite täuscht Inhalt vor.
 - **Einstellungen, Abschnitt „Offline verfügbar“:**
-  - Der Knopf „Alles offline verfügbar machen“ lädt alle Seiteninhalte (seitenweiser Snapshot wie heute) und alle Anhänge, mit Fortschrittsbalken. Er stellt das Gerät auf `offlineMode = all`.
+  - Der Knopf „Alles offline verfügbar machen“ lädt alle fehlenden Seiteninhalte in Paketen zu 100 Seiten (`POST /api/sync/documents`, damit Abbrechen und Fortsetzen ohne erneuten Gesamtdownload gehen) und alle Anhänge, mit Fortschrittsbalken. Erst wenn alles geladen ist, steht das Gerät auf `offlineMode = all`.
+  - „Abbrechen“ beendet das Laden sofort. Was bis dahin geladen ist, bleibt geladen; das Gerät bleibt bei „bei Bedarf“. Ein erneuter Klick setzt fort und lädt nur, was noch fehlt.
   - „Nur bei Bedarf laden“ stellt zurück, Geladenes bleibt.
   - Angezeigt wird, wie viele Seiten geladen sind und wie viel Speicher das belegt.
 - **Bestehende Geräte** mit Cursor bleiben bei `all` (Upgrade der Dexie-Version). Für sie ändert sich nichts.
 - **Suche:**
   - Online ergänzt die Serversuche (FTS5) die lokale Suche.
   - Offline sagt ein Hinweis, dass nur geladene Seiten durchsucht werden.
-  - Backlinks kommen online vom Server, offline aus dem lokalen Index, mit demselben Hinweis.
+  - Backlinks kommen aus dem lokalen Index und zeigen einen Hinweis, solange Seiten nicht geladen sind. Backlinks vom Server folgen bei Bedarf als eigene Aufgabe.
 - **Export:**
   - Online lädt der Export fehlende Seiten vorher (wie heute schon fehlende Anhänge).
   - Offline nennt er die nicht geladenen Seiten im Manifest, statt sie still wegzulassen.
@@ -94,6 +95,6 @@ Betroffene Prinzipien und Kriterien:
   - Einstellungen: Knopf mit Fortschritt.
   - Suche, Backlinks und Export ergänzen.
   - Doku: Akzeptanzkriterien, `sync.md`, Nutzerdoku.
-- **Offene Fragen:**
-  - Option 3 (zuletzt geänderte Seiten automatisch) gleich mit umsetzen?
-  - Soll ein installiertes Gerät (PWA) standardmäßig `all` sein?
+- **Geklärt bei der Annahme:**
+  - Option 3 (zuletzt geänderte Seiten automatisch) kommt nicht in v1.
+  - Ein installiertes Gerät (PWA) startet wie der Browser mit „bei Bedarf“.

@@ -121,6 +121,7 @@ test('deleting a page removes its subtree', async ({ signedIn: page }) => {
   await page.getByRole('navigation', { name: 'Pfad' }).getByRole('link', { name: 'Eltern' }).click()
 
   page.once('dialog', (dialog) => void dialog.accept())
+  await page.getByRole('button', { name: 'Seitenmenü' }).click()
   await page.getByRole('button', { name: 'Löschen' }).click()
   await expect(page).toHaveURL(/\/w\/[0-9a-f-]+$/)
   await expect(page.getByRole('tree')).not.toContainText('Eltern')

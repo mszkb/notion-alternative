@@ -6,7 +6,7 @@ namespace NotionAlt\Database\Migrations;
 
 use NotionAlt\Database\SqlMigration;
 
-final class M0012AuthAttempts extends SqlMigration
+final class M0013AuthAttempts extends SqlMigration
 {
     protected function statements(): array
     {

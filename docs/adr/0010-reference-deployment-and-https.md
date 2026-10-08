@@ -1,7 +1,10 @@
 # 0010 – Referenz-Deployment und HTTPS
 
-- **Status:** Accepted; Referenz-Deployment teilweise Superseded by [0018](0018-php-backend.md) (Proposed): Shared Hosting wird Hauptweg, Docker Compose bleibt
+- **Status:** Accepted, Server-Teil superseded by 0018
 - **Datum:** 2026-10-03
+
+
+> **Teilweise ersetzt:** Der Teil „Referenz-Deployment nur mit Docker“ ist durch [ADR 0018](0018-php-backend.md) (PHP-Backend, angenommen 2026-10-08) ersetzt. Bis zur Umstellung ([#129](https://github.com/mszkb/notion-alternative/issues/129)) läuft weiter der Node-Server.
 
 ## Kontext
 

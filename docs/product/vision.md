@@ -12,11 +12,44 @@ Notion nervt mit seinem „always on“. Die Offline-Funktion existiert, ist abe
 
 ## Zielgruppen
 
-1. **Einzelanwender und Entwickler**, die Notion-ähnliche Organisation ohne zentrale SaaS-Abhängigkeit möchten.
-2. **Self-Hoster** mit Interesse an Offline-first und sauberem Export.
-3. **Kleine Teams** – spätere Zielgruppe für Sharing, Kommentare und Governance (Phase 8+).
+Festgelegt in [#17](https://github.com/mszkb/notion-alternative/issues/17) (2026-10-07).
 
-**Positionierung:** Lokale Wissensbasis mit self-hosted Sync, offenem Export und optionalem Managed Service.
+### Primär: Umsteiger von Notion
+
+Menschen, die Notion heute für Notizen, persönliches Wiki oder Wissenssammlung nutzen und davon weg wollen, weil Notion ohne Netz kaum nutzbar ist oder weil ihre Daten nicht bei einem SaaS-Anbieter liegen sollen. Ausdrücklich **auch weniger technikaffine Nutzer**: Sie kennen Notion, nicht Docker oder Markdown.
+
+Daraus folgt:
+
+- **Vertraute Bedienung schlägt eigene Konzepte.** Was in Notion funktioniert (Seitenleiste mit Seitenbaum, Slash-Menü, Tastenkürzel, Blocktypen wie To-do und Toggle, Seiten-Icons), wird übernommen, soweit es die Prinzipien zulassen ([#130](https://github.com/mszkb/notion-alternative/issues/130)).
+- **Der Umzug muss leicht sein.** Import aus dem Notion-Export ([#137](https://github.com/mszkb/notion-alternative/issues/137)) gehört zum Kern, nicht zu den Extras.
+- **Betrieb ohne Docker-Kenntnisse.** Neben Docker Compose braucht es einen Weg über gewöhnliches Webhosting mit fertig eingerichtetem Webserver und HTTPS ([#116](https://github.com/mszkb/notion-alternative/issues/116), [ADR 0011](../adr/0011-https-for-mobile-devices.md)).
+- **Begriffe und Hinweise in Alltagssprache.** Sync-Zustand, Konflikte und „offline verfügbar“ werden ohne Fachbegriffe erklärt.
+
+### Sekundär: Self-Hoster und Home-Lab
+
+Technikaffine Nutzer mit eigenem Server oder Raspberry Pi, denen Offline-first, Datenhoheit und sauberer Export wichtig sind. Sie bleiben die Referenz für das Deployment (Docker Compose, [ADR 0010](../adr/0010-reference-deployment-and-https.md)) und sind die ersten, die die App produktiv nutzen. Für Smartphones im Home-Lab ist Tailscale der empfohlene Weg zu HTTPS ([ADR 0011](../adr/0011-https-for-mobile-devices.md)).
+
+### Später: kleine Teams
+
+Sharing, Kommentare und Berechtigungen kommen erst in Phase 8. Bis dahin ist die App für eine Person mit mehreren Geräten gebaut.
+
+### Bewusst nicht
+
+- Unternehmen mit Anforderungen an SSO, SCIM oder Audit-Logs.
+- Nutzer, die Notion vor allem für Datenbanken, Projektmanagement oder Echtzeit-Zusammenarbeit verwenden (siehe [Bewusst nicht im MVP](#bewusst-nicht-im-mvp)).
+
+### Szenarien
+
+| Szenario | Was zählen muss |
+| --- | --- |
+| Persönliches Wiki aus Notion übernehmen | Import mit Seitenhierarchie, Bildern und Links; gewohnte Bedienung ab der ersten Minute |
+| Unterwegs auf dem Smartphone ohne Netz nachschlagen und notieren | installierte PWA, Inhalte offline verfügbar, Sync ohne Zutun |
+| Notizen am Laptop und Handy parallel | keine still verlorenen Änderungen, Konflikte verständlich erklärt |
+| Daten mitnehmen oder sichern | Export als Markdown/ZIP, Backup per Anleitung |
+
+**Positionierung:** Die Notion-Alternative, die offline funktioniert und deren Daten beim Nutzer bleiben: self-hosted oder auf eigenem Webspace, mit offenem Export.
+
+**Konsequenzen für die Priorisierung:** Nach Phase 7 kommt zuerst die vertraute Oberfläche ([#130](https://github.com/mszkb/notion-alternative/issues/130)) mit Notion-Import, danach der einfachere Betrieb über Webhosting ([#116](https://github.com/mszkb/notion-alternative/issues/116)). Ein Import aus Obsidian bleibt eine spätere Idee.
 
 ## Produktprinzipien
 

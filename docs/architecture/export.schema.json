@@ -4,7 +4,7 @@
   "properties": {
     "schema_version": {
       "type": "number",
-      "const": 1
+      "const": 3
     },
     "exported_at": {
       "type": "string"
@@ -64,6 +64,37 @@
           },
           "favorite": {
             "type": "boolean"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^gradient:(sunrise|ocean|forest|dusk|sand|slate)$"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^attachment:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "createdAt": {
             "type": "string"
@@ -129,7 +160,11 @@
               "quote",
               "code",
               "image",
-              "file"
+              "file",
+              "todo",
+              "toggle",
+              "callout",
+              "divider"
             ]
           },
           "content": {
@@ -155,6 +190,14 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 5
+              },
+              "checked": {
+                "type": "boolean"
+              },
+              "icon": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16
               },
               "language": {
                 "type": "string",

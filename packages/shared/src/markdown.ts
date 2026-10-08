@@ -6,6 +6,9 @@ export interface MarkdownBlock {
   attrs: BlockAttrs
 }
 
+/** Block types written as Markdown list items; consecutive ones form one list. */
+const LIST_TYPES = new Set<BlockType>(['list_item', 'todo', 'toggle'])
+
 /** Longest run of backticks in `text`, so a code fence can be chosen that never closes early. */
 function longestBacktickRun(text: string): number {
   return Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
@@ -31,9 +34,9 @@ export function blocksToMarkdown(
   let previousWasList = false
 
   for (const block of blocks) {
+    const indent = block.attrs.indent ?? 0
     let text: string
     if (block.type === 'list_item') {
-      const indent = block.attrs.indent ?? 0
       counters.length = indent + 1
       let marker = '-'
       if (block.attrs.list === 'ordered') {
@@ -43,8 +46,16 @@ export function blocksToMarkdown(
         counters[indent] = 0
       }
       text = `${'  '.repeat(indent)}${marker} ${block.content}`
+    } else if (block.type === 'todo') {
+      // GitHub/CommonMark task list (ADR 0019). Numbering of outer levels continues after it.
+      counters.length = Math.min(counters.length, indent)
+      text = `${'  '.repeat(indent)}- [${block.attrs.checked ? 'x' : ' '}] ${block.content}`
+    } else if (block.type === 'toggle') {
+      // A list item; its children follow indented (ADR 0019).
+      counters.length = Math.min(counters.length, indent)
+      text = `${'  '.repeat(indent)}- ${block.content}`
     } else {
-      counters.length = 0
+      counters.length = Math.min(counters.length, indent)
       switch (block.type) {
         case 'heading':
           text = `${'#'.repeat(block.attrs.level ?? 1)} ${block.content}`
@@ -54,6 +65,14 @@ export function blocksToMarkdown(
             .split('\n')
             .map((line) => (line ? `> ${line}` : '>'))
             .join('\n')
+          break
+        case 'callout': {
+          const lines = `${block.attrs.icon ?? '💡'} ${block.content}`.split('\n')
+          text = lines.map((line) => (line ? `> ${line}` : '>')).join('\n')
+          break
+        }
+        case 'divider':
+          text = '---'
           break
         case 'code': {
           const fence = '`'.repeat(Math.max(3, longestBacktickRun(block.content) + 1))
@@ -69,8 +88,15 @@ export function blocksToMarkdown(
         default:
           text = block.content
       }
+      // Children of a toggle keep their depth as indentation.
+      if (indent > 0) {
+        text = text
+          .split('\n')
+          .map((line) => (line ? `${'  '.repeat(indent)}${line}` : line))
+          .join('\n')
+      }
     }
-    const isList = block.type === 'list_item'
+    const isList = LIST_TYPES.has(block.type)
     parts.push(parts.length === 0 ? text : `${isList && previousWasList ? '\n' : '\n\n'}${text}`)
     previousWasList = isList
   }

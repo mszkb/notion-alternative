@@ -67,6 +67,8 @@ it('a server restart during push loses nothing and applies nothing twice', async
   const { workspaces } = await call<{ workspaces: { id: string }[] }>(cookie, 'GET', '/workspaces')
   const workspaceId = workspaces[0]!.id
   const store = await LocalStore.open(new LocalDb(`restart-${newId()}`))
+  // Pre-ADR-0017 behaviour: every page's content is synced.
+  await store.db.meta.put({ key: 'offlineMode', value: 'all' })
   await call(cookie, 'POST', '/devices', { id: store.deviceId, name: 'Laptop' })
 
   const page = await store.createDocument({ workspaceId, title: 'Viele Blöcke' })

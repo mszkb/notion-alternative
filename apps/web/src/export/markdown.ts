@@ -1,5 +1,7 @@
 import { createZip, exportMarkdown, safeFileName, type ZipEntry } from '@notion-alt/shared'
 import type { LocalStore } from '../local/store'
+import type { DocumentFetch } from '../sync/resync'
+import { loadContentForExport } from './content'
 
 export interface ExportResult {
   fileName: string
@@ -7,11 +9,15 @@ export interface ExportResult {
   pages: number
   /** Attachments whose content is neither on this device nor downloadable now. */
   missingAttachments: number
+  /** Pages exported without content: not on this device and not loadable now (ADR 0017). */
+  missingDocuments: { id: string; title: string }[]
 }
 
 export interface ExportOptions {
   /** Fetches content not on this device; `null` if unavailable. Omitted when offline. */
   download?: (attachmentId: string) => Promise<ArrayBuffer | null>
+  /** Loads pages whose content is not on this device (ADR 0017). Omitted when offline. */
+  fetchDocument?: DocumentFetch
   now?: Date
 }
 
@@ -63,6 +69,7 @@ export async function buildMarkdownExport(
   options: ExportOptions = {},
 ): Promise<ExportResult> {
   const now = options.now ?? new Date()
+  const missingDocuments = await loadContentForExport(store, workspaceId, options.fetchDocument)
   const data = await store.exportData(workspaceId)
   const current = data.attachments.filter((a) => !a.deletedAt).map((a) => a.id)
   const contents = await loadAttachmentContents(store, current, options.download)
@@ -85,6 +92,7 @@ export async function buildMarkdownExport(
     data: createZip(entries),
     pages: result.files.length,
     missingAttachments,
+    missingDocuments,
   }
 }
 

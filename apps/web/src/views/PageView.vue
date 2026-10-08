@@ -1,12 +1,24 @@
 <script setup lang="ts">
-import { DOCUMENT_TITLE_MAX_LENGTH, type Document } from '@notion-alt/shared'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import {
+  COVER_GRADIENTS,
+  DOCUMENT_TITLE_MAX_LENGTH,
+  type Document,
+  INLINE_IMAGE_TYPES,
+} from '@notion-alt/shared'
+import IconPicker from '../components/IconPicker.vue'
+import PageCover from '../components/PageCover.vue'
+import { sha256Hex } from '../local/store'
+import { maxFileBytes } from '../limits'
+import { formatBytes } from '../local/persistence'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TagBar from '../components/TagBar.vue'
 import { useLiveQuery } from '../composables/live-query'
-import { displayTitle, NO_CHILDREN, useWorkspace } from '../composables/workspace'
+import { displayTitle, NO_CHILDREN, pageLabel, useWorkspace } from '../composables/workspace'
 import PageEditor from '../editor/PageEditor.vue'
 import { registerPendingEdits } from '../pending-edits'
+import { connection } from '../session'
+import { ensureDocumentLoaded, type OpenOutcome } from '../sync/offline'
 
 const { store, workspaceId, documentsById, childrenByParent } = useWorkspace()
 const route = useRoute()
@@ -35,7 +47,35 @@ const ancestors = computed(() => {
   return chain
 })
 const children = computed(() => childrenByParent.value.get(documentId) ?? NO_CHILDREN)
+
+// ---------------------------------------------------------------- content on demand (ADR 0017)
+
+/** Whether the page's content is on this device; `loading` while it is fetched. */
+const content = ref<OpenOutcome | 'loading' | 'error'>('loading')
+let loading = false
+
+async function loadContent() {
+  if (loading) return
+  loading = true
+  try {
+    content.value = await ensureDocumentLoaded(store, workspaceId.value, documentId)
+  } catch {
+    content.value = 'error'
+  } finally {
+    loading = false
+  }
+}
+void loadContent()
+// Try again as soon as the server is reachable.
+watch(connection, (state) => {
+  if (state === 'online' && content.value !== 'loaded') void loadContent()
+})
 const backlinks = useLiveQuery(() => store.backlinks(documentId), [])
+/** Backlinks come from pages whose content is on this device (ADR 0017). */
+const unloadedCount = useLiveQuery(
+  async () => (await store.unloadedDocuments(workspaceId.value)).length,
+  0,
+)
 const conflicts = useLiveQuery(
   async () =>
     (await store.openConflicts(workspaceId.value)).filter((c) => c.documentId === documentId),
@@ -45,7 +85,7 @@ const conflicts = useLiveQuery(
 // ---------------------------------------------------------------- title
 
 const title = ref('')
-const titleInput = ref<HTMLInputElement | null>(null)
+const titleInput = ref<HTMLTextAreaElement | null>(null)
 let titleTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(
@@ -69,7 +109,23 @@ function saveTitle(): Promise<void> {
 }
 const stopPendingTitle = registerPendingEdits(saveTitle)
 
+/** The title wraps like a heading (a textarea growing with its text), but stays one line. */
+function fitTitle() {
+  const el = titleInput.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+watch(title, () => void nextTick(fitTitle), { flush: 'post' })
+onMounted(() => {
+  fitTitle()
+  window.addEventListener('resize', fitTitle)
+})
+onBeforeUnmount(() => window.removeEventListener('resize', fitTitle))
+
 function onTitleInput() {
+  // Pasted line breaks become spaces: a title has one line.
+  if (/[\r\n]/.test(title.value)) title.value = title.value.replace(/[\r\n]+/g, ' ')
   if (titleTimer) clearTimeout(titleTimer)
   titleTimer = setTimeout(saveTitle, 400)
 }
@@ -84,6 +140,68 @@ onBeforeUnmount(() => {
   void saveTitle()
   stopPendingTitle()
 })
+
+// ---------------------------------------------------------------- icon and cover (#136)
+
+const iconPickerOpen = ref(false)
+const coverMenuOpen = ref(false)
+const coverInput = ref<HTMLInputElement | null>(null)
+const lookError = ref<string | null>(null)
+
+async function chooseIcon(icon: string | null) {
+  iconPickerOpen.value = false
+  await store.setPageLook(documentId, { icon })
+}
+
+async function chooseGradient(name: (typeof COVER_GRADIENTS)[number]) {
+  coverMenuOpen.value = false
+  await store.setPageLook(documentId, { cover: `gradient:${name}` })
+}
+
+async function removeCover() {
+  coverMenuOpen.value = false
+  await store.setPageLook(documentId, { cover: null })
+}
+
+async function onCoverFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  coverMenuOpen.value = false
+  lookError.value = null
+  if (!file) return
+  if (!INLINE_IMAGE_TYPES.includes(file.type)) {
+    lookError.value = 'Als Titelbild eignen sich PNG, JPEG, GIF und WebP.'
+    return
+  }
+  if (file.size > maxFileBytes.value) {
+    lookError.value = `Das Bild ist größer als ${formatBytes(maxFileBytes.value)}.`
+    return
+  }
+  const data = await file.arrayBuffer()
+  // Hash before the write: awaiting crypto inside a Dexie transaction would commit it early.
+  const sha256 = await sha256Hex(data)
+  await store.setCoverImage(documentId, { name: file.name, type: file.type, data, sha256 })
+}
+
+// ---------------------------------------------------------------- header (#132)
+
+const editedFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+const edited = computed(() =>
+  document.value ? editedFormat.format(new Date(document.value.updatedAt)) : '',
+)
+
+const menuOpen = ref(false)
+const menuRoot = ref<HTMLElement | null>(null)
+
+function closeMenuOutside(event: PointerEvent) {
+  if (menuRoot.value && !menuRoot.value.contains(event.target as Node)) menuOpen.value = false
+}
+watch(menuOpen, (open) => {
+  if (open) window.addEventListener('pointerdown', closeMenuOutside)
+  else window.removeEventListener('pointerdown', closeMenuOutside)
+})
+onBeforeUnmount(() => window.removeEventListener('pointerdown', closeMenuOutside))
 
 // ---------------------------------------------------------------- actions
 
@@ -132,13 +250,14 @@ async function deletePage() {
       <nav class="breadcrumbs" aria-label="Pfad">
         <template v-for="ancestor in ancestors" :key="ancestor.id">
           <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: ancestor.id } }">
-            {{ displayTitle(ancestor) }}
+            {{ pageLabel(ancestor) }}
           </RouterLink>
           <span aria-hidden="true">/</span>
         </template>
-        <span>{{ displayTitle(document) }}</span>
+        <span>{{ pageLabel(document) }}</span>
       </nav>
       <div class="page-actions">
+        <span class="muted edited" data-testid="page-edited">Bearbeitet {{ edited }}</span>
         <button
           type="button"
           class="icon"
@@ -149,39 +268,139 @@ async function deletePage() {
         >
           {{ document.favorite ? '★' : '☆' }}
         </button>
-        <button type="button" class="secondary" @click="addChild">+ Unterseite</button>
-        <RouterLink
-          class="secondary"
-          :to="{ name: 'history', params: { workspaceId, documentId } }"
-        >
-          Verlauf
-        </RouterLink>
-        <button type="button" class="secondary danger" @click="deletePage">Löschen</button>
+        <div ref="menuRoot" class="page-menu" @keydown.escape="menuOpen = false">
+          <button
+            type="button"
+            class="icon"
+            aria-label="Seitenmenü"
+            title="Seitenmenü"
+            aria-haspopup="true"
+            :aria-expanded="menuOpen"
+            data-testid="page-menu"
+            @click="menuOpen = !menuOpen"
+          >
+            ⋯
+          </button>
+          <div v-if="menuOpen" class="block-menu page-menu-list" @click="menuOpen = false">
+            <button type="button" @click="addChild">Unterseite anlegen</button>
+            <RouterLink :to="{ name: 'history', params: { workspaceId, documentId } }">
+              Verlauf
+            </RouterLink>
+            <RouterLink :to="{ name: 'export', params: { workspaceId } }">
+              Export & Import
+            </RouterLink>
+            <div class="separator" role="separator"></div>
+            <button type="button" class="danger" @click="deletePage">Löschen</button>
+          </div>
+        </div>
       </div>
     </header>
 
-    <input
+    <div v-if="document.cover" class="page-cover-wrap">
+      <PageCover :cover="document.cover" />
+    </div>
+    <div class="page-look" :class="{ 'has-icon': document.icon }">
+      <button
+        v-if="document.icon"
+        type="button"
+        class="page-icon"
+        aria-label="Icon ändern"
+        :disabled="content !== 'loaded'"
+        data-testid="page-icon"
+        @click="iconPickerOpen = !iconPickerOpen"
+      >
+        {{ document.icon }}
+      </button>
+      <div v-if="content === 'loaded'" class="page-look-controls">
+        <button
+          v-if="!document.icon"
+          type="button"
+          class="link"
+          @click="iconPickerOpen = !iconPickerOpen"
+        >
+          Icon hinzufügen
+        </button>
+        <button type="button" class="link" @click="coverMenuOpen = !coverMenuOpen">
+          {{ document.cover ? 'Titelbild ändern' : 'Titelbild hinzufügen' }}
+        </button>
+      </div>
+      <IconPicker v-if="iconPickerOpen" @select="chooseIcon" @close="iconPickerOpen = false" />
+      <div
+        v-if="coverMenuOpen"
+        class="block-menu cover-menu"
+        role="dialog"
+        aria-label="Titelbild"
+        @keydown.escape="coverMenuOpen = false"
+      >
+        <div class="cover-swatches">
+          <button
+            v-for="name in COVER_GRADIENTS"
+            :key="name"
+            type="button"
+            class="cover-swatch"
+            :class="`cover-${name}`"
+            :aria-label="`Farbverlauf ${name}`"
+            @click="chooseGradient(name)"
+          ></button>
+        </div>
+        <button type="button" @click="coverInput?.click()">Bild hochladen …</button>
+        <button v-if="document.cover" type="button" class="danger" @click="removeCover">
+          Entfernen
+        </button>
+      </div>
+      <input
+        ref="coverInput"
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp"
+        hidden
+        data-testid="cover-input"
+        @change="onCoverFile"
+      />
+      <p v-if="lookError" class="error">{{ lookError }}</p>
+    </div>
+
+    <textarea
       ref="titleInput"
       v-model="title"
+      rows="1"
       class="page-title"
       placeholder="Unbenannt"
       aria-label="Titel"
+      :readonly="content !== 'loaded'"
       :maxlength="DOCUMENT_TITLE_MAX_LENGTH"
       @input="onTitleInput"
       @blur="saveTitle"
       @keydown.enter.prevent="focusFirstBlock"
-    />
+    ></textarea>
 
-    <TagBar :document-id="document.id" />
-
-    <PageEditor :document-id="document.id" />
+    <template v-if="content === 'loaded'">
+      <TagBar :document-id="document.id" />
+      <PageEditor :document-id="document.id" />
+    </template>
+    <p v-else-if="content === 'loading'" class="muted" data-testid="page-content-loading">
+      Inhalt wird geladen …
+    </p>
+    <p v-else class="notice" role="status" data-testid="page-content-unavailable">
+      <template v-if="content === 'offline'">
+        Der Inhalt dieser Seite ist nicht auf diesem Gerät. Er wird geladen, sobald der Server
+        erreichbar ist. Damit alle Seiten auch ohne Verbindung da sind:
+        <RouterLink :to="{ name: 'account' }">Konto → Offline verfügbar</RouterLink>.
+      </template>
+      <template v-else-if="content === 'missing'">
+        Der Inhalt dieser Seite ist auf dem Server nicht verfügbar.
+      </template>
+      <template v-else>
+        Der Inhalt dieser Seite konnte nicht geladen werden.
+        <button type="button" class="secondary" @click="loadContent">Erneut versuchen</button>
+      </template>
+    </p>
 
     <section v-if="children.length" class="page-section" aria-labelledby="subpages">
       <h2 id="subpages">Unterseiten</h2>
       <ul class="link-list">
         <li v-for="child in children" :key="child.id">
           <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: child.id } }">
-            {{ displayTitle(child) }}
+            {{ pageLabel(child) }}
           </RouterLink>
         </li>
       </ul>
@@ -192,11 +411,17 @@ async function deletePage() {
       <ul v-if="backlinks.length" class="link-list">
         <li v-for="source in backlinks" :key="source.id">
           <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: source.id } }">
-            {{ displayTitle(source) }}
+            {{ pageLabel(source) }}
           </RouterLink>
         </li>
       </ul>
       <p v-else class="muted">Keine Seite verlinkt hierher. Mit <kbd>[[</kbd> im Text verlinken.</p>
+      <p v-if="unloadedCount" class="muted" data-testid="backlinks-partial">
+        Berücksichtigt sind Seiten, deren Inhalt auf diesem Gerät ist ({{
+          unloadedCount.toLocaleString('de-DE')
+        }}
+        weitere nicht).
+      </p>
     </section>
   </article>
 

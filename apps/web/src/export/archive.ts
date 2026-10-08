@@ -5,6 +5,8 @@ import {
   type SyncLogResponse,
 } from '@notion-alt/shared'
 import type { LocalStore } from '../local/store'
+import type { DocumentFetch } from '../sync/resync'
+import { loadContentForExport } from './content'
 import { fetchHistory } from './json'
 import { exportFileName, loadAttachmentContents } from './markdown'
 
@@ -25,12 +27,20 @@ export async function buildArchiveExport(
   options: {
     download?: (attachmentId: string) => Promise<ArrayBuffer | null>
     syncLog?: (query: SyncLogQuery) => Promise<SyncLogResponse>
+    /** Loads pages whose content is not on this device (ADR 0017); omit offline. */
+    fetchDocument?: DocumentFetch
     onProgress?: (message: string) => void
     now?: Date
   } = {},
 ): Promise<ArchiveExportResult> {
   const now = options.now ?? new Date()
   const progress = options.onProgress ?? (() => {})
+  const missingDocuments = await loadContentForExport(
+    store,
+    workspace.id,
+    options.fetchDocument,
+    (done, total) => progress(`Seiten laden (${done + 1}/${total})…`),
+  )
   progress('Daten lesen…')
   const input = await store.exportData(workspace.id)
   const active = new Set(input.documents.filter((d) => !d.deletedAt).map((d) => d.id))
@@ -48,7 +58,7 @@ export async function buildArchiveExport(
   progress('ZIP erstellen…')
   const { parts, manifest } = await buildExportArchive(
     input,
-    { workspace, exportedAt: now, history },
+    { workspace, exportedAt: now, history, missingDocuments },
     contents,
   )
   return {

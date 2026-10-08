@@ -17,6 +17,8 @@ let store: LocalStore
 beforeEach(async () => {
   db = new LocalDb(`engine-${newId()}`)
   store = await LocalStore.open(db)
+  // Pre-ADR-0017 behaviour: every page's content is synced.
+  await store.db.meta.put({ key: 'offlineMode', value: 'all' })
   connection.value = 'online'
   deviceStatus.value = 'registered'
 })
