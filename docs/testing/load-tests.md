@@ -103,6 +103,9 @@ Gemessen am 2026-10-04 mit `e2e/load-app.spec.ts`, Chromium 141 headless, Vite-E
 | 10 000 / 502 000, ohne Tracing, Production-Build (2026-10-05) | 3,2 min | 9,8 min | 1,9 / 2,3 s (zwei Läufe) | 0,6 / 0,8 s | 4–5 ms pro Taste |
 | 10 000 / 502 000, nach den Suchmarken (2026-10-05) | 3,3 min | 5,5 min | 1,9 s | 0,7 s | 6 ms pro Taste |
 | 10 000 / 502 000, Seitenbaum mit einfachen Links (2026-10-05) | 3,0 min | **5,2 min** | **1,6 s** | **0,55 s** | **5 ms pro Taste** |
+| 10 000 / 502 000, PHP-Server, Inhalte bei Bedarf (ADR 0017), Production-Build (2026-10-08) | 3,1 min | **11,7 s** | 1,6 s | 1,9 s¹ | 5 ms pro Taste |
+
+¹ Seit ADR 0017 lädt das Öffnen der großen Seite ihre 2 000 Blöcke zuerst vom Server; der Wert enthält diesen Abruf und ist deshalb nicht mit den Zeilen davor vergleichbar. Gemessen mit `LOAD_PAGES=10000 LOAD_PREVIEW=1`, ohne Dexie-Query-Cache (387c871).
 
 Der Kaltstart wird direkt nach dem Erstsync gemessen. Der Test findet die große Seite per CSS-Selektor; `getByRole` über 10 000 Baumknoten hätte die Messung selbst verlängert.
 
