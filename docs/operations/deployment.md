@@ -24,6 +24,16 @@ Nur `frontend` veröffentlicht einen Port, standardmäßig **nur auf `127.0.0.1`
 
 `BIND_ADDRESS=0.0.0.0` macht die App ohne TLS im ganzen Netz erreichbar – Passwörter und Session-Cookies gehen dann im Klartext über das Netz. Nur in vertrauenswürdigen Netzen und zum Testen verwenden.
 
+### PHP-Backend (ADR 0018)
+
+Der PHP-Server ersetzt den Node-Server ([#129](https://github.com/mszkb/notion-alternative/issues/129)). Bis dahin läuft er über eine zweite Compose-Datei: `backend` ist dann PHP-FPM (`apps/server-php/Dockerfile`, Port 9000 nur im Docker-Netz), `frontend` spricht FastCGI mit ihm (`apps/web/nginx.php.conf`). Weiterhin zwei Container, gleiches Volume `data`.
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.php.yml up -d --build
+```
+
+Im PHP-Container laufen die periodischen Aufgaben (`bin/cron.php`) alle 5 Minuten in einer Schleife des Entrypoints; der Healthcheck schickt eine FastCGI-Anfrage an `/api/health`. Befehle wie Backup: `docker compose exec -T backend php bin/console backup` (siehe [`apps/server-php/README.md`](../../apps/server-php/README.md#cron-und-kommandozeile)). Ohne Docker, auf gewöhnlichem Webspace: [Installation auf Webspace](../user/webhosting.md).
+
 ## Server mit SSH-Tunnel (Referenz)
 
 Referenz-Deployment ist ein Linux-Host mit Docker, auf dem die App nur auf Loopback lauscht ([ADR 0010](../adr/0010-reference-deployment-and-https.md)). Zugriff vom eigenen Rechner per SSH-Tunnel. `http://localhost` ist im Browser ein sicherer Kontext, Service Worker und Web Push funktionieren damit auch in der Entwicklung.

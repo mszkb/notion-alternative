@@ -1,0 +1,16 @@
+# Apache/LiteSpeed: every request below /api/ goes to index.php (Slim routes it). Needs mod_rewrite
+# and "AllowOverride FileInfo" (or All). app/ (code, vendor, config, default data) is never served.
+
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Metrics are for internal scraping only (they would be public here).
+    RewriteRule ^metrics$ - [R=404,L]
+    RewriteRule ^(index|check)\.php$ - [L]
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

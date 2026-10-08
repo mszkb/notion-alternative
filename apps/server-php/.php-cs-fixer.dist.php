@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 $finder = (new PhpCsFixer\Finder())
-    ->in([__DIR__ . '/src', __DIR__ . '/tests', __DIR__ . '/public'])
-    ->append([__FILE__, __DIR__ . '/bin/cron.php', __DIR__ . '/bin/console']);
+    ->in([__DIR__ . '/src', __DIR__ . '/tests', __DIR__ . '/public', __DIR__ . '/release'])
+    ->append([__FILE__, __DIR__ . '/bin/cron.php', __DIR__ . '/bin/console', __DIR__ . '/bin/fpm-healthcheck.php']);
 
 return (new PhpCsFixer\Config())
     ->setRiskyAllowed(true)

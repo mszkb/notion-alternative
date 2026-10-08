@@ -40,15 +40,19 @@ Alle Routen beginnen mit `/api`. Liegt die App nicht im Wurzelverzeichnis des Ho
 
 Das Paket für Shared Hosting (SPA + `api/` + `vendor/`) und das Docker-Image folgen in #128.
 
-## Docker (Probebetrieb)
+## Docker
 
-Zum Ausprobieren, z. B. auf einem Raspberry Pi (64-Bit-OS): Das bestehende Frontend (nginx mit der SPA) bleibt, statt des Node-Backends läuft der PHP-Server (`apps/server-php/Dockerfile`, eingebauter Server von PHP mit 4 Workern).
+`apps/server-php/Dockerfile` baut PHP-FPM (offizielles Image `php:8.3-fpm-bookworm`, auch `linux/arm64`) mit OPcache, `clear_env = no` (Konfiguration aus der Umgebung), `memory_limit = 512M` und einem Entrypoint, der migriert und `bin/cron.php` alle 5 Minuten startet. Der Healthcheck `bin/fpm-healthcheck.php` schickt eine FastCGI-Anfrage für `/api/health` an `127.0.0.1:9000`. Das Frontend (nginx) spricht mit `apps/web/nginx.php.conf` FastCGI mit dem Backend; `X-Forwarded-For` setzt nginx wie beim Proxy, damit die Rate-Limits die echte Client-Adresse sehen.
 
 ```sh
 ALLOW_REGISTRATION=true docker compose -f docker-compose.yml -f docker-compose.php.yml up -d --build
 ```
 
-Die App ist dann unter `http://127.0.0.1:8080` erreichbar (Zugriff von außen wie beim Node-Stack, siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)). Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen. Das endgültige Image folgt in #128.
+Die App ist dann unter `http://127.0.0.1:8080` erreichbar. Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen.
+
+## Webhosting (Release-ZIP)
+
+`scripts/build-php-release.sh [Version]` baut `dist/php-release/notion-alt-php-<Version>.zip`: die SPA im Wurzelverzeichnis mit `.htaccess` (SPA-Fallback, Sicherheits- und Cache-Header wie `apps/web/nginx.conf`), `api/index.php` als Front-Controller mit eigener `.htaccess`, `api/check.php` (Einrichtungs-Check im Browser) und `api/app/` mit Code, `vendor/`, `bin/` und `config.example.php` (per `.htaccess` gesperrt). Die Vorlagen liegen in `release/`. `SKIP_WEB_BUILD=1` nutzt ein vorhandenes `apps/web/dist`, `VENDOR_DIR=…` kopiert ein vorhandenes `vendor/` statt Composer aufzurufen. Anleitung für Nutzer: [`docs/user/webhosting.md`](../../docs/user/webhosting.md).
 
 ## Konfiguration
 

@@ -7,7 +7,9 @@ RUN pnpm install --frozen-lockfile --filter @notion-alt/web...
 RUN pnpm --filter @notion-alt/web build
 
 FROM nginx:1.29-alpine
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+# nginx.php.conf talks FastCGI to the PHP backend (docker-compose.php.yml).
+ARG NGINX_CONF=apps/web/nginx.conf
+COPY ${NGINX_CONF} /etc/nginx/conf.d/default.conf
 COPY apps/web/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
