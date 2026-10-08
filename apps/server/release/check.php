@@ -58,10 +58,12 @@ if ($modernPhp && is_file($autoload)) {
 if ($config !== null && is_file($config->databasePath)) {
     try {
         $existing = NotionAlt\Database\Database::open($config->databasePath);
-        $users = $existing->query('select count(*) from users');
-        $setUp = $users !== false && (int) $users->fetchColumn() > 0;
+        $tables = $existing->query("select 1 from sqlite_master where type = 'table' and name = 'users'");
+        $users = $tables !== false && $tables->fetchColumn() !== false ? $existing->query('select count(*) from users') : null;
+        $setUp = $users !== null && ($users === false || (int) $users->fetchColumn() > 0);
     } catch (Throwable $error) {
-        $setUp = false;
+        // An existing database that cannot be read may still hold accounts: show nothing.
+        $setUp = true;
     }
     if ($setUp) {
         // In use: no details for anonymous visitors.
