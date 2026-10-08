@@ -12,6 +12,7 @@ use NotionAlt\Http\BasePath;
 use NotionAlt\Http\HttpError;
 use NotionAlt\Http\Json;
 use NotionAlt\Http\JsonBodyMiddleware;
+use NotionAlt\Http\RawBody;
 use NotionAlt\Logging\Logger;
 use NotionAlt\Shared\AuthSchemas;
 use NotionAlt\Validation\Undefined;
@@ -73,6 +74,25 @@ final class HttpTest extends TestCase
             self::assertSame(404, $response->getStatusCode(), "{$method} {$path}");
             self::assertSame('{"error":{"code":"not_found","message":"Not found"}}', (string) $response->getBody());
         }
+    }
+
+    /** Routes with their own limit and octet-stream parser (attachment uploads). */
+    public function testRawBodyRoutes(): void
+    {
+        $octet = ['Content-Type' => 'application/octet-stream'];
+        self::assertSame('{"raw":"00ff"}', (string) $this->request('PUT', '/api/raw', "\x00\xff", $octet)->getBody());
+        // Fastify runs the parser for an empty body with a content type: an empty Buffer.
+        self::assertSame('{"raw":""}', (string) $this->request('PUT', '/api/raw', '', $octet)->getBody());
+        self::assertSame('{"body":"ab"}', (string) $this->request('PUT', '/api/raw', 'ab', ['Content-Type' => 'text/plain'])->getBody());
+        // The route's limit applies to every content type.
+        foreach ([$octet, ['Content-Type' => 'text/plain']] as $headers) {
+            $response = $this->request('PUT', '/api/raw', '12345', $headers);
+            self::assertSame(413, $response->getStatusCode());
+            self::assertSame('{"error":{"code":"bad_request","message":"Request body is too large"}}', (string) $response->getBody());
+        }
+        self::assertSame(415, $this->request('PUT', '/api/raw', 'ab', ['Content-Type' => 'image/png'])->getStatusCode());
+        // Other routes still refuse octet-stream.
+        self::assertSame(415, $this->request('POST', '/api/echo', 'ab', $octet)->getStatusCode());
     }
 
     public function testRequestLogWithoutQueryString(): void
@@ -215,6 +235,11 @@ final class HttpTest extends TestCase
         $app->post('/api/validate', static function (ServerRequestInterface $request, ResponseInterface $response): ResponseInterface {
             return Json::respond($response, Validation::parseInput(AuthSchemas::registerInput(), JsonBodyMiddleware::body($request)));
         });
+        $app->put('/api/raw', static function (ServerRequestInterface $request, ResponseInterface $response): ResponseInterface {
+            $body = JsonBodyMiddleware::body($request);
+
+            return Json::respond($response, $body instanceof RawBody ? ['raw' => bin2hex($body->bytes)] : ['body' => $body === Undefined::Value ? null : $body]);
+        })->setArgument(JsonBodyMiddleware::RAW_BODY_LIMIT, '4');
         $app->get('/api/limited', static fn(): never => throw new HttpError(429, 'too_many_attempts', 'Too many attempts, try again later', ['retryAfter' => 60]));
         $app->get('/api/boom', static fn(): never => throw new \LogicException('kaputt'));
 

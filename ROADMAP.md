@@ -148,7 +148,7 @@ Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/no
 - [x] Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121); offen: Push-Hinweis nach #125, Metrik nach #127)
 - [x] Sync-Pull, Änderungslog, Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122); die Contract-Tests zu `cursor_expired` brauchen den Import, #126)
 - [x] Serverseitige Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123))
-- [ ] Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124); SigV4-Signatur portiert)
+- [x] Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124); Aufräumen nach der Aufbewahrungsfrist läuft mit dem Cron, #127)
 - [ ] Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125); Verschlüsselung und VAPID portiert, Routen und Versand offen)
 - [ ] Versionsverlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126))
 - [ ] CLI, Cron, Metriken ([#127](https://github.com/mszkb/notion-alternative/issues/127))

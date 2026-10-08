@@ -1,12 +1,12 @@
 # PHP-Server (Slim 4)
 
-Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`; Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121)): `POST /api/sync/push`; Sync-Pull, Änderungslog und Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122)): `GET /api/sync/pull`, `GET /api/sync/log`, `GET /api/sync/snapshot` (auch seitenweise). Die übrigen Endpunkte folgen in #123–#127.
+Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`; Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121)): `POST /api/sync/push`; Sync-Pull, Änderungslog und Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122)): `GET /api/sync/pull`, `GET /api/sync/log`, `GET /api/sync/snapshot` (auch seitenweise); Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123)): `GET /api/search`; Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124)): `GET /api/attachments/usage`, `PUT/GET /api/attachments/:id/content`. Die übrigen Endpunkte folgen in #125–#127.
 
 ## Voraussetzungen
 
 - PHP **≥ 8.2**
 - Extensions: `pdo_sqlite` (SQLite **mit FTS5**), `mbstring`, `json`
-- Später zusätzlich (Web Push, S3): `openssl`, `curl`
+- Für Anhänge in S3 (`ATTACHMENT_STORAGE=s3`): `curl`; später für Web Push zusätzlich `openssl`
 - Composer (nur für die Entwicklung; das Release-ZIP enthält `vendor/`, siehe #128)
 
 FTS5 wird beim ersten Datenbankzugriff geprüft. Fehlt es, antwortet `/api/ready` mit 503 und im Log steht `SQLite of this PHP installation has no FTS5 …`.
@@ -48,7 +48,7 @@ Zum Ausprobieren, z. B. auf einem Raspberry Pi (64-Bit-OS): Das bestehende Front
 ALLOW_REGISTRATION=true docker compose -f docker-compose.yml -f docker-compose.php.yml up -d --build
 ```
 
-Die App ist dann unter `http://127.0.0.1:8080` erreichbar (Zugriff von außen wie beim Node-Stack, siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)). Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen. Noch nicht portiert und daher in der App ohne Funktion: Dateianhänge (#124), Web Push (#125), Versionsverlauf und Import (#126). Das endgültige Image folgt in #128.
+Die App ist dann unter `http://127.0.0.1:8080` erreichbar (Zugriff von außen wie beim Node-Stack, siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)). Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen. Noch nicht portiert und daher in der App ohne Funktion: Web Push (#125), Versionsverlauf und Import (#126). Das endgültige Image folgt in #128.
 
 ## Konfiguration
 
@@ -104,12 +104,21 @@ pnpm --filter @notion-alt/server exec tsx scripts/dump-php-fixtures.ts
 
 Das Skript schreibt nach `tests/fixtures/`: `node-schema.json` (`sqlite_master` einer frischen Node-Datenbank), `node-0004.sqlite` und `node-latest.sqlite` (Datenbank mit Inhalt vor und nach den Node-Migrationen 0005–0013) und `inline-plaintext.json` (Erwartungswerte für den PHP-Port von `inlineToPlainText`, den Migration 0005 braucht).
 
+## Dateianhänge
+
+Port von `apps/server/src/attachments/` (ADR 0012), gleiche Ablage wie der Node-Server: `ATTACHMENTS_DIR/<workspace>/<id>` im Volume (atomar über Temp-Datei und `rename`) oder Objekt `<workspace>/<id>` im S3-Bucket (`src/Attachments/S3Client.php`, SigV4 mit `S3Signer`, Versand mit ext-curl, ohne Redirects, 60 s Timeout). Ein Wechsel zwischen den Servern braucht deshalb keine Migration der Dateien.
+
+- `PUT /api/attachments/:id/content` nimmt nur `application/octet-stream` an (sonst 415). Für diese Route gilt `ATTACHMENT_MAX_MB` als Body-Limit statt 1 MiB (Routen-Argument `JsonBodyMiddleware::RAW_BODY_LIMIT`, wie `bodyLimit` einer Fastify-Route). Der Body wird ganz gelesen; `memory_limit` muss deshalb deutlich über `ATTACHMENT_MAX_MB` liegen (Default 25 MB, PHP-Default 128 MB reicht). `post_max_size` und `upload_max_filesize` gelten für `PUT` nicht.
+- Größe und SHA-256 werden gegen die synchronisierten Metadaten geprüft; Quota (`WORKSPACE_STORAGE_MB`) und Dateigröße prüft schon der Sync-Push.
+- `GET …/content` streamt die Datei; nur Rasterbilder inline, alles andere als Download, mit `nosniff`, `sandbox`-CSP und `no-store` (gleiche Header wie Node, `Content-Disposition` nach RFC 6266 bis auf das Zeichen gleich).
+- `Purge::deletedAttachments` entfernt Dateien gelöschter Anhänge nach `ATTACHMENT_RETENTION_DAYS`; aufgerufen wird es vom Cron (#127).
+
 ## Bausteine
 
 Reine Funktionen ohne HTTP, für die späteren Endpunkte vorab portiert; nur `ext-openssl` und `hash`:
 
 - `src/Push` (Web Push, #125): `WebPushCrypto::encrypt` (RFC 8291, aes128gcm), `Vapid::authorization` (RFC 8292, ES256-JWT), `VapidKeys` (liest und schreibt das JSON, das der Node-Server in `settings` unter `vapid` speichert; ein vorhandenes Schlüsselpaar gilt weiter), `PushRequest::syncAvailable` (Header und verschlüsselter Hinweis ohne Inhalte) und `PushRequest::isAllowedEndpoint`. Tests: RFC-8291-Testvektor, JWT-Prüfung mit dem öffentlichen Schlüssel, Node-Schlüssel laden.
-- `src/Attachments/S3Signer.php` (S3, #124): AWS Signature V4 mit Header und Objekt-URLs (Path-Style oder virtueller Host). Tests: AWS-Beispiel und vom Node-Client aufgezeichnete Anfragen. Presigned URLs gibt es wie im Node-Server nicht.
+- `src/Attachments/S3Signer.php` (S3, #124): AWS Signature V4 mit Header und Objekt-URLs (Path-Style oder virtueller Host). Tests: AWS-Beispiel und vom Node-Client aufgezeichnete Anfragen. Presigned URLs gibt es wie im Node-Server nicht. Genutzt von `S3Client` (siehe Dateianhänge).
 - `src/Sync` (Sync-Push, #121): Port von `apps/server/src/sync/apply.ts` (`Apply::batch`: eine Transaktion je Batch, ein Savepoint je Operation; Revisionen, Tombstones, Block-Merge und Konfliktobjekte nach ADR 0003, Einträge in `changes`, Markierung für den Suchindex), `Mapping` (Port von `mapping.ts`) und `SyncRoutes` (`POST /api/sync/push`). Payloads bleiben `stdClass`, damit `{}` wie in Node als `{}` gespeichert wird. Die Eingabeschemas stehen in `src/Shared/SyncSchemas.php`. Der Push-Hinweis an andere Geräte fehlt noch (#125). Tests: `tests/Unit/SyncApplyTest.php`.
 - `src/Search/SearchIndex.php` (Suche, #123): Port von `apps/server/src/search/index.ts` mit PDO – `reindexDocument` (Zeile über die Rowid aus `search_documents`), `markForReindex`/`reindexMarked` (`search_dirty`), `toFtsQuery` und `searchWorkspace` (nur Workspaces des Owners, gleiche Treffer, Reihenfolge und Snippets wie Node). Die Route `GET /api/search` liegt in `SearchRoutes`, ihr Eingabeschema in `src/Shared/SearchSchemas.php`. Tests: Fälle aus `search.test.ts`/`migrations.test.ts` und `tests/fixtures/search.json` (Treffer des Node-Servers, erzeugt mit `pnpm --filter @notion-alt/server exec tsx scripts/dump-php-search-fixture.ts`).
 

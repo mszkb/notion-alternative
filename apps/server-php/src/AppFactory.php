@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace NotionAlt;
 
+use NotionAlt\Attachments\AttachmentRoutes;
+use NotionAlt\Attachments\ContentStore;
 use NotionAlt\Auth\AuthRoutes;
 use NotionAlt\Config\Config;
 use NotionAlt\Devices\DeviceRoutes;
@@ -23,11 +25,12 @@ use Slim\Psr7\Factory\ResponseFactory;
 final class AppFactory
 {
     /**
-     * @param \Closure(): \PDO $db opens the migrated database on first use
+     * @param \Closure(): \PDO              $db    opens the migrated database on first use
+     * @param ?ContentStore                 $store attachment contents (default: from the configuration)
      *
      * @return App<null>
      */
-    public static function create(Config $config, Logger $logger, \Closure $db, string $basePath = ''): App
+    public static function create(Config $config, Logger $logger, \Closure $db, string $basePath = '', ?ContentStore $store = null): App
     {
         $responseFactory = new ResponseFactory();
         $app = new App($responseFactory);
@@ -40,13 +43,17 @@ final class AppFactory
         $errors->setDefaultErrorHandler(new ErrorHandler($responseFactory, $logger));
         $app->add(new RequestLogMiddleware($logger));
 
-        $app->group('/api', /** @param RouteCollectorProxyInterface<null> $api */ static function (RouteCollectorProxyInterface $api) use ($db, $logger, $config): void {
+        // Cheap to build: no I/O until a request needs it.
+        $store ??= ContentStore::fromConfig($config->attachments);
+
+        $app->group('/api', /** @param RouteCollectorProxyInterface<null> $api */ static function (RouteCollectorProxyInterface $api) use ($db, $logger, $config, $store): void {
             HealthRoutes::register($api, $db, $logger);
             AuthRoutes::register($api, $db, $config, $logger);
             WorkspaceRoutes::register($api, $db);
             DeviceRoutes::register($api, $db, $logger);
             SyncRoutes::register($api, $db, $config->attachments);
             SearchRoutes::register($api, $db);
+            AttachmentRoutes::register($api, $db, $config->attachments, $store);
         });
 
         return $app;

@@ -9,12 +9,19 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Slim\Interfaces\RouteInterface;
+use Slim\Routing\RouteContext;
 
 /**
  * Parses request bodies like Fastify's default content-type parsers: `application/json` (decoded
  * with objects as `stdClass`) and `text/plain` (string); other types with a body are 415. The
  * decoded body is in the request attribute `body` (read it with {@see self::body()}); a request
  * without body has none, like `request.body === undefined`.
+ *
+ * Routes with the argument {@see self::RAW_BODY_LIMIT} also accept `application/octet-stream`
+ * (as {@see RawBody}, even when empty) and use that limit for every content type, like a route
+ * with its own `bodyLimit` and an octet-stream parser in Fastify. Needs the routing middleware
+ * to run first.
  */
 final class JsonBodyMiddleware implements MiddlewareInterface
 {
@@ -22,6 +29,9 @@ final class JsonBodyMiddleware implements MiddlewareInterface
 
     /** Fastify's default `bodyLimit` as set in apps/server/src/app.ts. */
     public const DEFAULT_LIMIT = 1024 * 1024;
+
+    /** Route argument: body limit in bytes of a route that takes `application/octet-stream`. */
+    public const RAW_BODY_LIMIT = 'rawBodyLimit';
 
     private const INVALID_JSON = "Body is not valid JSON but content-type is set to 'application/json'";
 
@@ -43,14 +53,20 @@ final class JsonBodyMiddleware implements MiddlewareInterface
         if (!\in_array(strtoupper($request->getMethod()), self::BODY_METHODS, true)) {
             return $handler->handle($request);
         }
+        $route = $request->getAttribute(RouteContext::ROUTE);
+        $rawLimit = $route instanceof RouteInterface ? $route->getArgument(self::RAW_BODY_LIMIT) : null;
+        $limit = $rawLimit !== null ? (int) $rawLimit : $this->limit;
         $length = $request->getHeaderLine('Content-Length');
-        if ($length !== '' && ctype_digit($length) && (int) $length > $this->limit) {
+        if ($length !== '' && ctype_digit($length) && (int) $length > $limit) {
             throw self::tooLarge();
         }
-        $raw = self::read($request, $this->limit);
+        $raw = self::read($request, $limit);
         $contentType = $request->getHeaderLine('Content-Type');
         $mediaType = strtolower(trim(explode(';', $contentType, 2)[0]));
 
+        if ($rawLimit !== null && $mediaType === 'application/octet-stream') {
+            return $handler->handle($request->withAttribute(self::ATTRIBUTE, new RawBody($raw)));
+        }
         if ($raw === '' && $mediaType !== 'application/json') {
             return $handler->handle($request);
         }
