@@ -201,6 +201,20 @@ final class ValidationTest extends TestCase
         ));
     }
 
+    /** `z.url()` as checked with zod 4 (`new URL()`), and literals. */
+    public function testUrlAndLiteral(): void
+    {
+        $url = V::string()->url();
+        foreach (['https://a', 'mailto:x@y', 'file:///x', 'javascript:alert(1)', 'https://ü.de/x', ' https://a.de', 'https://u:p@h:443/p?q#f'] as $valid) {
+            self::assertTrue($url->safeParse($valid)->success(), $valid);
+        }
+        foreach (['nope', 'http://', 'https://a b', '', '1http://a'] as $invalid) {
+            self::assertSame('Invalid URL', $url->safeParse($invalid)->issues[0]->message ?? null, $invalid);
+        }
+        self::assertTrue(V::literal(3)->safeParse(3)->success());
+        self::assertSame('Invalid input: expected 3', V::literal(3)->safeParse(2)->issues[0]->message ?? null);
+    }
+
     private static function json(string $json): mixed
     {
         return json_decode($json, false, 512, JSON_THROW_ON_ERROR);

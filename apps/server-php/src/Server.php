@@ -6,9 +6,12 @@ namespace NotionAlt;
 
 use NotionAlt\Config\ConfigLoader;
 use NotionAlt\Database\DatabaseProvider;
+use NotionAlt\Http\AfterResponse;
 use NotionAlt\Http\BasePath;
 use NotionAlt\Http\Json;
 use NotionAlt\Logging\Logger;
+use Slim\Factory\ServerRequestCreatorFactory;
+use Slim\ResponseEmitter;
 
 /** Entry point of `public/index.php`: configuration, database, app, one request. */
 final class Server
@@ -28,6 +31,17 @@ final class Server
         }
         $logger = new Logger($config->logLevel);
         $database = new DatabaseProvider($config->databasePath, $logger);
-        AppFactory::create($config, $logger, $database->get(...), BasePath::detect($_SERVER))->run();
+        $after = new AfterResponse();
+        $app = AppFactory::create($config, $logger, $database->get(...), BasePath::detect($_SERVER), after: $after);
+        $response = $app->handle(ServerRequestCreatorFactory::create()->createServerRequestFromGlobals());
+        if ($after->pending()) {
+            // The client must not wait for the work after the response (no `Connection: close` wait).
+            $size = $response->getBody()->getSize();
+            if ($size !== null && !$response->hasHeader('Content-Length') && !\in_array($response->getStatusCode(), [204, 304], true)) {
+                $response = $response->withHeader('Content-Length', (string) $size);
+            }
+        }
+        (new ResponseEmitter())->emit($response);
+        $after->run($logger);
     }
 }

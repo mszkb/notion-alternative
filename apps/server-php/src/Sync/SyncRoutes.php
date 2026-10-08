@@ -7,11 +7,15 @@ namespace NotionAlt\Sync;
 use NotionAlt\Auth\AuthContext;
 use NotionAlt\Auth\RequireAuth;
 use NotionAlt\Config\AttachmentsConfig;
+use NotionAlt\Config\PushConfig;
 use NotionAlt\Database\Row;
 use NotionAlt\Devices\Devices;
+use NotionAlt\Http\AfterResponse;
 use NotionAlt\Http\HttpError;
 use NotionAlt\Http\Json;
 use NotionAlt\Http\JsonBodyMiddleware;
+use NotionAlt\Push\PushNotifier;
+use NotionAlt\Push\PushRoutes;
 use NotionAlt\Search\SearchIndex;
 use NotionAlt\Shared\SyncSchemas;
 use NotionAlt\Support\Ids;
@@ -30,15 +34,17 @@ final class SyncRoutes
     private function __construct(
         private readonly \Closure $db,
         private readonly AttachmentsConfig $attachments,
+        private readonly PushConfig $push,
+        private readonly AfterResponse $after,
     ) {}
 
     /**
      * @param RouteCollectorProxyInterface<null> $api
      * @param \Closure(): \PDO                   $db
      */
-    public static function register(RouteCollectorProxyInterface $api, \Closure $db, AttachmentsConfig $attachments): void
+    public static function register(RouteCollectorProxyInterface $api, \Closure $db, AttachmentsConfig $attachments, PushConfig $push, AfterResponse $after): void
     {
-        $routes = new self($db, $attachments);
+        $routes = new self($db, $attachments, $push, $after);
         $auth = new RequireAuth($db);
         $api->post('/sync/push', $routes->push(...))->add($auth);
         $api->get('/sync/pull', $routes->pull(...))->add($auth);
@@ -72,8 +78,14 @@ final class SyncRoutes
         foreach ($deviceIds as $deviceId) {
             Devices::touch($db, $userId, $deviceId, $now);
         }
-        // TODO(#125): tell the owner's other devices that changes are waiting (a hint only,
-        // ADR 0005) for each workspace with an applied, merged or conflicting operation.
+        // Tell the owner's other devices that changes are waiting (a hint only, ADR 0005).
+        $changed = [];
+        foreach ($applied as $i => $result) {
+            if (\in_array($result['status'] ?? null, ['applied', 'merged', 'conflict'], true)) {
+                $changed[$operations[$i]->workspaceId] = $operations[$i]->deviceId;
+            }
+        }
+        PushRoutes::afterChanges($db, $this->push, $this->after, $changed);
 
         return Json::respond($response, ['results' => $results]);
     }
@@ -90,6 +102,10 @@ final class SyncRoutes
         if ($workspace === null) {
             throw new HttpError(404, 'not_found', 'Workspace not found');
         }
+        // Devices pull regularly: a good moment to send bundled hints that are due by now.
+        $this->after->add(function () use ($db): void {
+            PushNotifier::flush($db, $this->push);
+        });
         if ($cursor < $workspace['compacted_seq']) {
             // Changes after the cursor are gone: the client needs a full re-sync (snapshot).
             throw new HttpError(410, 'cursor_expired', 'Cursor is older than the change log');

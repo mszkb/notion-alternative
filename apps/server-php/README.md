@@ -1,12 +1,12 @@
 # PHP-Server (Slim 4)
 
-Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`; Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121)): `POST /api/sync/push`; Sync-Pull, Änderungslog und Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122)): `GET /api/sync/pull`, `GET /api/sync/log`, `GET /api/sync/snapshot` (auch seitenweise); Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123)): `GET /api/search`; Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124)): `GET /api/attachments/usage`, `PUT/GET /api/attachments/:id/content`; Verlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126)): `GET /api/documents/:id/history`, `GET /api/documents/:id/history/:seq`, `POST /api/import`. Die übrigen Endpunkte folgen in #125 und #127.
+Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`; Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121)): `POST /api/sync/push`; Sync-Pull, Änderungslog und Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122)): `GET /api/sync/pull`, `GET /api/sync/log`, `GET /api/sync/snapshot` (auch seitenweise); Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123)): `GET /api/search`; Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124)): `GET /api/attachments/usage`, `PUT/GET /api/attachments/:id/content`; Verlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126)): `GET /api/documents/:id/history`, `GET /api/documents/:id/history/:seq`, `POST /api/import`; Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125)): `GET /api/push/public-key`, `POST/DELETE /api/push/subscriptions` und Hinweise nach dem Sync-Push. Es fehlen noch Cron, CLI und Metriken (#127).
 
 ## Voraussetzungen
 
 - PHP **≥ 8.2**
 - Extensions: `pdo_sqlite` (SQLite **mit FTS5**), `mbstring`, `json`
-- Für Anhänge in S3 (`ATTACHMENT_STORAGE=s3`): `curl`; später für Web Push zusätzlich `openssl`
+- Für Web Push: `openssl` und `curl`; für Anhänge in S3 (`ATTACHMENT_STORAGE=s3`): `curl`
 - Composer (nur für die Entwicklung; das Release-ZIP enthält `vendor/`, siehe #128)
 
 FTS5 wird beim ersten Datenbankzugriff geprüft. Fehlt es, antwortet `/api/ready` mit 503 und im Log steht `SQLite of this PHP installation has no FTS5 …`.
@@ -48,7 +48,7 @@ Zum Ausprobieren, z. B. auf einem Raspberry Pi (64-Bit-OS): Das bestehende Front
 ALLOW_REGISTRATION=true docker compose -f docker-compose.yml -f docker-compose.php.yml up -d --build
 ```
 
-Die App ist dann unter `http://127.0.0.1:8080` erreichbar (Zugriff von außen wie beim Node-Stack, siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)). Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen. Noch nicht portiert und daher in der App ohne Funktion: Web Push (#125). Das endgültige Image folgt in #128.
+Die App ist dann unter `http://127.0.0.1:8080` erreichbar (Zugriff von außen wie beim Node-Stack, siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)). Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen. Das endgültige Image folgt in #128.
 
 ## Konfiguration
 
@@ -113,6 +113,17 @@ Port von `apps/server/src/attachments/` (ADR 0012), gleiche Ablage wie der Node-
 - `GET …/content` streamt die Datei; nur Rasterbilder inline, alles andere als Download, mit `nosniff`, `sandbox`-CSP und `no-store` (gleiche Header wie Node, `Content-Disposition` nach RFC 6266 bis auf das Zeichen gleich).
 - `Purge::deletedAttachments` entfernt Dateien gelöschter Anhänge nach `ATTACHMENT_RETENTION_DAYS`; aufgerufen wird es vom Cron (#127).
 
+## Web Push
+
+Port von `apps/server/src/push/` (ADR 0005): Abos mit denselben Prüfungen und Fehlercodes (`device_not_registered`, `endpoint_not_allowed` nach `PUSH_ALLOWED_HOSTS`, `invalid_keys`, `endpoint_taken`, `too_many_subscriptions` ab 20 Abos), VAPID-Schlüssel und Installations-ID in `settings` (dieselben Zeilen wie Node, ein vorhandenes Schlüsselpaar gilt weiter). Der Hinweis enthält nur `{"type":"sync_available","installation","workspace"}`.
+
+**Bündeln ohne Timer.** Node sammelt die Hinweise eines Bursts 2 s im Speicher. PHP hält zwischen Anfragen nichts, deshalb liegt pro Abo eine Zeile in `push_hints` (Migration `0014_push_hints`, in Node angelegt, aber ungenutzt):
+
+- Nach einem Sync-Push mit angewandten, gemergten oder Konflikt-Operationen bekommt jedes andere Gerät des Owners einen fälligen Hinweis. Der erste nach einer Ruhepause ist sofort fällig, weitere innerhalb von 2 s nach dem letzten Versand werden zu einem Hinweis am Ende dieses Fensters gebündelt.
+- **Versand nach der Antwort** (`Http/AfterResponse`): unter PHP-FPM nach `fastcgi_finish_request()`, sonst mit `Content-Length` und geleerter Ausgabe, damit der Client nicht wartet. Fällige Hinweise gehen sofort raus; einen gebündelten Hinweis wartet der Prozess nur unter PHP-FPM ab (höchstens 2 s). Sonst schickt ihn der nächste Sync-Push oder -Pull eines Geräts oder der Cron (#127).
+- Jeder Hinweis wird vor dem Versand per `update … where due_at = ?` beansprucht, parallele Worker senden ihn also nie doppelt. `404`/`410` des Push-Dienstes löschen das Abo, ebenso fünf Fehlversuche in Folge.
+- Versand mit ext-curl (nur HTTPS, keine Redirects, 10 s Timeout). Für die Contract-Tests muss `curl` dem Zertifikat des Fake-Push-Dienstes vertrauen: `php -d curl.cainfo=$PUSH_RECEIVER_CA -S …`.
+
 ## Verlauf, Import und Export
 
 - **Verlauf** (`src/History`, ADR 0013): Port von `apps/server/src/history/`. Versionen sind Bearbeitungssitzungen pro Gerät (Abstand höchstens 10 Minuten), neueste zuerst, höchstens 200. Ein Stand wird aus dem Änderungslog der Seite und ihrer Blöcke zurückgerechnet; Blöcke nach Sortierschlüssel und ID.
@@ -126,7 +137,7 @@ Reine Funktionen ohne HTTP, für die späteren Endpunkte vorab portiert; nur `ex
 
 - `src/Push` (Web Push, #125): `WebPushCrypto::encrypt` (RFC 8291, aes128gcm), `Vapid::authorization` (RFC 8292, ES256-JWT), `VapidKeys` (liest und schreibt das JSON, das der Node-Server in `settings` unter `vapid` speichert; ein vorhandenes Schlüsselpaar gilt weiter), `PushRequest::syncAvailable` (Header und verschlüsselter Hinweis ohne Inhalte) und `PushRequest::isAllowedEndpoint`. Tests: RFC-8291-Testvektor, JWT-Prüfung mit dem öffentlichen Schlüssel, Node-Schlüssel laden.
 - `src/Attachments/S3Signer.php` (S3, #124): AWS Signature V4 mit Header und Objekt-URLs (Path-Style oder virtueller Host). Tests: AWS-Beispiel und vom Node-Client aufgezeichnete Anfragen. Presigned URLs gibt es wie im Node-Server nicht. Genutzt von `S3Client` (siehe Dateianhänge).
-- `src/Sync` (Sync-Push, #121): Port von `apps/server/src/sync/apply.ts` (`Apply::batch`: eine Transaktion je Batch, ein Savepoint je Operation; Revisionen, Tombstones, Block-Merge und Konfliktobjekte nach ADR 0003, Einträge in `changes`, Markierung für den Suchindex), `Mapping` (Port von `mapping.ts`) und `SyncRoutes` (`POST /api/sync/push`). Payloads bleiben `stdClass`, damit `{}` wie in Node als `{}` gespeichert wird. Die Eingabeschemas stehen in `src/Shared/SyncSchemas.php`. Der Push-Hinweis an andere Geräte fehlt noch (#125). Tests: `tests/Unit/SyncApplyTest.php`.
+- `src/Sync` (Sync-Push, #121): Port von `apps/server/src/sync/apply.ts` (`Apply::batch`: eine Transaktion je Batch, ein Savepoint je Operation; Revisionen, Tombstones, Block-Merge und Konfliktobjekte nach ADR 0003, Einträge in `changes`, Markierung für den Suchindex), `Mapping` (Port von `mapping.ts`) und `SyncRoutes` (`POST /api/sync/push`). Payloads bleiben `stdClass`, damit `{}` wie in Node als `{}` gespeichert wird. Die Eingabeschemas stehen in `src/Shared/SyncSchemas.php`. Nach dem Batch plant `PushRoutes::afterChanges` die Hinweise an die anderen Geräte (siehe Web Push). Tests: `tests/Unit/SyncApplyTest.php`.
 - `src/Search/SearchIndex.php` (Suche, #123): Port von `apps/server/src/search/index.ts` mit PDO – `reindexDocument` (Zeile über die Rowid aus `search_documents`), `markForReindex`/`reindexMarked` (`search_dirty`), `toFtsQuery` und `searchWorkspace` (nur Workspaces des Owners, gleiche Treffer, Reihenfolge und Snippets wie Node). Die Route `GET /api/search` liegt in `SearchRoutes`, ihr Eingabeschema in `src/Shared/SearchSchemas.php`. Tests: Fälle aus `search.test.ts`/`migrations.test.ts` und `tests/fixtures/search.json` (Treffer des Node-Servers, erzeugt mit `pnpm --filter @notion-alt/server exec tsx scripts/dump-php-search-fixture.ts`).
 
 ## Tests und Werkzeuge

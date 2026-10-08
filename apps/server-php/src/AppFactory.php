@@ -11,11 +11,13 @@ use NotionAlt\Config\Config;
 use NotionAlt\Devices\DeviceRoutes;
 use NotionAlt\Health\HealthRoutes;
 use NotionAlt\History\HistoryRoutes;
+use NotionAlt\Http\AfterResponse;
 use NotionAlt\Http\ErrorHandler;
 use NotionAlt\Http\JsonBodyMiddleware;
 use NotionAlt\Http\RequestLogMiddleware;
 use NotionAlt\Import\ImportRoutes;
 use NotionAlt\Logging\Logger;
+use NotionAlt\Push\PushRoutes;
 use NotionAlt\Search\SearchRoutes;
 use NotionAlt\Sync\SyncRoutes;
 use NotionAlt\Workspaces\WorkspaceRoutes;
@@ -29,10 +31,11 @@ final class AppFactory
     /**
      * @param \Closure(): \PDO              $db    opens the migrated database on first use
      * @param ?ContentStore                 $store attachment contents (default: from the configuration)
+     * @param ?AfterResponse                $after work after the response (default: none is run)
      *
      * @return App<null>
      */
-    public static function create(Config $config, Logger $logger, \Closure $db, string $basePath = '', ?ContentStore $store = null): App
+    public static function create(Config $config, Logger $logger, \Closure $db, string $basePath = '', ?ContentStore $store = null, ?AfterResponse $after = null): App
     {
         $responseFactory = new ResponseFactory();
         $app = new App($responseFactory);
@@ -47,16 +50,18 @@ final class AppFactory
 
         // Cheap to build: no I/O until a request needs it.
         $store ??= ContentStore::fromConfig($config->attachments);
+        $after ??= new AfterResponse();
 
-        $app->group('/api', /** @param RouteCollectorProxyInterface<null> $api */ static function (RouteCollectorProxyInterface $api) use ($db, $logger, $config, $store): void {
+        $app->group('/api', /** @param RouteCollectorProxyInterface<null> $api */ static function (RouteCollectorProxyInterface $api) use ($db, $logger, $config, $store, $after): void {
             HealthRoutes::register($api, $db, $logger);
             AuthRoutes::register($api, $db, $config, $logger);
             WorkspaceRoutes::register($api, $db);
             DeviceRoutes::register($api, $db, $logger);
-            SyncRoutes::register($api, $db, $config->attachments);
+            SyncRoutes::register($api, $db, $config->attachments, $config->push, $after);
             SearchRoutes::register($api, $db);
             AttachmentRoutes::register($api, $db, $config->attachments, $store);
             HistoryRoutes::register($api, $db);
+            PushRoutes::register($api, $db, $config->push);
             ImportRoutes::register($api, $db, $config, $logger);
         });
 

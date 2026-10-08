@@ -12,7 +12,7 @@ pnpm --filter @notion-alt/contract-tests test
 pnpm --filter @notion-alt/contract-tests exec vitest run test/sync-push.test.ts
 
 # anderer Server, z. B. PHP (läuft im Repo-Wurzelverzeichnis, Port als $PORT bzw. {port})
-SERVER_CMD='php -S 127.0.0.1:$PORT -t apps/server-php/public' pnpm --filter @notion-alt/contract-tests test
+SERVER_CMD='php -d curl.cainfo=$PUSH_RECEIVER_CA -S 127.0.0.1:$PORT -t apps/server-php/public apps/server-php/public/index.php' pnpm --filter @notion-alt/contract-tests test
 
 # bereits laufender Server (wird weder gestartet noch beendet)
 SERVER_URL=http://127.0.0.1:3000 pnpm --filter @notion-alt/contract-tests test
