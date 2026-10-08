@@ -22,11 +22,22 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      # The web app's integration tests and the contract tests run against the PHP server.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, mbstring, curl, openssl, sodium
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --no-progress --prefer-dist
+        working-directory: apps/server-php
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm test
+      # HTTP contract of the server (docs/testing/contract-tests.md), the spec since #129.
+      - run: pnpm --filter @notion-alt/contract-tests test
       - run: pnpm build
 
   # PHP server (ADR 0018): code style, static analysis and tests on the oldest and current PHP.
@@ -44,7 +55,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: pdo_sqlite, mbstring
+          extensions: pdo_sqlite, mbstring, curl, openssl, sodium
           coverage: none
           tools: composer:v2
       - run: composer install --no-interaction --no-progress --prefer-dist

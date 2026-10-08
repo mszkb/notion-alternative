@@ -10,9 +10,16 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: docker
-    directories: [/apps/server, /apps/web]
+    directories: [/apps/server-php, /apps/web]
     schedule:
       interval: weekly
+  - package-ecosystem: composer
+    directory: /apps/server-php
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:

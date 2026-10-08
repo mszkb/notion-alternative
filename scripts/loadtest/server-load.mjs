@@ -3,7 +3,7 @@
 // concurrent device sync, full pull, snapshot, change log (JSON export) and server search. Plain Node 22, no dependencies, so it also runs on the reference hosts (Raspberry Pi).
 //
 // Usage:
-//   node scripts/loadtest/server-load.mjs                 # starts apps/server/dist (pnpm build)
+//   node scripts/loadtest/server-load.mjs                 # starts the PHP server (php -S)
 //   BASE_URL=http://127.0.0.1:3000 node scripts/loadtest/server-load.mjs   # existing server
 //
 // Environment: PAGES (default 1000), BLOCKS_PER_PAGE (50), DEVICES (10), ROUNDS (20),
@@ -157,11 +157,12 @@ async function startServer() {
   workDir = mkdtempSync(join(tmpdir(), 'notion-alt-load-'))
   const port = 3900 + Math.floor(Math.random() * 90)
   baseUrl = `http://127.0.0.1:${port}`
-  server = spawn(process.execPath, [join(root, 'apps/server/dist/index.js')], {
+  // PHP's built-in web server with several workers; RAM/CPU below cover its main process only.
+  server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', 'public', 'public/index.php'], {
+    cwd: join(root, 'apps/server-php'),
     env: {
       ...process.env,
-      PORT: String(port),
-      HOST: '127.0.0.1',
+      PHP_CLI_SERVER_WORKERS: '8',
       DATA_DIR: workDir,
       DATABASE_PATH: join(workDir, 'app.db'),
       LOG_LEVEL: 'warn',

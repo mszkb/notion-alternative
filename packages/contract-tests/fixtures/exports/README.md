@@ -4,4 +4,4 @@ Ein vollständiger Export (ZIP) pro veröffentlichter `schema_version` (ADR 0004
 
 - Fixtures **nie ändern oder löschen**: Sie belegen, dass alte Exporte importierbar bleiben.
 - Neue `schema_version`: Migration in `EXPORT_MIGRATIONS` (`packages/shared/src/import.ts`) ergänzen, dann das neue Fixture erzeugen mit
-  `UPDATE_EXPORT_FIXTURES=1 pnpm --filter @notion-alt/server test export-roundtrip` (bestehende Dateien werden nicht überschrieben).
+  `UPDATE_EXPORT_FIXTURES=1 pnpm --filter @notion-alt/contract-tests exec vitest run export-roundtrip` (bestehende Dateien werden nicht überschrieben).

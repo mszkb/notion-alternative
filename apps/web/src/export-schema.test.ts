@@ -9,7 +9,7 @@ const file = fileURLToPath(
 )
 
 // The published JSON Schema of the export (ADR 0004) must match the zod schema.
-// Regenerate with `UPDATE_EXPORT_SCHEMA=1 pnpm --filter @notion-alt/server test export-schema`.
+// Regenerate with `UPDATE_EXPORT_SCHEMA=1 pnpm --filter @notion-alt/web test export-schema`.
 it('docs/architecture/export.schema.json matches the zod schema', () => {
   const generated = `${JSON.stringify(z.toJSONSchema(jsonExportSchema), null, 2)}\n`
   if (process.env.UPDATE_EXPORT_SCHEMA) writeFileSync(file, generated)

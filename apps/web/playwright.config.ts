@@ -38,16 +38,19 @@ export default defineConfig({
   ],
   webServer: [
     {
-      // SERVER_CMD runs another server (e.g. the PHP one, #118) from the repository root, like
-      // the contract tests: the port comes as PORT, `{port}` in the command is replaced by it.
+      // The PHP server (ADR 0018); SERVER_CMD runs another one from the repository root, like the
+      // contract tests: the port comes as PORT, `{port}` in the command is replaced by it.
       command: (
-        process.env.SERVER_CMD || 'pnpm --filter @notion-alt/server exec tsx src/index.ts'
+        process.env.SERVER_CMD ||
+        'php -S 127.0.0.1:{port} -t apps/server-php/public apps/server-php/public/index.php'
       ).replaceAll('{port}', String(API_PORT)),
       cwd: '../..',
-      url: `http://localhost:${API_PORT}/api/ready`,
+      url: `http://127.0.0.1:${API_PORT}/api/ready`,
       // Every test (and retry) registers its own account, so attempts never share server data.
       env: {
         PORT: String(API_PORT),
+        // Parallel requests for PHP's built-in server.
+        PHP_CLI_SERVER_WORKERS: '4',
         DATABASE_PATH: databasePath,
         LOG_LEVEL: 'warn',
         ALLOW_REGISTRATION: 'true',
@@ -63,13 +66,13 @@ export default defineConfig({
     {
       command: `pnpm exec vite build && pnpm exec vite preview --port ${PREVIEW_PORT} --strictPort`,
       url: `http://localhost:${PREVIEW_PORT}`,
-      env: { API_PROXY_TARGET: `http://localhost:${API_PORT}` },
+      env: { API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}` },
       reuseExistingServer: false,
     },
     {
       command: `pnpm exec vite --port ${WEB_PORT} --strictPort`,
       url: `http://localhost:${WEB_PORT}`,
-      env: { API_PROXY_TARGET: `http://localhost:${API_PORT}` },
+      env: { API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}` },
       reuseExistingServer: false,
     },
   ],

@@ -11,12 +11,15 @@ export const PUSH_RECEIVER_KEY = fileURLToPath(
   new URL('../fixtures/push-receiver.key', import.meta.url),
 )
 
-/** Export fixtures of every released schema version, shared with apps/server. */
-export const EXPORT_FIXTURES = fileURLToPath(
-  new URL('../../../apps/server/test/fixtures/exports/', import.meta.url),
-)
+/** Export fixtures of every released schema version (ADR 0004); never change them. */
+export const EXPORT_FIXTURES = fileURLToPath(new URL('../fixtures/exports/', import.meta.url))
 
-export const DEFAULT_SERVER_CMD = 'pnpm --filter @notion-alt/server exec tsx src/index.ts'
+/**
+ * The PHP server (ADR 0018) with PHP's built-in web server; curl must trust the fake push
+ * service's certificate. Needs `composer install` in apps/server-php.
+ */
+export const DEFAULT_SERVER_CMD =
+  'php -d curl.cainfo="$PUSH_RECEIVER_CA" -S 127.0.0.1:$PORT -t apps/server-php/public apps/server-php/public/index.php'
 
 function fromEnv(name: string, fallback: string): string {
   const value = process.env[name]

@@ -30,7 +30,6 @@ export default tseslint.config(
   },
   {
     files: [
-      'apps/server/**/*.{ts,js}',
       'packages/contract-tests/**/*.ts',
       'apps/*/scripts/**/*.{js,mjs}',
       'scripts/**/*.mjs',

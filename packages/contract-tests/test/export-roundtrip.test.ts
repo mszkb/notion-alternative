@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import {
   buildExportArchive,
@@ -19,8 +19,10 @@ import { changeLog, expectSameContent, snapshot } from '../src/workspace-data'
 
 /**
  * T-EXP-02 (#72): a workspace with everything the data model has is exported as ZIP, imported
- * and compared; the fixtures of every released `schema_version` (apps/server/test/fixtures/
- * exports) must import completely. Ids are unique per server, so imports use a copy with new
+ * and compared; the fixtures of every released `schema_version` (fixtures/exports) must import
+ * completely. A new schema version gets its fixture with
+ * `UPDATE_EXPORT_FIXTURES=1 pnpm --filter @notion-alt/contract-tests exec vitest run export-roundtrip`
+ * (existing files are never overwritten). Ids are unique per server, so imports use a copy with new
  * ids (`remapExportIds`, as the app does for "import as copy") in a second account.
  */
 
@@ -144,14 +146,18 @@ async function buildRichWorkspace(a: Account): Promise<Map<string, Uint8Array>> 
   ])
 }
 
-async function exportArchive(a: Account, contents: Map<string, Uint8Array>) {
+async function exportArchive(
+  a: Account,
+  contents: Map<string, Uint8Array>,
+  exportedAt = new Date(),
+) {
   const state = await snapshot(a.client, a.workspaceId)
   const log = await changeLog(a.client, a.workspaceId)
   const { parts } = await buildExportArchive(
     state,
     {
       workspace: { id: a.workspaceId, name: 'Referenz' },
-      exportedAt: new Date(),
+      exportedAt,
       history: { compactedSeq: log.compactedSeq, changes: log.changes },
     },
     contents,
@@ -245,8 +251,15 @@ describe('T-EXP-02: export → import', () => {
 })
 
 describe('fixtures of released schema versions', () => {
-  it('a fixture exists for the current schema version', () => {
-    expect(existsSync(path.join(EXPORT_FIXTURES, `v${EXPORT_SCHEMA_VERSION}.zip`))).toBe(true)
+  it('a fixture exists for the current schema version', async () => {
+    const file = path.join(EXPORT_FIXTURES, `v${EXPORT_SCHEMA_VERSION}.zip`)
+    if (!existsSync(file) && process.env.UPDATE_EXPORT_FIXTURES) {
+      const source = await signUp({ name: 'fixture-source' })
+      const contents = await buildRichWorkspace(source)
+      mkdirSync(EXPORT_FIXTURES, { recursive: true })
+      writeFileSync(file, await exportArchive(source, contents, new Date('2026-10-03T12:00:00Z')))
+    }
+    expect(existsSync(file)).toBe(true)
   })
 
   const fixtures = existsSync(EXPORT_FIXTURES)
