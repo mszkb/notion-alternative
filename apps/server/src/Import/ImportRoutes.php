@@ -40,7 +40,7 @@ final class ImportRoutes
         $routes = new self($db, $config, $logger, $lock ?? ImportLock::forDatabase($config->databasePath));
         $api->post('/import', $routes->import(...))
             ->add(new RequireAuth($db))
-            ->setArgument(JsonBodyMiddleware::BODY_LIMIT, (string) $config->importMaxBytes);
+            ->setArguments([JsonBodyMiddleware::BODY_LIMIT => (string) $config->importMaxBytes, JsonBodyMiddleware::DEFER_JSON => '1']);
     }
 
     /**
@@ -50,10 +50,11 @@ final class ImportRoutes
     private function import(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $userId = AuthContext::of($request)->userId();
-        // One import at a time: each holds a whole workspace in memory.
+        // One import at a time: each holds a whole workspace in memory. The body is decoded inside
+        // the lock, so parallel requests never hold several decoded exports (security review L7).
         $result = $this->lock->run(function () use ($request, $userId): array {
             /** @var array{name: string, data: array{documents: list<array<string, mixed>>, blocks: list<array<string, mixed>>, tags: list<array<string, mixed>>, document_tags: list<array<string, mixed>>, attachments: list<array<string, mixed>>, history: array{compactedSeq: int, changes: list<array<string, mixed>>}|null}} $input */
-            $input = Validation::parseInput(ExportSchemas::importInput(), JsonBodyMiddleware::body($request));
+            $input = Validation::parseInput(ExportSchemas::importInput(), JsonBodyMiddleware::decodedBody($request));
 
             return Import::workspace(($this->db)(), $userId, $input['name'], $input['data'], $this->config->attachments->workspaceQuotaBytes);
         });

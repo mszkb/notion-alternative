@@ -36,6 +36,12 @@ final class JsonBodyMiddleware implements MiddlewareInterface
     /** Route argument (`'1'`): the route accepts `application/octet-stream`. */
     public const OCTET_STREAM = 'octetStream';
 
+    /**
+     * Route argument (`'1'`): a JSON body is only read and checked for size here; the route decodes
+     * it with {@see self::decodedBody()} when it is ready to (e.g. inside a lock, for big imports).
+     */
+    public const DEFER_JSON = 'deferJson';
+
     private const INVALID_JSON = "Body is not valid JSON but content-type is set to 'application/json'";
 
     /** Methods whose body is parsed. */
@@ -51,6 +57,14 @@ final class JsonBodyMiddleware implements MiddlewareInterface
         return \array_key_exists(self::ATTRIBUTE, $attributes) ? $attributes[self::ATTRIBUTE] : Undefined::Value;
     }
 
+    /** Like {@see self::body()}, decoding a deferred JSON body (same errors as without deferral). */
+    public static function decodedBody(ServerRequestInterface $request): mixed
+    {
+        $body = self::body($request);
+
+        return $body instanceof DeferredJson ? self::decode($body->raw) : $body;
+    }
+
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
         if (!\in_array(strtoupper($request->getMethod()), self::BODY_METHODS, true)) {
@@ -59,6 +73,7 @@ final class JsonBodyMiddleware implements MiddlewareInterface
         $route = $request->getAttribute(RouteContext::ROUTE);
         $routeLimit = $route instanceof RouteInterface ? $route->getArgument(self::BODY_LIMIT) : null;
         $octetStream = $route instanceof RouteInterface && $route->getArgument(self::OCTET_STREAM) === '1';
+        $deferJson = $route instanceof RouteInterface && $route->getArgument(self::DEFER_JSON) === '1';
         $limit = $routeLimit !== null ? (int) $routeLimit : $this->limit;
         $length = $request->getHeaderLine('Content-Length');
         if ($length !== '' && ctype_digit($length) && (int) $length > $limit) {
@@ -75,7 +90,9 @@ final class JsonBodyMiddleware implements MiddlewareInterface
             return $handler->handle($request);
         }
         if ($mediaType === 'application/json') {
-            return $handler->handle($request->withAttribute(self::ATTRIBUTE, self::decode($raw)));
+            $body = $deferJson ? new DeferredJson($raw) : self::decode($raw);
+
+            return $handler->handle($request->withAttribute(self::ATTRIBUTE, $body));
         }
         if ($mediaType === 'text/plain') {
             return $handler->handle($request->withAttribute(self::ATTRIBUTE, $raw));
