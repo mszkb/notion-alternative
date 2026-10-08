@@ -22,6 +22,7 @@ describe('migrations', () => {
       'devices',
       'document_tags',
       'documents',
+      'push_hints',
       'push_subscriptions',
       'search_dirty',
       'search_documents',

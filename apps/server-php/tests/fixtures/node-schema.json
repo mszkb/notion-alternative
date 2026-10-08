@@ -91,6 +91,12 @@
   },
   {
     "type": "index",
+    "name": "push_hints_due_at_idx",
+    "tbl_name": "push_hints",
+    "sql": "CREATE INDEX \"push_hints_due_at_idx\" on \"push_hints\" (\"due_at\")"
+  },
+  {
+    "type": "index",
     "name": "push_subscriptions_user_id_idx",
     "tbl_name": "push_subscriptions",
     "sql": "CREATE INDEX \"push_subscriptions_user_id_idx\" on \"push_subscriptions\" (\"user_id\")"
@@ -177,6 +183,12 @@
     "type": "index",
     "name": "sqlite_autoindex_kysely_migration_lock_1",
     "tbl_name": "kysely_migration_lock",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_push_hints_1",
+    "tbl_name": "push_hints",
     "sql": null
   },
   {
@@ -310,6 +322,12 @@
     "name": "kysely_migration_lock",
     "tbl_name": "kysely_migration_lock",
     "sql": "CREATE TABLE \"kysely_migration_lock\" (\"id\" varchar(255) not null primary key, \"is_locked\" integer default 0 not null)"
+  },
+  {
+    "type": "table",
+    "name": "push_hints",
+    "tbl_name": "push_hints",
+    "sql": "CREATE TABLE \"push_hints\" (\"endpoint\" text primary key references \"push_subscriptions\" (\"endpoint\") on delete cascade, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"due_at\" integer, \"sent_at\" integer)"
   },
   {
     "type": "table",

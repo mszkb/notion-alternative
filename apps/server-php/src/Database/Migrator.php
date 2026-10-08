@@ -17,6 +17,7 @@ use NotionAlt\Database\Migrations\M0010SearchDirty;
 use NotionAlt\Database\Migrations\M0011SnapshotPaging;
 use NotionAlt\Database\Migrations\M0012DocumentIconCover;
 use NotionAlt\Database\Migrations\M0013AuthAttempts;
+use NotionAlt\Database\Migrations\M0014PushHints;
 
 /**
  * Runs the migrations with Kysely's bookkeeping (`kysely_migration`, `kysely_migration_lock`,
@@ -76,6 +77,7 @@ final class Migrator
             '0011_snapshot_paging' => new M0011SnapshotPaging(),
             '0012_document_icon_cover' => new M0012DocumentIconCover(),
             '0013_auth_attempts' => new M0013AuthAttempts(),
+            '0014_push_hints' => new M0014PushHints(),
         ];
     }
 
