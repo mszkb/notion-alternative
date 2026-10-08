@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NotionAlt\Search;
 
 use NotionAlt\Database\Sql;
+use NotionAlt\Database\Transaction;
 use NotionAlt\Text\InlineText;
 
 /**
@@ -98,30 +99,25 @@ final class SearchIndex
      */
     public static function reindexMarked(\PDO $db): void
     {
-        /** @var list<string> $marked */
-        $marked = Sql::run($db, 'select document_id from search_dirty')->fetchAll(\PDO::FETCH_COLUMN);
-        if ($marked === []) {
+        if (Sql::rows($db, 'select 1 from search_dirty limit 1') === []) {
             return;
         }
-        // Joins an open transaction (PDO cannot nest them); otherwise runs in one of its own.
-        $own = !$db->inTransaction();
-        if ($own) {
-            $db->beginTransaction();
-        }
-        try {
+        $work = static function () use ($db): void {
+            // Read inside the write transaction: another worker may have handled some pages.
+            /** @var list<string> $marked */
+            $marked = Sql::run($db, 'select document_id from search_dirty')->fetchAll(\PDO::FETCH_COLUMN);
             foreach ($marked as $documentId) {
                 self::reindexDocument($db, $documentId);
                 Sql::run($db, 'delete from search_dirty where document_id = ?', [$documentId]);
             }
-            if ($own) {
-                $db->commit();
-            }
-        } catch (\Throwable $error) {
-            if ($own) {
-                $db->rollBack();
-            }
-
-            throw $error;
+        };
+        // Joins an open transaction (PDO cannot nest them). Otherwise one of its own that takes the
+        // write lock up front: a deferred one that reads first fails at once with SQLITE_BUSY when
+        // another worker commits in between, without waiting for busy_timeout.
+        if ($db->inTransaction()) {
+            $work();
+        } else {
+            Transaction::run($db, $work);
         }
     }
 

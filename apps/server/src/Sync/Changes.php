@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NotionAlt\Sync;
 
 use NotionAlt\Database\Sql;
+use NotionAlt\Database\Transaction;
 use NotionAlt\Workspaces\Workspaces;
 
 /** Reading and compacting the change log. */
@@ -43,15 +44,9 @@ final class Changes
      */
     public static function compact(\PDO $db, string $workspaceId, int $throughSeq): void
     {
-        $db->beginTransaction();
-        try {
+        Transaction::run($db, static function () use ($db, $workspaceId, $throughSeq): void {
             Sql::run($db, 'delete from changes where workspace_id = ? and seq <= ?', [$workspaceId, $throughSeq]);
             Sql::run($db, 'update workspaces set compacted_seq = max(compacted_seq, ?) where id = ?', [$throughSeq, $workspaceId]);
-            $db->commit();
-        } catch (\Throwable $error) {
-            $db->rollBack();
-
-            throw $error;
-        }
+        });
     }
 }

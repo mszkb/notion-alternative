@@ -39,6 +39,7 @@ Ein gestarteter Server bekommt genau diese Variablen. Ein externer Server (`SERV
 | `PORT` | freier Port | nur beim Start durch die Suite |
 | `DATA_DIR`, `DATABASE_PATH` | temporäres Verzeichnis, `…/app.sqlite` | frische Datenbank pro Lauf |
 | `LOG_LEVEL` | `warn` | |
+| `PHP_CLI_SERVER_WORKERS` | `4` | parallele Worker des eingebauten PHP-Servers, damit Anfragen wirklich gleichzeitig laufen (Schreibsperre von SQLite) |
 | `ALLOW_REGISTRATION` | `true` | jeder Test legt eigene Konten an |
 | `METRICS_ENABLED` | `true` | `GET /api/metrics`; antwortet der Server `404`, wird der Test übersprungen (Metriken sind laut ADR 0018 optional) |
 | `LOGIN_MAX_FAILURES_PER_EMAIL` | `3` (überschreibbar) | Rate-Limit-Tests |
@@ -69,7 +70,7 @@ Nur über die API. Jeder Test registriert ein frisches Konto mit eindeutiger E-M
 | `password-change.test.ts` | `POST /api/auth/password` (`invalid_current_password`, Richtlinie, andere Sitzungen enden, zählt zum Login-Limit) |
 | `workspaces.test.ts` | `GET/POST /api/workspaces`, `GET /api/workspaces/:id` |
 | `devices.test.ts` | `POST/GET /api/devices`, `PATCH/DELETE /api/devices/:id` (`device_conflict`, `current_device`, `device_revoked`, #46), Logout mit `removeDevice` |
-| `sync-push.test.ts`, `sync-apply.test.ts` | `POST /api/sync/push`: `applied`, `duplicate`, `rejected` (`workspace_not_found`, `not_found`, `device_not_active`, `op_id_reused`, `invalid_payload`, `already_exists`, `deleted`), Savepoint pro Operation (#95), Revisionen/`seq`, Tags, Wiederherstellen (#66), Batch-Grenzen |
+| `sync-push.test.ts`, `sync-apply.test.ts` | `POST /api/sync/push`: `applied`, `duplicate`, `rejected` (`workspace_not_found`, `not_found`, `device_not_active`, `op_id_reused`, `invalid_payload`, `already_exists`, `deleted`), Savepoint pro Operation (#95), Revisionen/`seq`, Tags, Wiederherstellen (#66), Batch-Grenzen, gleichzeitige Pushes mehrerer Geräte ohne Fehler |
 | `sync-conflicts.test.ts` | `merged`, `conflict` (`changed`), Konfliktobjekt in Snapshot und Log, Auflösung |
 | `sync-apply.test.ts` | `conflict` mit `deleted` und `parent_deleted` (T-DEL-02) |
 | `sync-pull.test.ts` | `GET /api/sync/pull` (Paging, `cursor_ahead`, `cursor_expired`), `GET /api/sync/log` (auch nach „Kompaktierung“) |
