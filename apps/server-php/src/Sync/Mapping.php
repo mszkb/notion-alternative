@@ -20,6 +20,9 @@ final class Mapping
      */
     public static function toDocument(array $row): array
     {
+        $icon = Row::nullableString($row, 'icon');
+        $cover = Row::nullableString($row, 'cover');
+
         return [
             'id' => Row::string($row, 'id'),
             'workspaceId' => Row::string($row, 'workspace_id'),
@@ -27,6 +30,9 @@ final class Mapping
             'title' => Row::string($row, 'title'),
             'sortKey' => Row::string($row, 'sort_key'),
             'favorite' => Row::int($row, 'favorite') === 1,
+            // Only when set (#136): pages without them look like before export schema version 3.
+            ...($icon !== null && $icon !== '' ? ['icon' => $icon] : []),
+            ...($cover !== null && $cover !== '' ? ['cover' => $cover] : []),
             'createdAt' => Row::string($row, 'created_at'),
             'updatedAt' => Row::string($row, 'updated_at'),
             'revision' => Row::int($row, 'revision'),

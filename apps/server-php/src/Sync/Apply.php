@@ -361,6 +361,22 @@ final class Apply
         }
     }
 
+    /** A cover image must be an attachment of the same workspace (#136). */
+    private function assertCoverInWorkspace(string $workspaceId, mixed $cover): void
+    {
+        if (!\is_string($cover) || !str_starts_with($cover, 'attachment:')) {
+            return;
+        }
+        $attachment = self::first(
+            $this->db,
+            'select id from attachments where id = ? and workspace_id = ?',
+            [substr($cover, \strlen('attachment:')), $workspaceId],
+        );
+        if ($attachment === null) {
+            self::reject('invalid_payload', 'Cover attachment not found in this workspace');
+        }
+    }
+
     private function applyDocument(Operation $op): int
     {
         $db = $this->db;
@@ -371,18 +387,21 @@ final class Apply
             case 'create':
                 $parentId = self::nullableStr($op->field('parentId'));
                 $this->assertNoCycle($op->workspaceId, $op->entityId, $parentId);
+                $this->assertCoverInWorkspace($op->workspaceId, $op->field('cover'));
                 Sql::run(
                     $db,
-                    'insert into documents (id, workspace_id, parent_id, title, sort_key, favorite, created_at, updated_at, revision, deleted_at)
-                     values (?, ?, ?, ?, ?, ?, ?, ?, ?, null)',
+                    'insert into documents (id, workspace_id, parent_id, title, sort_key, favorite, icon, cover, created_at, updated_at, revision, deleted_at)
+                     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null)',
                     [
                         $op->entityId, $op->workspaceId, $parentId, self::str($op->field('title')),
                         self::str($op->field('sortKey')), $op->field('favorite') === true ? 1 : 0,
+                        self::nullableStr($op->field('icon')), self::nullableStr($op->field('cover')),
                         self::str($op->field('createdAt')), $now, $revision,
                     ],
                 );
                 break;
             case 'update':
+                $this->assertCoverInWorkspace($op->workspaceId, $op->field('cover'));
                 $sets = [];
                 $params = [];
                 if ($op->has('title')) {
@@ -392,6 +411,13 @@ final class Apply
                 if ($op->has('favorite')) {
                     $sets[] = 'favorite = ?';
                     $params[] = $op->field('favorite') === true ? 1 : 0;
+                }
+                // null removes the icon or cover (#136).
+                foreach (['icon', 'cover'] as $field) {
+                    if ($op->has($field)) {
+                        $sets[] = "{$field} = ?";
+                        $params[] = self::nullableStr($op->field($field));
+                    }
                 }
                 $sets[] = 'updated_at = ?';
                 $sets[] = 'revision = ?';

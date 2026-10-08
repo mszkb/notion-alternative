@@ -15,8 +15,10 @@ final class StringSchema extends Schema
     /** zod 4's email pattern (`z.email()`). */
     private const EMAIL = "/^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$/D";
 
-    /** zod 4's UUID pattern (`z.uuid()`, RFC 9562 versions 1-8 plus nil and max). */
-    private const UUID = '/^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/D';
+    /** zod 4's UUID pattern (`z.uuid()`, RFC 9562 versions 1-8 plus nil and max), without anchors. */
+    public const UUID_PATTERN = '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)';
+
+    private const UUID = '/^' . self::UUID_PATTERN . '$/D';
 
     /** @var list<array{0: string, 1?: int|string}> */
     private array $steps = [];

@@ -44,6 +44,8 @@ final class SyncRoutes
         $api->get('/sync/pull', $routes->pull(...))->add($auth);
         $api->get('/sync/log', $routes->log(...))->add($auth);
         $api->get('/sync/snapshot', $routes->snapshot(...))->add($auth);
+        $api->get('/sync/documents/{id}', $routes->document(...))->add($auth);
+        $api->post('/sync/documents', $routes->documents(...))->add($auth);
     }
 
     /**
@@ -127,18 +129,51 @@ final class SyncRoutes
     private function snapshot(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $db = ($this->db)();
-        /** @var array{workspaceId: string, limit?: int, after?: string} $input */
+        /** @var array{workspaceId: string, limit?: int, after?: string, content?: string} $input */
         $input = Validation::parseInput(SyncSchemas::snapshotQuery(), (object) $request->getQueryParams());
         $userId = AuthContext::of($request)->userId();
+        $content = ($input['content'] ?? 'true') === 'true';
         // Paged (#97) unless an older client asks for everything at once.
         $snapshot = isset($input['limit'])
-            ? Snapshot::loadPage($db, $userId, $input['workspaceId'], $input['limit'], $input['after'] ?? null)
-            : Snapshot::load($db, $userId, $input['workspaceId']);
+            ? Snapshot::loadPage($db, $userId, $input['workspaceId'], $input['limit'], $input['after'] ?? null, $content)
+            : Snapshot::load($db, $userId, $input['workspaceId'], $content);
         if ($snapshot === null) {
             throw new HttpError(404, 'not_found', 'Workspace not found');
         }
 
         return Json::respond($response, $snapshot);
+    }
+
+    /**
+     * One page with its blocks, for devices that load content on demand (ADR 0017).
+     *
+     * @param array<string, string> $args
+     */
+    private function document(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        /** @var array{id: string} $params */
+        $params = Validation::parseInput(SyncSchemas::documentParams(), $args);
+        /** @var array{workspaceId: string} $query */
+        $query = Validation::parseInput(SyncSchemas::documentQuery(), (object) $request->getQueryParams());
+        $result = Snapshot::loadDocument(($this->db)(), AuthContext::of($request)->userId(), $query['workspaceId'], $params['id']);
+        if ($result === null) {
+            throw new HttpError(404, 'not_found', 'Page not found');
+        }
+
+        return Json::respond($response, $result);
+    }
+
+    /** Several pages at once: "make everything available offline" and re-sync (ADR 0017). */
+    private function documents(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        /** @var array{workspaceId: string, ids: list<string>} $input */
+        $input = Validation::parseInput(SyncSchemas::documentsInput(), JsonBodyMiddleware::body($request));
+        $result = Snapshot::loadDocuments(($this->db)(), AuthContext::of($request)->userId(), $input['workspaceId'], $input['ids']);
+        if ($result === null) {
+            throw new HttpError(404, 'not_found', 'Workspace not found');
+        }
+
+        return Json::respond($response, $result);
     }
 
     /**

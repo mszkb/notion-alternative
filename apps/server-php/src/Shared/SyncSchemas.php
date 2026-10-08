@@ -26,10 +26,14 @@ final class SyncSchemas
     public const SYNC_PULL_MAX_LIMIT = 1000;
     /** Largest page of a paged snapshot (#97). */
     public const SNAPSHOT_PAGE_MAX = 5000;
+    /** Most pages per `POST /api/sync/documents` (ADR 0017). */
+    public const SYNC_DOCUMENTS_MAX = 100;
+    /** Built-in cover gradients (#136); the colours live in the web app's stylesheet. */
+    public const COVER_GRADIENTS = ['sunrise', 'ocean', 'forest', 'dusk', 'sand', 'slate'];
 
     public const OPERATION_ENTITIES = ['document', 'block', 'tag', 'document_tag', 'attachment', 'conflict'];
     public const OPERATION_KINDS = ['create', 'update', 'move', 'delete', 'restore'];
-    public const BLOCK_TYPES = ['paragraph', 'heading', 'list_item', 'quote', 'code', 'image', 'file'];
+    public const BLOCK_TYPES = ['paragraph', 'heading', 'list_item', 'quote', 'code', 'image', 'file', 'todo', 'toggle', 'callout', 'divider'];
 
     /** `operationSchema`: one local change, transferred idempotently by `opId` (ADR 0002). */
     public static function operation(): ObjectSchema
@@ -79,6 +83,29 @@ final class SyncSchemas
             'limit' => V::coerce(V::int()->min(1)->max(self::SNAPSHOT_PAGE_MAX))->optional(),
             // `<cursor>.<table>.<last id>`, opaque to the client.
             'after' => V::string()->regex('/^\d+\.\d\.[0-9A-Fa-f-]{0,64}$/D')->optional(),
+            // `false`: everything except blocks; page contents load on demand (ADR 0017).
+            'content' => V::enum(['true', 'false'])->optional(),
+        ]);
+    }
+
+    /** `syncDocumentQuerySchema` (`GET /api/sync/documents/:id`). */
+    public static function documentQuery(): ObjectSchema
+    {
+        return V::object(['workspaceId' => V::uuid()]);
+    }
+
+    /** `syncDocumentParamsSchema`. */
+    public static function documentParams(): ObjectSchema
+    {
+        return V::object(['id' => V::uuid()]);
+    }
+
+    /** `syncDocumentsInputSchema` (`POST /api/sync/documents`). */
+    public static function documentsInput(): ObjectSchema
+    {
+        return V::object([
+            'workspaceId' => V::uuid(),
+            'ids' => V::array(V::uuid())->min(1)->max(self::SYNC_DOCUMENTS_MAX),
         ]);
     }
 
@@ -113,11 +140,16 @@ final class SyncSchemas
                 'title' => self::title(),
                 'sortKey' => self::sortKey(),
                 'favorite' => V::boolean(),
+                'icon' => self::documentIcon()->nullable()->optional(),
+                'cover' => self::documentCover()->nullable()->optional(),
                 'createdAt' => V::string()->max(40),
             ])->strict(),
             'document.update' => V::object([
                 'title' => self::title()->optional(),
                 'favorite' => V::boolean()->optional(),
+                // null removes the icon or cover (#136).
+                'icon' => self::documentIcon()->nullable()->optional(),
+                'cover' => self::documentCover()->nullable()->optional(),
             ])->strict(),
             'document.move' => V::object([
                 'parentId' => V::uuid()->nullable(),
@@ -160,6 +192,20 @@ final class SyncSchemas
         return V::string()->max(self::DOCUMENT_TITLE_MAX_LENGTH);
     }
 
+    /** `documentIconSchema` (#136): an emoji, stored as text. */
+    private static function documentIcon(): StringSchema
+    {
+        return V::string()->min(1)->max(16);
+    }
+
+    /** `documentCoverSchema` (#136): `gradient:<name>` or `attachment:<uuid>`. */
+    private static function documentCover(): StringSchema
+    {
+        return V::string()->regex(
+            '/^(gradient:(' . implode('|', self::COVER_GRADIENTS) . ')|attachment:' . StringSchema::UUID_PATTERN . ')$/D',
+        );
+    }
+
     private static function sortKey(): StringSchema
     {
         return V::string()->min(1)->max(200);
@@ -177,6 +223,9 @@ final class SyncSchemas
             'level' => V::int()->min(1)->max(3)->optional(),
             'list' => V::enum(['bullet', 'ordered'])->optional(),
             'indent' => V::int()->min(0)->max(self::MAX_LIST_INDENT)->optional(),
+            // ADR 0019: done (`todo`), emoji shown before the text (`callout`).
+            'checked' => V::boolean()->optional(),
+            'icon' => V::string()->min(1)->max(16)->optional(),
             'language' => V::string()->max(40)->optional(),
             'attachmentId' => V::uuid()->optional(),
         ])->strict();

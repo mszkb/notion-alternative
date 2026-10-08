@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NotionAlt\Sync;
 
+use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Workspaces\Workspaces;
 
@@ -27,20 +28,23 @@ final class Snapshot
 
     /**
      * Complete state of a workspace including tombstones, read in one transaction so entities
-     * and cursor match (ADR 0002 re-sync). Null if the user may not access the workspace.
+     * and cursor match (ADR 0002 re-sync). Without `$content` the blocks are left out (ADR 0017).
+     * Null if the user may not access the workspace.
      *
      * @return array<string, mixed>|null
      */
-    public static function load(\PDO $db, string $userId, string $workspaceId): ?array
+    public static function load(\PDO $db, string $userId, string $workspaceId, bool $content = true): ?array
     {
-        return self::inTransaction($db, static function () use ($db, $userId, $workspaceId): ?array {
+        return self::inTransaction($db, static function () use ($db, $userId, $workspaceId, $content): ?array {
             $workspace = Workspaces::findForUser($db, $workspaceId, $userId);
             if ($workspace === null) {
                 return null;
             }
             $snapshot = [];
             foreach (['documents', 'blocks', 'tags', 'document_tags', 'attachments', 'conflicts'] as $table) {
-                $rows = Sql::rows($db, "select * from {$table} where workspace_id = ?", [$workspaceId]);
+                $rows = $content || $table !== 'blocks'
+                    ? Sql::rows($db, "select * from {$table} where workspace_id = ?", [$workspaceId])
+                    : [];
                 $snapshot[self::KEYS[$table]] = self::map($table, $rows);
             }
             $snapshot['cursor'] = Changes::latestSeq($db, $workspaceId, $workspace['compacted_seq']);
@@ -55,13 +59,16 @@ final class Snapshot
      * (no `$after`) fixes the cursor and carries it in `next`. Rows on later pages may be newer
      * than the cursor and rows created behind the walk are missing; both are covered by the pull
      * from the cursor, which replays every change after it (tombstones included, ADR 0002).
-     * Null if the user may not access the workspace or `$after` names no table.
+     * Null if the user may not access the workspace or `$after` names no table. Without `$content`
+     * the walk skips the blocks (ADR 0017); the caller passes the same value on every page.
      *
      * @return array<string, mixed>|null
      */
-    public static function loadPage(\PDO $db, string $userId, string $workspaceId, int $limit, ?string $after = null): ?array
+    public static function loadPage(\PDO $db, string $userId, string $workspaceId, int $limit, ?string $after = null, bool $content = true): ?array
     {
-        return self::inTransaction($db, static function () use ($db, $userId, $workspaceId, $limit, $after): ?array {
+        $skip = static fn(string $name): bool => !$content && $name === 'blocks';
+
+        return self::inTransaction($db, static function () use ($db, $userId, $workspaceId, $limit, $after, $skip): ?array {
             $workspace = Workspaces::findForUser($db, $workspaceId, $userId);
             if ($workspace === null) {
                 return null;
@@ -80,6 +87,9 @@ final class Snapshot
                 $cursor = Changes::latestSeq($db, $workspaceId, $workspace['compacted_seq']);
                 $total = 0;
                 foreach (self::TABLES as $name) {
+                    if ($skip($name)) {
+                        continue;
+                    }
                     $total += (int) Sql::run($db, "select count(*) from {$name} where workspace_id = ?", [$workspaceId])->fetchColumn();
                 }
             }
@@ -100,6 +110,9 @@ final class Snapshot
             $room = $limit;
             for (; $table < \count(self::TABLES) && $room > 0; $table++, $lastId = null) {
                 $name = self::TABLES[$table];
+                if ($skip($name)) {
+                    continue;
+                }
                 $sql = "select * from {$name} where workspace_id = ?";
                 $params = [$workspaceId];
                 if ($lastId !== null) {
@@ -125,6 +138,71 @@ final class Snapshot
             }
 
             return $page;
+        });
+    }
+
+    /**
+     * One page with all its blocks (tombstones included) and the change-log position they
+     * reflect, read in one transaction (ADR 0017). Null if the user may not access the workspace
+     * or the page is not in it.
+     *
+     * @return array{document: array<string, mixed>, blocks: list<array<string, mixed>>, seq: int}|null
+     */
+    public static function loadDocument(\PDO $db, string $userId, string $workspaceId, string $documentId): ?array
+    {
+        return self::inTransaction($db, static function () use ($db, $userId, $workspaceId, $documentId): ?array {
+            $workspace = Workspaces::findForUser($db, $workspaceId, $userId);
+            if ($workspace === null) {
+                return null;
+            }
+            $document = Sql::rows($db, 'select * from documents where workspace_id = ? and id = ?', [$workspaceId, $documentId])[0] ?? null;
+            if ($document === null) {
+                return null;
+            }
+            $blocks = Sql::rows($db, 'select * from blocks where workspace_id = ? and document_id = ?', [$workspaceId, $documentId]);
+
+            return [
+                'document' => Mapping::toDocument($document),
+                'blocks' => array_map(Mapping::toBlock(...), $blocks),
+                'seq' => Changes::latestSeq($db, $workspaceId, $workspace['compacted_seq']),
+            ];
+        });
+    }
+
+    /**
+     * Several pages with their blocks, read in one transaction with the change-log position they
+     * reflect (ADR 0017). Ids the workspace does not have are left out. Null if the user may not
+     * access the workspace.
+     *
+     * @param list<string> $ids
+     *
+     * @return array{pages: list<array{document: array<string, mixed>, blocks: list<array<string, mixed>>}>, seq: int}|null
+     */
+    public static function loadDocuments(\PDO $db, string $userId, string $workspaceId, array $ids): ?array
+    {
+        return self::inTransaction($db, static function () use ($db, $userId, $workspaceId, $ids): ?array {
+            $workspace = Workspaces::findForUser($db, $workspaceId, $userId);
+            if ($workspace === null) {
+                return null;
+            }
+            $in = implode(', ', array_fill(0, \count($ids), '?'));
+            $documents = Sql::rows($db, "select * from documents where workspace_id = ? and id in ({$in})", [$workspaceId, ...$ids]);
+            $blocks = Sql::rows($db, "select * from blocks where workspace_id = ? and document_id in ({$in})", [$workspaceId, ...$ids]);
+            $byDocument = [];
+            foreach ($blocks as $row) {
+                $byDocument[Row::string($row, 'document_id')][] = Mapping::toBlock($row);
+            }
+
+            return [
+                'pages' => array_map(
+                    static fn(array $row): array => [
+                        'document' => Mapping::toDocument($row),
+                        'blocks' => $byDocument[Row::string($row, 'id')] ?? [],
+                    ],
+                    $documents,
+                ),
+                'seq' => Changes::latestSeq($db, $workspaceId, $workspace['compacted_seq']),
+            ];
         });
     }
 
