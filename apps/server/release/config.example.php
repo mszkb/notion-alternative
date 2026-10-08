@@ -12,4 +12,7 @@ return [
     // Open registration for the first account, then set back to false.
     'ALLOW_REGISTRATION' => true,
     'PUSH_SUBJECT' => 'mailto:admin@example.com',
+    // Only with a reverse proxy in front (most web hosts): client address from X-Forwarded-For.
+    // On your own server without a proxy, e.g. at home, set it to false.
+    'TRUST_PROXY' => true,
 ];
