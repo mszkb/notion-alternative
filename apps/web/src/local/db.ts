@@ -97,7 +97,10 @@ export class LocalDb extends Dexie {
   unloadedDocuments!: EntityTable<UnloadedDocument, 'documentId'>
 
   constructor(name: string) {
-    super(name)
+    // Dexie's optimistic query cache could deliver a live-query result from before a write that
+    // had already finished; the editor would then render the older text (and the next keystroke
+    // saved it). Disabled: results always come from IndexedDB, same speed in the load test.
+    super(name, { cache: 'disabled' })
     // Never edit a released version; add `this.version(n + 1)` with an upgrade instead (T-MIG-02).
     this.version(1).stores({
       meta: 'key',
