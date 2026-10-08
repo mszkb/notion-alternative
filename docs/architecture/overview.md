@@ -14,10 +14,10 @@
                 │ Delta-Sync (Cursor, idempotent) │ Web Push: sync_available
 ┌───────────────▼───────────────────────────────┴───────────────┐
 │  Self-hosted Server (Docker Compose, 2 Container)             │
-│   ├─ frontend: statischer Webserver (SPA), /api → backend     │
-│   └─ backend:  Fastify-API                                    │
+│   ├─ frontend: nginx (SPA), /api per FastCGI → backend        │
+│   └─ backend:  PHP-FPM mit der API (Slim 4)                   │
 │                 ├─ SQLite (Daten, Änderungslog, FTS5)         │
-│                 ├─ Datei-Volume (Anhänge; S3 später)          │
+│                 ├─ Datei-Volume oder S3 (Anhänge)             │
 │                 └─ VAPID-Keypair / Push-Versand               │
 └───────────────────────────────────────────────────────────────┘
 ```
@@ -28,9 +28,9 @@
 | --- | --- | --- |
 | Frontend | Vue 3 als SPA (Vite), ohne Nuxt; PWA-Funktionen ab Phase 4 | [0006](../adr/0006-tech-stack.md) |
 | Lokaler Speicher | IndexedDB über Dexie, `navigator.storage.persist()` | [0001](../adr/0001-local-storage.md) |
-| Backend | Fastify (TypeScript), geteilte Typen/Sync-Logik im Monorepo | [0006](../adr/0006-tech-stack.md) |
+| Backend | PHP 8.2+ mit Slim 4 (`apps/server`), auch auf Webhosting; Contract-Tests als Spezifikation | [0018](../adr/0018-php-backend.md) |
 | Serverdatenbank | SQLite (Prototyp); Wechsel auf PostgreSQL per eigenem ADR offen | [0006](../adr/0006-tech-stack.md) |
-| Dateien | Datei-Volume im Backend; S3-kompatibler Storage später | [0006](../adr/0006-tech-stack.md) |
+| Dateien | Datei-Volume im Backend oder S3-kompatibler Storage | [0012](../adr/0012-attachments.md) |
 | Sync | Versioniertes Änderungslog mit Cursor, Geräte-ID, Revisionen, Idempotency Keys | [0002](../adr/0002-sync-protocol.md) |
 | Konflikte | Block-Merge + sichtbare Konfliktanzeige; CRDT/operation-based Sync später (Phase 8) | [0003](../adr/0003-conflict-resolution.md) |
 | Suche | Server: SQLite FTS5; lokal: MiniSearch; später optional Meilisearch/OpenSearch | [0006](../adr/0006-tech-stack.md), [0009](../adr/0009-local-data-layer.md) |

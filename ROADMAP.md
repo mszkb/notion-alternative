@@ -126,16 +126,6 @@ Folgt aus der Zielgruppe ([`vision.md`](docs/product/vision.md)); Epic [#130](ht
 - [x] Seiten-Icons und Titelbilder ([#136](https://github.com/mszkb/notion-alternative/issues/136))
 - [x] Import aus Notion ([#137](https://github.com/mszkb/notion-alternative/issues/137))
 
-## Ohne Phase – PHP-Backend für Webhosting
-
-Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), Entscheidung [ADR 0018](docs/adr/0018-php-backend.md).
-
-- [x] ADR 0018 angenommen ([#117](https://github.com/mszkb/notion-alternative/issues/117); Argon2id, keine Übernahme der scrypt-Hashes)
-- [x] Contract-Tests gegen beliebige Server-URL ([#118](https://github.com/mszkb/notion-alternative/issues/118))
-- [ ] PHP-Server: Grundgerüst, Auth, Sync, Suche, Anhänge, Push, Verlauf, Import, CLI ([#119](https://github.com/mszkb/notion-alternative/issues/119)–[#127](https://github.com/mszkb/notion-alternative/issues/127))
-- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128))
-- [ ] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129))
-
 ## Ohne Phase – Opt-in-Telemetrie
 
 Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alternative/issues/103)). Gebaut wird erst, wenn [ADR 0016](docs/adr/0016-opt-in-telemetry.md) angenommen ist.
@@ -149,21 +139,21 @@ Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alte
 
 ## Ohne Phase – Backend in PHP (Slim 4)
 
-Self-Hosting per ZIP auf Shared Hosting ([#116](https://github.com/mszkb/notion-alternative/issues/116), [ADR 0018](docs/adr/0018-php-backend.md), Proposed). Der PHP-Server entsteht in `apps/server-php` parallel zum Node-Server.
+Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), [ADR 0018](docs/adr/0018-php-backend.md)). Der PHP-Server in `apps/server` hat den Node-Server abgelöst.
 
-- [ ] ADR 0018: PHP-Backend mit Slim 4 (Vorschlag liegt vor, Annahme durch den Owner offen) ([#117](https://github.com/mszkb/notion-alternative/issues/117))
+- [x] ADR 0018 angenommen ([#117](https://github.com/mszkb/notion-alternative/issues/117); Argon2id, keine Übernahme der scrypt-Hashes)
 - [x] Contract-Tests gegen beliebige Server-URL ([`contract-tests.md`](docs/testing/contract-tests.md), [#118](https://github.com/mszkb/notion-alternative/issues/118))
 - [x] Grundgerüst: Slim 4, Konfiguration, Fehlerformat, SQLite, Migrationen ([#119](https://github.com/mszkb/notion-alternative/issues/119); offen: erster Lauf des CI-Jobs `php`)
 - [x] Auth, Sessions, Workspaces, Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120))
-- [x] Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121); offen: Push-Hinweis nach #125, Metrik nach #127)
-- [x] Sync-Pull, Änderungslog, Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122); die Contract-Tests zu `cursor_expired` brauchen den Import, #126)
+- [x] Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121); offen: Metrik nach #127)
+- [x] Sync-Pull, Änderungslog, Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122))
 - [x] Serverseitige Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123))
-- [ ] Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124); SigV4-Signatur portiert)
-- [ ] Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125); Verschlüsselung und VAPID portiert, Routen und Versand offen)
-- [ ] Versionsverlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126))
-- [ ] CLI, Cron, Metriken ([#127](https://github.com/mszkb/notion-alternative/issues/127))
-- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128))
-- [ ] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129))
+- [x] Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124); Aufräumen nach der Aufbewahrungsfrist läuft mit dem Cron, #127)
+- [x] Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125); Bündeln über `push_hints`, Versand nach der Antwort, Rest per Cron #127)
+- [x] Versionsverlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126); Sperre per `flock`)
+- [x] CLI, Cron, Metriken ([#127](https://github.com/mszkb/notion-alternative/issues/127); `bin/console`, `bin/cron.php`, Tabelle `metrics`)
+- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128); ZIP, `.htaccess`, Einrichtungs-Check und PHP-FPM-Image gebaut, offen: echter Webspace-Test und Gitea-Nightly gegen PHP)
+- [x] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129); Contract-Tests sind die Spezifikation, Fixtures eingefroren)
 
 ## Phase 8 – Collaboration
 

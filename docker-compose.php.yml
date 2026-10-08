@@ -1,7 +1,0 @@
-# Trial: the existing frontend with the PHP backend instead of Node (ADR 0018, #116).
-#   docker compose -f docker-compose.yml -f docker-compose.php.yml up -d --build
-services:
-  backend:
-    build:
-      context: .
-      dockerfile: apps/server-php/Dockerfile

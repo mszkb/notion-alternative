@@ -29,7 +29,7 @@ Mit dem Owner abgestimmt ([#116](https://github.com/mszkb/notion-alternative/iss
 
 ## Entscheidung
 
-**Option 2: PHP 8.2+ mit Slim 4**, in `apps/server-php`, parallel zum Node-Server, bis die Contract-Tests ([#118](https://github.com/mszkb/notion-alternative/issues/118)) gegen beide grün sind. Danach wird PHP Standard und der Node-Server entfernt ([#129](https://github.com/mszkb/notion-alternative/issues/129)).
+**Option 2: PHP 8.2+ mit Slim 4**, in `apps/server-php` (seit #129 `apps/server`), parallel zum Node-Server, bis die Contract-Tests ([#118](https://github.com/mszkb/notion-alternative/issues/118)) gegen beide grün sind. Danach wird PHP Standard und der Node-Server entfernt ([#129](https://github.com/mszkb/notion-alternative/issues/129)).
 
 **Gleich bleibt:** das HTTP-API bis auf das Byte, also Pfade, Statuscodes, Fehlerobjekt `{error:{code,message,…}}`, Cookies und Sync-Protokoll ([ADR 0002](0002-sync-protocol.md)). Die SPA bleibt unverändert, installierte PWAs laufen ohne Update weiter.
 
@@ -68,6 +68,13 @@ Mit dem Owner abgestimmt ([#116](https://github.com/mszkb/notion-alternative/iss
 
 - **Webhosting:** Release-ZIP hochladen (SPA + `api/` mit `vendor/`), Datenverzeichnis außerhalb des Webroots, Cron eintragen ([#128](https://github.com/mszkb/notion-alternative/issues/128)).
 - **Docker Compose:** bleibt mit zwei Containern (nginx + PHP-FPM statt Node), auch für `linux/arm64`.
+
+## Umsetzung (2026-10-08)
+
+- Alle Endpunkte portiert ([#119](https://github.com/mszkb/notion-alternative/issues/119)–[#127](https://github.com/mszkb/notion-alternative/issues/127)); die Contract-Tests laufen vollständig grün gegen PHP. Der Node-Server ist entfernt ([#129](https://github.com/mszkb/notion-alternative/issues/129)), seine Fixtures für Migrationen und Suche sind eingefroren.
+- Zustand ohne Prozess wie oben, mit zwei Abweichungen: Die Import-Sperre ist ein nicht blockierendes `flock` statt einer Zeile mit Ablaufzeit (das Betriebssystem gibt sie auch nach einem Absturz frei). Push-Hinweise werden über die Tabelle `push_hints` gebündelt und nach der Antwort verschickt (`fastcgi_finish_request`), Reste per Cron. Metriken liegen in der Tabelle `metrics`. APCu wird nicht genutzt.
+- Docker: zwei Container bleiben; `frontend` (nginx) spricht FastCGI mit `backend` (PHP-FPM), der Cron läuft als Schleife im Entrypoint.
+- scrypt-Hashes des Node-Servers werden wie entschieden nicht geprüft (Owner, 2026-10-08); die zwischenzeitliche Prüfung in PHP ist entfernt. Konten aus der Node-Zeit bekommen mit `bin/console reset-password` ein neues Passwort.
 
 ## Konsequenzen
 

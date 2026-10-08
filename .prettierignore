@@ -6,7 +6,7 @@ test-results
 playwright-report
 docs/architecture/export.schema.json
 # PHP server: Composer files use Composer's format, fixtures are generated.
-apps/server-php/vendor
-apps/server-php/composer.json
-apps/server-php/composer.lock
-apps/server-php/tests/fixtures
+apps/server/vendor
+apps/server/composer.json
+apps/server/composer.lock
+apps/server/tests/fixtures

@@ -1,0 +1,16 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Operator commands (backup, restore, migrations, password reset); `bin/console` shows the list.
+// Uses the same configuration as the web server (config.php and environment variables).
+
+require __DIR__ . '/../vendor/autoload.php';
+
+if (PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
+$config = NotionAlt\Config\ConfigLoader::fromEnvironment(dirname(__DIR__));
+exit((new NotionAlt\Cli\Console($config))->run(array_slice($argv, 1)));

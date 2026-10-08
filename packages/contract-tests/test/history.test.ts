@@ -14,7 +14,7 @@ import {
 
 /**
  * Version history (ADR 0013). Versions are editing sessions per device; the 10-minute gap
- * between sessions of one device needs server time and stays in apps/server/test.
+ * between sessions of one device needs server time and is tested in PHPUnit (apps/server/tests).
  */
 
 let laptop: Account

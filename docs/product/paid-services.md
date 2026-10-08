@@ -30,7 +30,7 @@ Die Leitplanken gelten für alle Dienste:
 
 **Vorschlag:**
 
-- Das bestehende Backup (`node dist/index.js backup`, Manifest mit SHA-256) wird vor dem Upload clientseitig verschlüsselt, mit age oder libsodium in einem eigenen ADR. Der Schlüssel bleibt beim Nutzer.
+- Das bestehende Backup (`php bin/console backup`, Manifest mit SHA-256) wird vor dem Upload clientseitig verschlüsselt, mit age oder libsodium in einem eigenen ADR. Der Schlüssel bleibt beim Nutzer.
 - Ziel ist ein S3-kompatibler Bucket des Dienstes mit Aufbewahrungsregeln.
 - Restore lädt herunter, entschlüsselt und nutzt danach den unveränderten `restore`-Befehl.
 - Ohne den Dienst bleibt die Off-site-Kopie mit restic oder rclone ([`backup.md`](../operations/backup.md#off-site-kopie)) gleichwertig.

@@ -1,19 +1,23 @@
 import { type ChildProcess, spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+
+/** The PHP server (ADR 0018); needs `composer install` in apps/server. */
+export const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url))
 
 /**
- * Starts the real server for an integration test, in its own process group so that a kill
- * reaches tsx and node, not only pnpm.
+ * Starts the real server for an integration test (PHP's built-in web server), in its own
+ * process group so that a kill reaches every worker.
  */
 export function spawnServer(
   port: number,
   databasePath: string,
   env: Record<string, string> = {},
 ): ChildProcess {
-  return spawn('pnpm', ['--filter', '@notion-alt/server', 'exec', 'tsx', 'src/index.ts'], {
+  return spawn('php', ['-S', `127.0.0.1:${port}`, '-t', 'public', 'public/index.php'], {
+    cwd: SERVER_DIR,
     env: {
       ...process.env,
-      PORT: String(port),
-      HOST: '127.0.0.1',
+      PHP_CLI_SERVER_WORKERS: '4',
       DATABASE_PATH: databasePath,
       LOG_LEVEL: 'silent',
       ALLOW_REGISTRATION: 'true',
@@ -25,9 +29,8 @@ export function spawnServer(
 }
 
 /**
- * Waits until the server answers `/api/ready`. Under `pnpm test` all packages test in parallel
- * and tsx starts slowly, so the wait is long (a fixed 15 s failed once); callers give their hook
- * a timeout above it. Fails at once if the server process exits.
+ * Waits until the server answers `/api/ready`. Under `pnpm test` all packages test in parallel,
+ * so the wait is long; callers give their hook a timeout above it. Fails at once if the server process exits.
  */
 export async function waitForServer(
   child: ChildProcess,

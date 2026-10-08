@@ -16,7 +16,7 @@ export default defineConfig({
   server: {
     port: 5173,
     // Same-origin API in development, mirroring the nginx proxy in production.
-    proxy: { '/api': process.env.API_PROXY_TARGET ?? 'http://localhost:3000' },
+    proxy: { '/api': process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:3000' },
   },
   preview: { headers: securityHeaders() },
   test: {

@@ -6,8 +6,8 @@ import { snapshot } from '../src/workspace-data'
 
 /**
  * Attachments (ADR 0012) with ATTACHMENT_MAX_MB=1 and WORKSPACE_STORAGE_MB=0.003 (3000 bytes per
- * account). Purging deleted files after the retention period needs server time and stays in
- * apps/server/test.
+ * account). Purging deleted files after the retention period needs server time and is tested in
+ * PHPUnit (apps/server/tests).
  */
 
 let alice: Account

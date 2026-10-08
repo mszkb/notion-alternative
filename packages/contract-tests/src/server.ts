@@ -62,7 +62,7 @@ function stopProcess(child: ChildProcess): Promise<void> {
 
 /**
  * Starts the server under test with a fresh data directory on a free port and waits for
- * `/api/ready`. The command comes from SERVER_CMD (default: the Node server); it runs in the
+ * `/api/ready`. The command comes from SERVER_CMD (default: the PHP server); it runs in the
  * repository root through the shell, gets the port as `PORT` and `{port}` is replaced by it.
  */
 export async function startServer(extraEnv: Record<string, string> = {}): Promise<StartedServer> {
@@ -77,14 +77,12 @@ export async function startServer(extraEnv: Record<string, string> = {}): Promis
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
-      HOST: '127.0.0.1',
       PORT: String(port),
       DATA_DIR: dataDir,
       DATABASE_PATH: path.join(dataDir, 'app.sqlite'),
       LOG_LEVEL: 'warn',
       ...SERVER_SETTINGS,
-      // Node trusts the fake push service through this; other servers can use the path.
-      NODE_EXTRA_CA_CERTS: PUSH_RECEIVER_CERT,
+      // The server must trust the fake push service (default command: `php -d curl.cainfo=…`).
       PUSH_RECEIVER_CA: PUSH_RECEIVER_CERT,
       ...extraEnv,
     },

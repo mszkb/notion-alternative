@@ -1,0 +1,428 @@
+[
+  {
+    "type": "index",
+    "name": "attachments_workspace_id_id_idx",
+    "tbl_name": "attachments",
+    "sql": "CREATE INDEX attachments_workspace_id_id_idx on \"attachments\" (workspace_id, id)"
+  },
+  {
+    "type": "index",
+    "name": "attachments_workspace_id_idx",
+    "tbl_name": "attachments",
+    "sql": "CREATE INDEX \"attachments_workspace_id_idx\" on \"attachments\" (\"workspace_id\")"
+  },
+  {
+    "type": "index",
+    "name": "auth_attempts_reset_at_idx",
+    "tbl_name": "auth_attempts",
+    "sql": "CREATE INDEX \"auth_attempts_reset_at_idx\" on \"auth_attempts\" (\"reset_at\")"
+  },
+  {
+    "type": "index",
+    "name": "blocks_document_id_idx",
+    "tbl_name": "blocks",
+    "sql": "CREATE INDEX \"blocks_document_id_idx\" on \"blocks\" (\"document_id\")"
+  },
+  {
+    "type": "index",
+    "name": "blocks_workspace_id_id_idx",
+    "tbl_name": "blocks",
+    "sql": "CREATE INDEX blocks_workspace_id_id_idx on \"blocks\" (workspace_id, id)"
+  },
+  {
+    "type": "index",
+    "name": "blocks_workspace_id_idx",
+    "tbl_name": "blocks",
+    "sql": "CREATE INDEX \"blocks_workspace_id_idx\" on \"blocks\" (\"workspace_id\")"
+  },
+  {
+    "type": "index",
+    "name": "changes_entity_idx",
+    "tbl_name": "changes",
+    "sql": "CREATE INDEX \"changes_entity_idx\" on \"changes\" (\"entity\", \"entity_id\")"
+  },
+  {
+    "type": "index",
+    "name": "conflicts_workspace_id_id_idx",
+    "tbl_name": "conflicts",
+    "sql": "CREATE INDEX conflicts_workspace_id_id_idx on \"conflicts\" (workspace_id, id)"
+  },
+  {
+    "type": "index",
+    "name": "conflicts_workspace_id_idx",
+    "tbl_name": "conflicts",
+    "sql": "CREATE INDEX \"conflicts_workspace_id_idx\" on \"conflicts\" (\"workspace_id\")"
+  },
+  {
+    "type": "index",
+    "name": "devices_user_id_idx",
+    "tbl_name": "devices",
+    "sql": "CREATE INDEX \"devices_user_id_idx\" on \"devices\" (\"user_id\")"
+  },
+  {
+    "type": "index",
+    "name": "document_tags_document_id_idx",
+    "tbl_name": "document_tags",
+    "sql": "CREATE INDEX \"document_tags_document_id_idx\" on \"document_tags\" (\"document_id\")"
+  },
+  {
+    "type": "index",
+    "name": "document_tags_workspace_id_id_idx",
+    "tbl_name": "document_tags",
+    "sql": "CREATE INDEX document_tags_workspace_id_id_idx on \"document_tags\" (workspace_id, id)"
+  },
+  {
+    "type": "index",
+    "name": "document_tags_workspace_id_idx",
+    "tbl_name": "document_tags",
+    "sql": "CREATE INDEX \"document_tags_workspace_id_idx\" on \"document_tags\" (\"workspace_id\")"
+  },
+  {
+    "type": "index",
+    "name": "documents_workspace_id_id_idx",
+    "tbl_name": "documents",
+    "sql": "CREATE INDEX documents_workspace_id_id_idx on \"documents\" (workspace_id, id)"
+  },
+  {
+    "type": "index",
+    "name": "documents_workspace_id_idx",
+    "tbl_name": "documents",
+    "sql": "CREATE INDEX \"documents_workspace_id_idx\" on \"documents\" (\"workspace_id\")"
+  },
+  {
+    "type": "index",
+    "name": "push_hints_due_at_idx",
+    "tbl_name": "push_hints",
+    "sql": "CREATE INDEX \"push_hints_due_at_idx\" on \"push_hints\" (\"due_at\")"
+  },
+  {
+    "type": "index",
+    "name": "push_subscriptions_user_id_idx",
+    "tbl_name": "push_subscriptions",
+    "sql": "CREATE INDEX \"push_subscriptions_user_id_idx\" on \"push_subscriptions\" (\"user_id\")"
+  },
+  {
+    "type": "index",
+    "name": "sessions_device_id_idx",
+    "tbl_name": "sessions",
+    "sql": "CREATE INDEX \"sessions_device_id_idx\" on \"sessions\" (\"device_id\")"
+  },
+  {
+    "type": "index",
+    "name": "sessions_user_id_idx",
+    "tbl_name": "sessions",
+    "sql": "CREATE INDEX \"sessions_user_id_idx\" on \"sessions\" (\"user_id\")"
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_attachments_1",
+    "tbl_name": "attachments",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_auth_attempts_1",
+    "tbl_name": "auth_attempts",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_blocks_1",
+    "tbl_name": "blocks",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_changes_1",
+    "tbl_name": "changes",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_changes_2",
+    "tbl_name": "changes",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_conflicts_1",
+    "tbl_name": "conflicts",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_conflicts_2",
+    "tbl_name": "conflicts",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_devices_1",
+    "tbl_name": "devices",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_document_tags_1",
+    "tbl_name": "document_tags",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_documents_1",
+    "tbl_name": "documents",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_kysely_migration_1",
+    "tbl_name": "kysely_migration",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_kysely_migration_lock_1",
+    "tbl_name": "kysely_migration_lock",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_metrics_1",
+    "tbl_name": "metrics",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_push_hints_1",
+    "tbl_name": "push_hints",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_push_subscriptions_1",
+    "tbl_name": "push_subscriptions",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_search_dirty_1",
+    "tbl_name": "search_dirty",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_search_documents_1",
+    "tbl_name": "search_documents",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_sessions_1",
+    "tbl_name": "sessions",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_settings_1",
+    "tbl_name": "settings",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_tags_1",
+    "tbl_name": "tags",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_users_1",
+    "tbl_name": "users",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_users_2",
+    "tbl_name": "users",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_workspaces_1",
+    "tbl_name": "workspaces",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "tags_workspace_id_id_idx",
+    "tbl_name": "tags",
+    "sql": "CREATE INDEX tags_workspace_id_id_idx on \"tags\" (workspace_id, id)"
+  },
+  {
+    "type": "index",
+    "name": "tags_workspace_id_idx",
+    "tbl_name": "tags",
+    "sql": "CREATE INDEX \"tags_workspace_id_idx\" on \"tags\" (\"workspace_id\")"
+  },
+  {
+    "type": "index",
+    "name": "workspaces_owner_id_idx",
+    "tbl_name": "workspaces",
+    "sql": "CREATE INDEX \"workspaces_owner_id_idx\" on \"workspaces\" (\"owner_id\")"
+  },
+  {
+    "type": "table",
+    "name": "attachments",
+    "tbl_name": "attachments",
+    "sql": "CREATE TABLE \"attachments\" (\"id\" text primary key, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"document_id\" text not null, \"name\" text not null, \"mime_type\" text not null, \"size\" integer not null, \"sha256\" text not null, \"created_at\" text not null, \"stored_at\" text, \"revision\" integer not null, \"deleted_at\" text)"
+  },
+  {
+    "type": "table",
+    "name": "auth_attempts",
+    "tbl_name": "auth_attempts",
+    "sql": "CREATE TABLE \"auth_attempts\" (\"key\" text primary key, \"count\" integer not null, \"reset_at\" integer not null)"
+  },
+  {
+    "type": "table",
+    "name": "blocks",
+    "tbl_name": "blocks",
+    "sql": "CREATE TABLE \"blocks\" (\"id\" text primary key, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"document_id\" text not null, \"type\" text not null, \"content\" text not null, \"attrs\" text not null, \"sort_key\" text not null, \"revision\" integer not null, \"deleted_at\" text)"
+  },
+  {
+    "type": "table",
+    "name": "changes",
+    "tbl_name": "changes",
+    "sql": "CREATE TABLE \"changes\" (\"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"seq\" integer not null, \"op_id\" text not null unique, \"device_id\" text not null, \"entity\" text not null, \"entity_id\" text not null, \"kind\" text not null, \"revision\" integer not null, \"payload\" text not null, \"applied_at\" text not null, constraint \"changes_pk\" primary key (\"workspace_id\", \"seq\"))"
+  },
+  {
+    "type": "table",
+    "name": "conflicts",
+    "tbl_name": "conflicts",
+    "sql": "CREATE TABLE \"conflicts\" (\"id\" text primary key, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"op_id\" text not null unique, \"entity\" text not null, \"entity_id\" text not null, \"document_id\" text, \"reason\" text not null, \"base_revision\" integer, \"local\" text not null, \"remote\" text, \"created_at\" text not null, \"resolved_at\" text, \"resolution\" text, \"revision\" integer not null, \"deleted_at\" text)"
+  },
+  {
+    "type": "table",
+    "name": "devices",
+    "tbl_name": "devices",
+    "sql": "CREATE TABLE \"devices\" (\"id\" text primary key, \"user_id\" text not null references \"users\" (\"id\") on delete cascade, \"name\" text not null, \"created_at\" text not null, \"last_seen_at\" text not null, \"revoked_at\" text)"
+  },
+  {
+    "type": "table",
+    "name": "document_tags",
+    "tbl_name": "document_tags",
+    "sql": "CREATE TABLE \"document_tags\" (\"id\" text primary key, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"document_id\" text not null, \"tag_id\" text not null, \"revision\" integer not null, \"deleted_at\" text)"
+  },
+  {
+    "type": "table",
+    "name": "documents",
+    "tbl_name": "documents",
+    "sql": "CREATE TABLE \"documents\" (\"id\" text primary key, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"parent_id\" text, \"title\" text not null, \"sort_key\" text not null, \"favorite\" integer not null, \"created_at\" text not null, \"updated_at\" text not null, \"revision\" integer not null, \"deleted_at\" text, \"icon\" text, \"cover\" text)"
+  },
+  {
+    "type": "table",
+    "name": "kysely_migration",
+    "tbl_name": "kysely_migration",
+    "sql": "CREATE TABLE \"kysely_migration\" (\"name\" varchar(255) not null primary key, \"timestamp\" varchar(255) not null)"
+  },
+  {
+    "type": "table",
+    "name": "kysely_migration_lock",
+    "tbl_name": "kysely_migration_lock",
+    "sql": "CREATE TABLE \"kysely_migration_lock\" (\"id\" varchar(255) not null primary key, \"is_locked\" integer default 0 not null)"
+  },
+  {
+    "type": "table",
+    "name": "metrics",
+    "tbl_name": "metrics",
+    "sql": "CREATE TABLE \"metrics\" (\"name\" text not null, \"labels\" text not null, \"value\" real not null, constraint \"metrics_pk\" primary key (\"name\", \"labels\"))"
+  },
+  {
+    "type": "table",
+    "name": "push_hints",
+    "tbl_name": "push_hints",
+    "sql": "CREATE TABLE \"push_hints\" (\"endpoint\" text primary key references \"push_subscriptions\" (\"endpoint\") on delete cascade, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"due_at\" integer, \"sent_at\" integer)"
+  },
+  {
+    "type": "table",
+    "name": "push_subscriptions",
+    "tbl_name": "push_subscriptions",
+    "sql": "CREATE TABLE \"push_subscriptions\" (\"endpoint\" text primary key, \"user_id\" text not null references \"users\" (\"id\") on delete cascade, \"device_id\" text not null references \"devices\" (\"id\") on delete cascade, \"p256dh\" text not null, \"auth\" text not null, \"created_at\" text not null, \"last_success_at\" text, \"failures\" integer default 0 not null)"
+  },
+  {
+    "type": "table",
+    "name": "search_dirty",
+    "tbl_name": "search_dirty",
+    "sql": "CREATE TABLE search_dirty (document_id text primary key)"
+  },
+  {
+    "type": "table",
+    "name": "search_documents",
+    "tbl_name": "search_documents",
+    "sql": "CREATE TABLE search_documents (\n    id integer primary key,\n    document_id text not null unique\n  )"
+  },
+  {
+    "type": "table",
+    "name": "search_index",
+    "tbl_name": "search_index",
+    "sql": "CREATE VIRTUAL TABLE search_index using fts5(\n    document_id unindexed,\n    workspace_id unindexed,\n    title,\n    body,\n    tokenize = 'unicode61 remove_diacritics 2'\n  )"
+  },
+  {
+    "type": "table",
+    "name": "search_index_config",
+    "tbl_name": "search_index_config",
+    "sql": "CREATE TABLE 'search_index_config'(k PRIMARY KEY, v) WITHOUT ROWID"
+  },
+  {
+    "type": "table",
+    "name": "search_index_content",
+    "tbl_name": "search_index_content",
+    "sql": "CREATE TABLE 'search_index_content'(id INTEGER PRIMARY KEY, c0, c1, c2, c3)"
+  },
+  {
+    "type": "table",
+    "name": "search_index_data",
+    "tbl_name": "search_index_data",
+    "sql": "CREATE TABLE 'search_index_data'(id INTEGER PRIMARY KEY, block BLOB)"
+  },
+  {
+    "type": "table",
+    "name": "search_index_docsize",
+    "tbl_name": "search_index_docsize",
+    "sql": "CREATE TABLE 'search_index_docsize'(id INTEGER PRIMARY KEY, sz BLOB)"
+  },
+  {
+    "type": "table",
+    "name": "search_index_idx",
+    "tbl_name": "search_index_idx",
+    "sql": "CREATE TABLE 'search_index_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID"
+  },
+  {
+    "type": "table",
+    "name": "sessions",
+    "tbl_name": "sessions",
+    "sql": "CREATE TABLE \"sessions\" (\"id\" text primary key, \"user_id\" text not null references \"users\" (\"id\") on delete cascade, \"created_at\" text not null, \"expires_at\" text not null, \"device_id\" text)"
+  },
+  {
+    "type": "table",
+    "name": "settings",
+    "tbl_name": "settings",
+    "sql": "CREATE TABLE \"settings\" (\"key\" text primary key, \"value\" text not null)"
+  },
+  {
+    "type": "table",
+    "name": "tags",
+    "tbl_name": "tags",
+    "sql": "CREATE TABLE \"tags\" (\"id\" text primary key, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"name\" text not null, \"revision\" integer not null, \"deleted_at\" text)"
+  },
+  {
+    "type": "table",
+    "name": "users",
+    "tbl_name": "users",
+    "sql": "CREATE TABLE \"users\" (\"id\" text primary key, \"email\" text not null unique, \"password_hash\" text not null, \"created_at\" text not null)"
+  },
+  {
+    "type": "table",
+    "name": "workspaces",
+    "tbl_name": "workspaces",
+    "sql": "CREATE TABLE \"workspaces\" (\"id\" text primary key, \"name\" text not null, \"owner_id\" text not null references \"users\" (\"id\") on delete cascade, \"created_at\" text not null, \"compacted_seq\" integer default 0 not null)"
+  }
+]

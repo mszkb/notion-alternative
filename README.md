@@ -10,14 +10,15 @@ Notion nervt mit seinem „always on“. Ja, es gibt eine Offline-Funktion, aber
 docker compose up -d --build
 ```
 
-Dann `http://127.0.0.1:8080` öffnen und das erste Konto anlegen. Details: [Deployment & Betrieb](docs/operations/deployment.md).
+Dann `http://127.0.0.1:8080` öffnen und das erste Konto anlegen. Details: [Deployment & Betrieb](docs/operations/deployment.md). Ohne Docker auf gewöhnlichem Webspace: [Installation auf Webspace](docs/user/webhosting.md).
 
 ## Entwicklung
 
 ```sh
 corepack enable
 pnpm install
-pnpm dev        # Server :3000, Web :5173
+(cd apps/server && composer install)   # PHP ≥ 8.2
+pnpm dev        # PHP-Server :3000, Web :5173
 pnpm test
 pnpm --filter @notion-alt/web test:e2e   # Playwright, startet Server und Vite selbst
 ```

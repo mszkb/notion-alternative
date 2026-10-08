@@ -12,7 +12,7 @@ import { LocalDb } from '../local/db'
 import { LocalStore } from '../local/store'
 import { pushQueue } from './push'
 import { syncWorkspace } from './resync'
-import { spawnServer, waitForServer } from './test-server'
+import { SERVER_DIR, spawnServer, waitForServer } from './test-server'
 
 // #75: the server is restored from a backup older than what the devices synced. Devices must
 // re-sync (410) and send again what the restored server lost, without losing local data.
@@ -63,11 +63,10 @@ async function call<T>(cookie: string, method: string, url: string, body?: unkno
 
 /** Runs a one-off server command (backup/restore) against the same database. */
 function serverCommand(...args: string[]) {
-  return execFileSync(
-    'pnpm',
-    ['--filter', '@notion-alt/server', 'exec', 'tsx', 'src/index.ts', ...args],
-    { env: { ...process.env, DATABASE_PATH: DB_PATH, LOG_LEVEL: 'silent' }, encoding: 'utf8' },
-  )
+  return execFileSync('php', [`${SERVER_DIR}bin/console`, ...args], {
+    env: { ...process.env, DATABASE_PATH: DB_PATH, LOG_LEVEL: 'silent' },
+    encoding: 'utf8',
+  })
 }
 
 it('devices re-sync after a restore and send what the backup lacks', async () => {

@@ -1,0 +1,11 @@
+parameters:
+    level: max
+    paths:
+        - src
+        - tests
+        - public
+        - bin/cron.php
+        - bin/console
+        - bin/fpm-healthcheck.php
+        - release
+    tmpDir: .phpstan.cache
