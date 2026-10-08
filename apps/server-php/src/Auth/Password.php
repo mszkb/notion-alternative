@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace NotionAlt\Auth;
 
 /**
- * Password hashes (ADR 0018): new ones via `password_hash()` (Argon2id, else bcrypt); the
- * `scrypt$N$r$p$salt$hash` hashes of the Node server are verified and replaced on login.
+ * Password hashes (ADR 0018): `password_hash()` with Argon2id, else bcrypt. Hashes of other
+ * formats (e.g. scrypt of the former Node server) never verify; such accounts get a new password
+ * with `bin/console reset-password`.
  */
 final class Password
 {
@@ -28,48 +29,17 @@ final class Password
 
     public static function verify(string $password, string $stored): bool
     {
-        if (str_starts_with($stored, 'scrypt$')) {
-            return self::verifyScrypt($password, $stored);
-        }
-
         return password_verify($password, $stored);
     }
 
-    /** True for Node scrypt hashes and `password_hash()` hashes of older algorithms or options. */
+    /** True for `password_hash()` hashes of older algorithms or options. */
     public static function needsRehash(string $stored): bool
     {
-        return str_starts_with($stored, 'scrypt$') || password_needs_rehash($stored, self::algorithm());
+        return password_needs_rehash($stored, self::algorithm());
     }
 
     private static function algorithm(): string
     {
         return \defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_BCRYPT;
-    }
-
-    /** Port of `verifyPassword` in apps/server/src/auth/password.ts. */
-    private static function verifyScrypt(string $password, string $stored): bool
-    {
-        $parts = explode('$', $stored);
-        if (\count($parts) !== 6) {
-            return false;
-        }
-        [, $n, $r, $p, $salt, $hash] = $parts;
-        foreach ([$n, $r, $p] as $number) {
-            if (!ctype_digit($number)) {
-                return false;
-            }
-        }
-        $saltBytes = base64_decode($salt, true);
-        $expected = base64_decode($hash, true);
-        if ($saltBytes === false || $expected === false || $salt === '' || $expected === '') {
-            return false;
-        }
-        try {
-            $actual = Scrypt::derive($password, $saltBytes, (int) $n, (int) $r, (int) $p, \strlen($expected));
-        } catch (\InvalidArgumentException) {
-            return false;
-        }
-
-        return hash_equals($expected, $actual);
     }
 }

@@ -27,7 +27,8 @@ final class AuthTest extends TestCase
         (new Migrator($this->db))->migrateToLatest();
     }
 
-    public function testLoginWithANodeHashWorksAndReplacesTheHash(): void
+    /** Accounts of the Node server need a new password (ADR 0018, `bin/console reset-password`). */
+    public function testLoginWithANodeHashFails(): void
     {
         Sql::run(
             $this->db,
@@ -35,17 +36,11 @@ final class AuthTest extends TestCase
             [PasswordTest::NODE_HASH],
         );
 
-        $response = $this->post('/api/auth/login', ['email' => 'Node@Example.com', 'password' => PasswordTest::NODE_PASSWORD]);
+        $response = $this->post('/api/auth/login', ['email' => 'node@example.com', 'password' => PasswordTest::NODE_PASSWORD]);
 
-        self::assertSame(200, $response->getStatusCode());
-        self::assertSame(
-            ['user' => ['id' => 'u1', 'email' => 'node@example.com', 'createdAt' => '2026-01-01T00:00:00.000Z']],
-            json_decode((string) $response->getBody(), true),
-        );
-        $hash = Row::string(Sql::rows($this->db, "select password_hash from users where id = 'u1'")[0], 'password_hash');
-        self::assertStringStartsNotWith('scrypt$', $hash);
-        self::assertTrue(password_verify(PasswordTest::NODE_PASSWORD, $hash));
-        self::assertSame(200, $this->post('/api/auth/login', ['email' => 'node@example.com', 'password' => PasswordTest::NODE_PASSWORD])->getStatusCode());
+        self::assertSame(401, $response->getStatusCode());
+        self::assertStringContainsString('"code":"invalid_credentials"', (string) $response->getBody());
+        self::assertSame([['password_hash' => PasswordTest::NODE_HASH]], Sql::rows($this->db, "select password_hash from users where id = 'u1'"));
     }
 
     public function testSessionCookieAndStoredSession(): void

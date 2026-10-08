@@ -90,7 +90,7 @@ Ungültige Werte führen zu einer Fehlermeldung, die nur Variablennamen nennt (z
 ## Passwörter und Rate-Limits
 
 - **Neue Hashes** mit `password_hash()`: Argon2id, falls PHP es kennt, sonst bcrypt.
-- **Hashes des Node-Servers** (`scrypt$N$r$p$salt$hash`) prüft `src/Auth/Scrypt.php` (reines PHP, RFC 7914). Das dauert einige Sekunden pro Login (OPcache-JIT beschleunigt es deutlich), aber nur einmal: Nach dem ersten erfolgreichen Login wird der Hash durch einen `password_hash()`-Hash ersetzt. Danach kann der Node-Server dieses Konto nicht mehr prüfen (ADR 0018, offene Frage 1).
+- **Hashes des früheren Node-Servers** (scrypt) werden nicht übernommen (ADR 0018): Der Login schlägt fehl, `bin/console reset-password <E-Mail>` setzt ein neues Passwort.
 - Für unbekannte E-Mail-Adressen wird gegen einen festen Dummy-Hash desselben Verfahrens geprüft, damit die Antwortzeit keine Konten verrät.
 - **Rate-Limits** (`LOGIN_MAX_FAILURES_PER_IP`, `LOGIN_MAX_FAILURES_PER_EMAIL`, `REGISTER_MAX_ATTEMPTS_PER_IP`, `AUTH_RATE_LIMIT_WINDOW_MINUTES`) wie beim Node-Server (festes Fenster pro Schlüssel, 429 `too_many_attempts` mit `retryAfter` und Header `Retry-After`). Da PHP zwischen Anfragen nichts im Speicher behält, liegen die Zähler in der Tabelle `auth_attempts`; abgelaufene Zeilen löscht jeder schreibende Zugriff.
 

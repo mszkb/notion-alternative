@@ -107,7 +107,7 @@ final class AuthRoutes
         }
         $byEmail->reset($input['email']);
         if (Password::needsRehash($user['password_hash'])) {
-            // Node scrypt hashes (ADR 0018) are slow to verify in PHP: replace them on first login.
+            // Lift hashes of older algorithms or options to the current ones.
             Users::updatePasswordHash($db, $user['id'], Password::hash($input['password']));
         }
         $response = $this->startSession($db, $response, $user['id']);

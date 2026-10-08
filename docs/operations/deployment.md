@@ -28,7 +28,7 @@ Nur `frontend` veröffentlicht einen Port, standardmäßig **nur auf `127.0.0.1`
 
 Im Backend laufen die periodischen Aufgaben (`bin/cron.php`: abgelaufene Sitzungen, Suchindex, Push-Hinweise, Aufräumen gelöschter Anhänge) alle 5 Minuten in einer Schleife des Entrypoints; der Healthcheck schickt eine FastCGI-Anfrage an `/api/health`. Befehle: `docker compose exec -T backend php bin/console <Befehl>` (`backup`, `restore`, `migrate-attachments-to-s3`, `reset-password`, siehe [`apps/server-php/README.md`](../../apps/server-php/README.md#cron-und-kommandozeile)). Ohne Docker, auf gewöhnlichem Webspace: [Installation auf Webspace](../user/webhosting.md).
 
-**Umstieg von der Node-Version** (bis Oktober 2026): Datenbank und Anhänge bleiben im Volume und werden beim ersten Start weiter migriert. Passwörter werden nicht übernommen (Argon2id statt scrypt, ADR 0018): Jedes Konto bekommt mit `docker compose exec backend php bin/console reset-password <E-Mail>` ein neues Passwort. Vorher ein Backup ziehen.
+**Umstieg von der Node-Version** (bis Oktober 2026): Datenbank und Anhänge bleiben im Volume und werden beim ersten Start weiter migriert. Passwörter werden nicht übernommen (Argon2id statt scrypt, ADR 0018), der Login mit dem alten Passwort schlägt fehl: Jedes Konto bekommt mit `docker compose exec backend php bin/console reset-password <E-Mail>` ein neues Passwort. Vorher ein Backup ziehen.
 
 ## Server mit SSH-Tunnel (Referenz)
 
