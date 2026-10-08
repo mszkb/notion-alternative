@@ -113,6 +113,7 @@ final class Backup
     public static function verify(string $dir): array
     {
         $manifest = self::readManifest($dir);
+        $root = realpath($dir);
         foreach ($manifest['files'] as $file) {
             if (\in_array('..', explode('/', $file['path']), true) || \in_array('', explode('/', $file['path']), true)) {
                 throw new \RuntimeException("Unsafe path in backup: {$file['path']}");
@@ -120,6 +121,11 @@ final class Backup
             $full = "{$dir}/{$file['path']}";
             if (!is_file($full)) {
                 throw new \RuntimeException("File missing in backup: {$file['path']}");
+            }
+            // No symlinks: a crafted backup could otherwise copy any local file into the volume.
+            $real = realpath($full);
+            if (is_link($full) || $root === false || $real === false || !str_starts_with($real, $root . '/')) {
+                throw new \RuntimeException("Unsafe path in backup: {$file['path']}");
             }
             if (filesize($full) !== $file['size'] || hash_file('sha256', $full) !== $file['sha256']) {
                 throw new \RuntimeException("Checksum mismatch in backup: {$file['path']}");
