@@ -7,8 +7,8 @@ namespace NotionAlt\Auth;
 use NotionAlt\Database\Sql;
 
 /**
- * Attempt counter with a fixed window per key, same semantics as `AttemptLimiter` in
- * apps/server/src/auth/rate-limit.ts. PHP keeps no memory between requests, so the counters live
+ * Attempt counter with a fixed window per key (login and registration limits). PHP keeps no
+ * memory between requests, so the counters live
  * in the table `auth_attempts` (migration 0012), keyed by limiter name and key.
  */
 final class AttemptLimiter

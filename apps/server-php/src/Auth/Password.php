@@ -6,8 +6,7 @@ namespace NotionAlt\Auth;
 
 /**
  * Password hashes (ADR 0018): `password_hash()` with Argon2id, else bcrypt. Hashes of other
- * formats (e.g. scrypt of the former Node server) never verify; such accounts get a new password
- * with `bin/console reset-password`.
+ * formats never verify; such accounts get a new password with `bin/console reset-password`.
  */
 final class Password
 {

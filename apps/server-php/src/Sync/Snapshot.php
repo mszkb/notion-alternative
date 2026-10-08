@@ -8,7 +8,7 @@ use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Workspaces\Workspaces;
 
-/** Port of apps/server/src/sync/snapshot.ts: the workspace state for a full re-sync. */
+/** The workspace state for a full re-sync. */
 final class Snapshot
 {
     /**
@@ -76,7 +76,7 @@ final class Snapshot
             $table = 0;
             $lastId = null;
             $total = null;
-            // An empty `after` counts as missing, like the `if (after)` in Node.
+            // An empty `after` counts as missing.
             if ($after !== null && $after !== '') {
                 $token = self::parseToken($after);
                 if ($token === null) {

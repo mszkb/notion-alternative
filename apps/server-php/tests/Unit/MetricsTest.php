@@ -10,7 +10,7 @@ use NotionAlt\Metrics\Metrics;
 use NotionAlt\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
-/** Text format of apps/server/test/metrics.test.ts, from the `metrics` table (#127). */
+/** Prometheus text from the `metrics` table (#127). */
 final class MetricsTest extends TestCase
 {
     use TempDir;

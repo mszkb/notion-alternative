@@ -9,7 +9,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 
-/** `GET /api/metrics` (only registered with METRICS_ENABLED, like `metricsRoutes` in Node). */
+/** `GET /api/metrics` (only registered with METRICS_ENABLED). */
 final class MetricsRoutes
 {
     /**

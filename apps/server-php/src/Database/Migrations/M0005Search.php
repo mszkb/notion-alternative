@@ -14,7 +14,7 @@ final class M0005Search implements Migration
     {
         // One row per active page: title and the plain text of its blocks (server-side search, FTS5).
         // `remove_diacritics 2` lets "uber" find "über"; prefixes are matched by the query.
-        // The text (with its line breaks and indentation) is what Kysely stored in sqlite_master.
+        // The exact text (line breaks, indentation) in sqlite_master of existing databases.
         $db->exec(
             "create virtual table search_index using fts5(\n"
             . "    document_id unindexed,\n"

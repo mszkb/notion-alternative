@@ -8,7 +8,7 @@ use NotionAlt\Database\Sql;
 use NotionAlt\Text\InlineText;
 
 /**
- * Port of apps/server/src/search/index.ts: server-side full-text search (FTS5) over the title and
+ * Server-side full-text search (FTS5) over the title and
  * the plain text of a page's blocks. `search_index` rows are addressed by the rowid kept in
  * `search_documents` (#77); applied operations only mark pages in `search_dirty` (#99).
  */
@@ -22,7 +22,7 @@ final class SearchIndex
 
     /**
      * The characters JavaScript's `\s` matches (ECMAScript WhiteSpace and LineTerminator), so the
-     * input is split into the same words as in Node.
+     * input is split into the same words as in the web app.
      */
     private const JS_WHITESPACE = '[\x{9}-\x{d}\x{20}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]';
 
@@ -59,7 +59,7 @@ final class SearchIndex
             'select "id", "workspace_id", "title", "deleted_at" from "documents" where "id" = ?',
             [$documentId],
         )->fetch(\PDO::FETCH_ASSOC);
-        // Like the falsy check in Node: an empty deleted_at counts as not deleted.
+        // An empty deleted_at counts as not deleted.
         if ($document === false || ($document['deleted_at'] !== null && $document['deleted_at'] !== '')) {
             if ($rowid !== null) {
                 Sql::run($db, 'delete from search_documents where id = ?', [$rowid]);
@@ -131,7 +131,7 @@ final class SearchIndex
      */
     public static function toFtsQuery(string $input): ?string
     {
-        // A /u pattern cannot split invalid UTF-8; broken sequences become U+FFFD as in Node.
+        // A /u pattern cannot split invalid UTF-8; broken sequences become U+FFFD.
         if (!mb_check_encoding($input, 'UTF-8')) {
             $input = htmlspecialchars_decode(htmlspecialchars($input, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES);
         }

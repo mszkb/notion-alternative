@@ -16,7 +16,7 @@ final class Json
         return json_encode($value, self::ENCODE_FLAGS);
     }
 
-    /** Writes `$data` as the JSON body (content type as sent by Fastify). */
+    /** Writes `$data` as the JSON body (`application/json; charset=utf-8`). */
     public static function respond(ResponseInterface $response, mixed $data, int $status = 200): ResponseInterface
     {
         $response->getBody()->write(self::encode($data));

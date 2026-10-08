@@ -9,7 +9,7 @@ use NotionAlt\Database\Sql;
 use NotionAlt\Support\Ids;
 
 /**
- * Port of apps/server/src/auth/users.ts.
+ * Accounts; email addresses are stored normalized (trimmed, lowercase).
  *
  * @phpstan-type UserRow array{id: string, email: string, password_hash: string, created_at: string}
  */

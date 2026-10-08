@@ -13,21 +13,21 @@ use Slim\Interfaces\RouteInterface;
 use Slim\Routing\RouteContext;
 
 /**
- * Parses request bodies like Fastify's default content-type parsers: `application/json` (decoded
+ * Parses request bodies: `application/json` (decoded
  * with objects as `stdClass`) and `text/plain` (string); other types with a body are 415. The
  * decoded body is in the request attribute `body` (read it with {@see self::body()}); a request
- * without body has none, like `request.body === undefined`.
+ * without body has none ({@see Undefined::Value}).
  *
- * Route arguments as Fastify route options: {@see self::BODY_LIMIT} replaces the limit for every
- * content type (`bodyLimit`), {@see self::OCTET_STREAM} also accepts `application/octet-stream`
- * as {@see RawBody}, even when empty (an octet-stream parser). Needs the routing middleware to
+ * Route arguments: {@see self::BODY_LIMIT} replaces the limit for every
+ * content type, {@see self::OCTET_STREAM} also accepts `application/octet-stream`
+ * as {@see RawBody}, even when empty. Needs the routing middleware to
  * run first.
  */
 final class JsonBodyMiddleware implements MiddlewareInterface
 {
     public const ATTRIBUTE = 'body';
 
-    /** Fastify's default `bodyLimit` as set in apps/server/src/app.ts. */
+    /** Body limit of all other routes (1 MiB). */
     public const DEFAULT_LIMIT = 1024 * 1024;
 
     /** Route argument: body limit in bytes of this route. */
@@ -38,7 +38,7 @@ final class JsonBodyMiddleware implements MiddlewareInterface
 
     private const INVALID_JSON = "Body is not valid JSON but content-type is set to 'application/json'";
 
-    /** Methods Fastify parses a body for. */
+    /** Methods whose body is parsed. */
     private const BODY_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'SEARCH', 'PROPFIND', 'PROPPATCH', 'LOCK', 'REPORT', 'MKCALENDAR'];
 
     public function __construct(private readonly int $limit = self::DEFAULT_LIMIT) {}
@@ -112,7 +112,7 @@ final class JsonBodyMiddleware implements MiddlewareInterface
             throw new HttpError(400, 'bad_request', self::INVALID_JSON, [], $error);
         }
         if (self::hasPrototypeKeys($value)) {
-            // Fastify (secure-json-parse) rejects prototype poisoning; same answer here.
+            // Prototype poisoning is rejected for JavaScript clients' sake, as it always was.
             throw new HttpError(400, 'bad_request', self::INVALID_JSON);
         }
 

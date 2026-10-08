@@ -8,7 +8,7 @@ use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Support\Ids;
 
-/** Server settings of `apps/server/src/push/service.ts`, in the same `settings` rows. */
+/** VAPID keys and installation id, created once in the table `settings`. */
 final class PushSettings
 {
     /** VAPID key pair of this installation, created on first use (stored in the database backup). */

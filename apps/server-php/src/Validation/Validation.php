@@ -9,8 +9,7 @@ use NotionAlt\Http\HttpError;
 final class Validation
 {
     /**
-     * Parses untrusted input; responds with 400 `invalid_input` on failure (like `parseInput` in
-     * apps/server/src/validation.ts).
+     * Parses untrusted input; responds with 400 `invalid_input` and `issues` on failure.
      *
      * @throws HttpError
      */

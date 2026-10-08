@@ -7,8 +7,7 @@ namespace NotionAlt\Push;
 use OpenSSLAsymmetricKey;
 
 /**
- * Web Push message encryption (RFC 8291, aes128gcm per RFC 8188) on ext-openssl only;
- * port of `apps/server/src/push/crypto.ts` (ADR 0005).
+ * Web Push message encryption (RFC 8291, aes128gcm per RFC 8188) on ext-openssl only (ADR 0005).
  */
 final class WebPushCrypto
 {

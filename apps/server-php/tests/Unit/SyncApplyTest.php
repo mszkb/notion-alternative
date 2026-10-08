@@ -15,7 +15,7 @@ use NotionAlt\Sync\Operation;
 use NotionAlt\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
-/** Logic cases of apps/server/test/sync-*.test.ts for the PHP port of apply.ts (#121). */
+/** Savepoints, merge and conflicts of `Apply` beyond the contract tests (#121). */
 final class SyncApplyTest extends TestCase
 {
     use TempDir;

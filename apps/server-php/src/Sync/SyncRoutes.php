@@ -26,7 +26,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 
-/** Port of apps/server/src/sync/routes.ts. */
+/** Sync API (ADR 0002): push, pull, log, snapshot and page contents on demand (ADR 0017). */
 final class SyncRoutes
 {
     /**

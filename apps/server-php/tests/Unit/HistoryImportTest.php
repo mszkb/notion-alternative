@@ -20,7 +20,7 @@ use NotionAlt\Tests\TempDir;
 use NotionAlt\Validation\Validation;
 use PHPUnit\Framework\TestCase;
 
-/** Cases of apps/server/test/history.test.ts and import.test.ts that need internals (#126). */
+/** History and import cases that need internals (#126). */
 final class HistoryImportTest extends TestCase
 {
     use TempDir;

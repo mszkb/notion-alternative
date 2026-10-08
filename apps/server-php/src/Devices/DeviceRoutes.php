@@ -21,7 +21,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 
-/** Port of apps/server/src/devices/routes.ts. */
+/** Device registration, list, rename and removal (#46). */
 final class DeviceRoutes
 {
     /**

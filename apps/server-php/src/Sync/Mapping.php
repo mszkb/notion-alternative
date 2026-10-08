@@ -7,7 +7,7 @@ namespace NotionAlt\Sync;
 use NotionAlt\Database\Row;
 
 /**
- * Port of apps/server/src/sync/mapping.ts: the single place where DB rows (snake_case) become
+ * The single place where DB rows (snake_case) become
  * API objects (camelCase, ADR 0009). JSON columns are decoded with objects as `stdClass`, so
  * `{}` encodes back as `{}`.
  */

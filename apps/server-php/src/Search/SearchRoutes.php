@@ -14,7 +14,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 
-/** Port of apps/server/src/search/routes.ts. */
+/** `GET /api/search` (FTS5, #123). */
 final class SearchRoutes
 {
     /**

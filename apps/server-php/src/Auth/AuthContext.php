@@ -7,7 +7,7 @@ namespace NotionAlt\Auth;
 use NotionAlt\Http\HttpError;
 use Psr\Http\Message\ServerRequestInterface;
 
-/** The signed-in user of a request (`request.user` and `request.deviceId` in the Node server). */
+/** The signed-in user of a request and the device registered with its session. */
 final class AuthContext
 {
     public const ATTRIBUTE = 'notion-alt.auth';

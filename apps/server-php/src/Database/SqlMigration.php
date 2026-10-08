@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace NotionAlt\Database;
 
-/** A migration made of SQL statements only (the DDL Kysely generates for the Node migration). */
+/** A migration made of SQL statements only. */
 abstract class SqlMigration implements Migration
 {
     /**

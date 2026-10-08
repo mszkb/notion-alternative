@@ -13,7 +13,7 @@ use NotionAlt\Support\Ids;
 use NotionAlt\Sync\Apply;
 
 /**
- * Port of apps/server/src/import/import.ts: creates a new workspace from a JSON export (ADR 0004).
+ * Creates a new workspace from a JSON export (ADR 0004).
  *
  * @phpstan-type Entity array<string, mixed>
  * @phpstan-type ExportData array{documents: list<Entity>, blocks: list<Entity>, tags: list<Entity>, document_tags: list<Entity>, attachments: list<Entity>, history: array{compactedSeq: int, changes: list<Entity>}|null}
@@ -86,7 +86,7 @@ final class Import
                 'document_id' => $b['documentId'],
                 'type' => $b['type'],
                 'content' => $b['content'],
-                // Parsed attrs come back in schema order, like zod's output in the Node server.
+                // Parsed attrs come back in schema order (same stored text as zod's output).
                 'attrs' => Json::encode((object) $b['attrs']),
                 'sort_key' => $b['sortKey'],
                 'revision' => self::revision($b['revision']),

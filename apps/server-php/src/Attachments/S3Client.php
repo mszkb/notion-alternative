@@ -9,7 +9,7 @@ use Psr\Http\Message\StreamInterface;
 use Slim\Psr7\Stream;
 
 /**
- * Minimal S3 client (port of `S3Client` in apps/server/src/attachments/s3.ts): signed requests
+ * Minimal S3 client without SDK (ADR 0007, #63): signed requests
  * with {@see S3Signer}, sent with ext-curl. No redirects, 60 s timeout.
  */
 final class S3Client

@@ -11,7 +11,7 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * One log line per request, like Fastify's "request completed" (method, path, status, time). The
+ * One log line "request completed" per request (method, path, status, time). The
  * query string is left out: search terms are page content and must not end up in logs.
  */
 final class RequestLogMiddleware implements MiddlewareInterface

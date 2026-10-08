@@ -27,7 +27,7 @@ final class Vapid
             throw new \RuntimeException('VAPID signing failed');
         }
         \assert(\is_string($der));
-        // JWS wants the raw `r || s` form (like Node's dsaEncoding: 'ieee-p1363').
+        // JWS wants the raw `r || s` form (IEEE P1363), not DER.
         $signature = Base64Url::encode(P256::derToRaw($der));
 
         return "vapid t={$input}.{$signature}, k={$keys->publicKey}";

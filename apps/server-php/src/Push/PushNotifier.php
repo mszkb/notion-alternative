@@ -10,18 +10,17 @@ use NotionAlt\Database\Sql;
 use NotionAlt\Support\Ids;
 
 /**
- * "Changes waiting" hints to the other devices of a workspace's owner (port of `PushNotifier` in
- * apps/server/src/push/service.ts). Data integrity never depends on it (principle 4).
+ * "Changes waiting" hints to the other devices of a workspace's owner. Data integrity never
+ * depends on it (principle 4).
  *
- * The Node server bundles the hints of a burst with a timer in memory. PHP has no timers between
- * requests, so pending hints are rows in `push_hints`: the first hint after a quiet period is
+ * PHP has no timers between requests, so pending hints are rows in `push_hints`: the first hint after a quiet period is
  * due at once, later ones within {@see self::BUNDLE_MS} of the last send are bundled into one
  * hint at the end of that window. {@see self::flush()} sends what is due; it runs after the
  * response of a sync request and in the cron (#127).
  */
 final class PushNotifier
 {
-    /** Hints to one subscription are at least this far apart (Node: delay of the timer). */
+    /** Hints to one subscription are at least this far apart. */
     public const BUNDLE_MS = 2000;
 
     /** Subscriptions that keep failing are dropped; the device can subscribe again. */

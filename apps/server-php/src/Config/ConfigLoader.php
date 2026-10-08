@@ -7,8 +7,8 @@ namespace NotionAlt\Config;
 use NotionAlt\Text\Js;
 
 /**
- * Reads the configuration from environment variables and an optional `config.php` (ADR 0018):
- * same variables, defaults and checks as apps/server/src/config.ts, without HOST and PORT.
+ * Reads the configuration from environment variables and an optional `config.php` (ADR 0018);
+ * invalid values fail with a message that names only variables, never values.
  * Environment variables win over `config.php`; empty values count as unset in both.
  */
 final class ConfigLoader
@@ -297,8 +297,8 @@ final class ConfigLoader
     }
 
     /**
-     * Relative paths are resolved against the app directory (the Node server uses its working
-     * directory, which is not fixed under PHP).
+     * Relative paths are resolved against the app directory (the working directory is not fixed
+     * under PHP).
      */
     private function resolvePath(string $path): string
     {

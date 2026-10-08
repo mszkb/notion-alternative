@@ -22,7 +22,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 
-/** Port of apps/server/src/attachments/routes.ts (ADR 0012). */
+/** Attachment contents and storage usage (ADR 0012). */
 final class AttachmentRoutes
 {
     /**
@@ -52,7 +52,7 @@ final class AttachmentRoutes
     /** RFC 6266 filename for Content-Disposition, safe for any name. */
     public static function disposition(string $kind, string $name): string
     {
-        // One `_` per UTF-16 code unit, like the JavaScript regex in the Node server.
+        // One `_` per UTF-16 code unit, as the API has always sent it.
         $fallback = preg_replace_callback(
             '/[^\x20-\x7e]|["\\\\]/u',
             static fn(array $match): string => str_repeat('_', mb_ord($match[0], 'UTF-8') > 0xFFFF ? 2 : 1),

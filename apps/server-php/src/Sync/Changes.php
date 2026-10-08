@@ -7,7 +7,7 @@ namespace NotionAlt\Sync;
 use NotionAlt\Database\Sql;
 use NotionAlt\Workspaces\Workspaces;
 
-/** Port of apps/server/src/sync/changes.ts: reading and compacting the change log. */
+/** Reading and compacting the change log. */
 final class Changes
 {
     /**

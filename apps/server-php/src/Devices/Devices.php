@@ -9,7 +9,7 @@ use NotionAlt\Database\Sql;
 use NotionAlt\Database\Transaction;
 
 /**
- * Port of apps/server/src/devices/repository.ts.
+ * Devices of a user; removing one sets `revoked_at` (#46).
  *
  * @phpstan-type DeviceRow array{id: string, user_id: string, name: string, created_at: string, last_seen_at: string, revoked_at: string|null}
  */

@@ -20,7 +20,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 
-/** Port of apps/server/src/push/routes.ts. */
+/** VAPID public key, push subscriptions and hints after changes (ADR 0005). */
 final class PushRoutes
 {
     /** More than any person has devices; bounds the fan-out of one change. */

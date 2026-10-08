@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace NotionAlt\Push;
 
-/** Sends a {@see PushRequest} with ext-curl: no redirects, 10 s timeout (like `sendPush` in Node). */
+/** Sends a {@see PushRequest} with ext-curl: no redirects, 10 s timeout. */
 final class PushSender
 {
     /** Status code of the push service, 0 if the request failed. */

@@ -6,7 +6,7 @@ namespace NotionAlt\Database;
 
 final class Database
 {
-    /** Opens the SQLite database (":memory:" for tests) with the pragmas of the Node server. */
+    /** Opens the SQLite database (":memory:" for tests): WAL, foreign keys, busy timeout. */
     public static function open(string $path): \PDO
     {
         if ($path !== ':memory:') {

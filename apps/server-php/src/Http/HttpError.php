@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace NotionAlt\Http;
 
 /**
- * An error with an HTTP status, sent as `{"error":{"code","message",...details}}`
- * (same as `HttpError` in apps/server/src/errors.ts).
+ * An error with an HTTP status, sent as `{"error":{"code","message",...details}}`.
  */
 final class HttpError extends \RuntimeException
 {

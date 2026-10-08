@@ -21,7 +21,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 
-/** Port of apps/server/src/auth/routes.ts. */
+/** Registration, login, logout, password change and session status. */
 final class AuthRoutes
 {
     private const DEFAULT_WORKSPACE_NAME = 'Personal';

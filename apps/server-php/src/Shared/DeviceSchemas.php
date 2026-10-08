@@ -29,7 +29,7 @@ final class DeviceSchemas
         return V::object(['name' => self::name()]);
     }
 
-    /** Route parameters of `/api/devices/:id` (apps/server/src/devices/routes.ts). */
+    /** Route parameters of `/api/devices/:id`. */
     public static function params(): ObjectSchema
     {
         return V::object(['id' => V::uuid()]);

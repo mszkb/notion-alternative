@@ -7,10 +7,7 @@ namespace NotionAlt\Attachments;
 use NotionAlt\Config\AttachmentsConfig;
 use Psr\Http\Message\StreamInterface;
 
-/**
- * Where attachment contents live: data volume (default) or S3-compatible storage (#63). Port of
- * apps/server/src/attachments/content-store.ts.
- */
+/** Where attachment contents live: data volume (default) or S3-compatible storage (#63). */
 abstract class ContentStore
 {
     private const UUID = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';

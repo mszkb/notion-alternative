@@ -15,8 +15,8 @@ use NotionAlt\Support\Ids;
 use NotionAlt\Workspaces\Workspaces;
 
 /**
- * Port of apps/server/src/sync/apply.ts: applies client operations (ADR 0002) with block merge
- * and conflict objects (ADR 0003). Results are the `ApplyResult` shapes of Node:
+ * Applies client operations (ADR 0002) with block merge and conflict objects (ADR 0003).
+ * Results (`ApplyResult`):
  * `applied`/`merged`/`duplicate` with `revision` and `seq`, `conflict` with `currentRevision`,
  * `reason` and `conflictId`, `rejected` with `code` and `message`.
  *

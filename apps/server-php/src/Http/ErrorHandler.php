@@ -13,9 +13,9 @@ use Slim\Exception\HttpMethodNotAllowedException;
 use Slim\Exception\HttpNotFoundException;
 
 /**
- * Error responses as in apps/server/src/app.ts: `HttpError` with its status and code, other 4xx
- * as `bad_request`, unknown routes as 404 `not_found` (also for a wrong method: Fastify has no
- * 405), everything else as a logged 500 `internal`.
+ * Error responses of the API: `HttpError` with its status and code, other 4xx as `bad_request`,
+ * unknown routes as 404 `not_found` (also for a wrong method: the API has no 405), everything
+ * else as a logged 500 `internal`.
  */
 final class ErrorHandler
 {

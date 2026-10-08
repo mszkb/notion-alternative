@@ -13,7 +13,7 @@ use NotionAlt\Search\SearchIndex;
 use NotionAlt\Support\Ids;
 
 /**
- * Periodic work that the Node server does with timers (ADR 0018), for `bin/cron.php`: run it every
+ * Periodic work without a long-running process (ADR 0018), for `bin/cron.php`: run it every
  * few minutes from the hoster's cron. Every task is also safe to skip: without the cron, requests
  * catch up on what they need (search index before a search, push hints after sync requests).
  */

@@ -28,7 +28,7 @@ use Slim\App;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 use Slim\Psr7\Factory\ResponseFactory;
 
-/** Builds the Slim app (counterpart of `buildApp` in apps/server/src/app.ts). */
+/** Builds the Slim app: middleware and all routes below `/api`. */
 final class AppFactory
 {
     /**

@@ -16,7 +16,7 @@ use NotionAlt\Support\Ids;
 use NotionAlt\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
-/** Bundling and failure handling of push hints (Node: timer cases of push.test.ts, #125). */
+/** Bundling and failure handling of push hints (#125). */
 final class PushNotifierTest extends TestCase
 {
     use TempDir;

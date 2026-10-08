@@ -24,7 +24,7 @@ use Slim\App;
 use Slim\Psr7\Factory\ServerRequestFactory;
 use Slim\Psr7\Factory\StreamFactory;
 
-/** Responses as the Node server sends them (checked against Fastify with `inject`). */
+/** HTTP basics of the API: status codes, error format, bodies, logs. */
 final class HttpTest extends TestCase
 {
     /** @var list<array<string, mixed>> */
@@ -49,7 +49,7 @@ final class HttpTest extends TestCase
         self::assertSame('{"status":"ok"}', (string) $response->getBody());
         self::assertSame(200, $this->request('HEAD', '/api/health')->getStatusCode());
         self::assertSame(200, $this->request('GET', '/api/health?x=1')->getStatusCode());
-        // Health checks are not in the info log (logLevel 'warn' in the Node server).
+        // Health checks are not in the info log.
         self::assertSame([], $this->logs);
     }
 
@@ -81,7 +81,7 @@ final class HttpTest extends TestCase
     {
         $octet = ['Content-Type' => 'application/octet-stream'];
         self::assertSame('{"raw":"00ff"}', (string) $this->request('PUT', '/api/raw', "\x00\xff", $octet)->getBody());
-        // Fastify runs the parser for an empty body with a content type: an empty Buffer.
+        // An empty body with this content type is an empty RawBody, not a missing body.
         self::assertSame('{"raw":""}', (string) $this->request('PUT', '/api/raw', '', $octet)->getBody());
         self::assertSame('{"body":"ab"}', (string) $this->request('PUT', '/api/raw', 'ab', ['Content-Type' => 'text/plain'])->getBody());
         // The route's limit applies to every content type.

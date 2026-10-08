@@ -10,7 +10,7 @@ use NotionAlt\Config\S3Config;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-/** Port of apps/server/test/s3-sign.test.ts plus requests recorded from the Node `S3Client`. */
+/** SigV4 against the AWS example and against requests recorded from the former S3 client. */
 final class S3SignerTest extends TestCase
 {
     // "GET Object" example from the AWS S3 documentation (Signature Version 4, header-based).
@@ -38,7 +38,7 @@ final class S3SignerTest extends TestCase
         self::assertArrayNotHasKey('host', $headers);
     }
 
-    public function testCanonicalizesPathQueryAndHeadersLikeNode(): void
+    public function testCanonicalizesPathQueryAndHeaders(): void
     {
         $headers = S3Signer::signV4(
             'GET',

@@ -10,8 +10,8 @@ use DateTimeZone;
 use NotionAlt\Config\S3Config;
 
 /**
- * AWS Signature Version 4 (header-based) and S3 object URLs, without HTTP: port of the pure
- * parts of `apps/server/src/attachments/s3.ts` (no SDK, ADR 0007; S3-compatible stores, #63).
+ * AWS Signature Version 4 (header-based) and S3 object URLs, without HTTP (no SDK, ADR 0007;
+ * S3-compatible stores, #63).
  */
 final class S3Signer
 {

@@ -8,7 +8,7 @@ use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Support\Ids;
 
-/** Port of `purgeDeletedAttachments` (apps/server/src/attachments/storage.ts), run by the cron (#127). */
+/** Removes the files of deleted attachments after the retention period; run by the cron (#127). */
 final class Purge
 {
     /**

@@ -7,7 +7,7 @@ namespace NotionAlt\Push;
 use OpenSSLAsymmetricKey;
 
 /**
- * VAPID key pair of an installation, in the format the Node server stores as JSON in
+ * VAPID key pair of an installation, stored as JSON in
  * `settings` (key `vapid`): `{"publicKey": <uncompressed point, base64url>, "privateKey": <PKCS#8 PEM>}`.
  */
 final class VapidKeys
@@ -15,7 +15,7 @@ final class VapidKeys
     public function __construct(
         /** Uncompressed public point, base64url (the browser's applicationServerKey). */
         public readonly string $publicKey,
-        /** Private key as PEM (PKCS#8; PHP and Node both write that, and both read SEC1 too). */
+        /** Private key as PEM (PKCS#8; SEC1 is read too). */
         #[\SensitiveParameter]
         public readonly string $privateKey,
     ) {}
@@ -46,7 +46,7 @@ final class VapidKeys
         return $keys;
     }
 
-    /** Same JSON as Node's `JSON.stringify(generateVapidKeys())`. */
+    /** The JSON stored in `settings` (`vapid`). */
     public function toJson(): string
     {
         return json_encode(

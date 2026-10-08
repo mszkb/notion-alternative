@@ -7,7 +7,7 @@ namespace NotionAlt\Attachments;
 use Psr\Http\Message\StreamInterface;
 use Slim\Psr7\Stream;
 
-/** Files in `<dir>/<workspace>/<id>`, same layout as the Node server (shared data volume). */
+/** Files in `<dir>/<workspace>/<id>` (both UUIDs) in the data volume. */
 final class VolumeStore extends ContentStore
 {
     public function __construct(public readonly string $dir) {}

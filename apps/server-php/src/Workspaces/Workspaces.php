@@ -9,7 +9,7 @@ use NotionAlt\Database\Sql;
 use NotionAlt\Support\Ids;
 
 /**
- * Port of apps/server/src/workspaces/repository.ts. Every read is restricted to the owner
+ * Workspaces; every read is restricted to the owner
  * (workspace boundary).
  *
  * @phpstan-type WorkspaceRow array{id: string, name: string, owner_id: string, created_at: string, compacted_seq: int}

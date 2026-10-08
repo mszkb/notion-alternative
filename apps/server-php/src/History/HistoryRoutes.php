@@ -14,7 +14,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 
-/** Port of apps/server/src/history/routes.ts. */
+/** `GET /api/documents/:id/history` and `…/history/:seq` (ADR 0013). */
 final class HistoryRoutes
 {
     /**

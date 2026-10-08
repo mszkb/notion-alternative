@@ -9,7 +9,7 @@ use NotionAlt\Database\Sql;
 use NotionAlt\Logging\Logger;
 
 /**
- * Prometheus metrics (text format 0.0.4) of apps/server/src/metrics/, kept in the table `metrics`
+ * Prometheus metrics (text format 0.0.4), kept in the table `metrics`
  * because PHP holds no counters between requests (ADR 0018). Only active with METRICS_ENABLED;
  * requests are recorded after the response. Labels must have low cardinality and never carry
  * personal data or content: route templates, status codes and fixed enums only.
@@ -20,7 +20,7 @@ final class Metrics
 
     public const DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 
-    /** Families in the order of the Node registry (process and event-loop gauges have no PHP counterpart). */
+    /** Families in output order. */
     private const FAMILIES = [
         'http_requests_total' => ['counter', 'HTTP requests by method, route template and status code.'],
         'http_request_duration_seconds' => ['histogram', 'HTTP request duration by method and route template.'],
@@ -63,7 +63,7 @@ final class Metrics
             if ($seconds <= $le) {
                 $series[] = ['http_request_duration_seconds_bucket', [...$labels, 'le' => self::format($le)], 1.0];
             } else {
-                // Present with 0 like in Node, so every bucket of a series is rendered.
+                // Present with 0, so every bucket of a series is rendered.
                 $series[] = ['http_request_duration_seconds_bucket', [...$labels, 'le' => self::format($le)], 0.0];
             }
         }
@@ -98,7 +98,7 @@ final class Metrics
         foreach (self::FAMILIES as $family => [$type, $help]) {
             $out[] = "# HELP {$family} {$help}";
             $out[] = "# TYPE {$family} {$type}";
-            // Histogram series: buckets, sum and count per label set, like the Node registry.
+            // Histogram series: buckets, sum and count per label set.
             $series = $lines[$family] ?? [];
             if ($type === 'histogram') {
                 $series = self::groupHistogram($series);

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace NotionAlt\Config;
 
-/** Server configuration, same values as `Config` in apps/server/src/config.ts (without host/port). */
+/** Server configuration (docs/operations/deployment.md). */
 final class Config
 {
     public function __construct(

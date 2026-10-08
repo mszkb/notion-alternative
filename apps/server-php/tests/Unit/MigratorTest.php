@@ -13,8 +13,8 @@ use NotionAlt\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The PHP migrations must produce the schema of the Node server and continue its databases
- * (ADR 0018). Fixtures come from apps/server/scripts/dump-php-fixtures.ts.
+ * The migrations produce the expected schema and continue databases of the former Node server
+ * (ADR 0018). The `node-*` fixtures were recorded from it and are frozen.
  */
 final class MigratorTest extends TestCase
 {

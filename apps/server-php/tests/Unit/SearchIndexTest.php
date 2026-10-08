@@ -13,9 +13,8 @@ use NotionAlt\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Port of the logic cases of apps/server/test/search.test.ts and the search part of
- * migrations.test.ts. Operations are emulated by writing rows and marking the page, as
- * `applyOperation` does in the Node server.
+ * Search index logic. Operations are emulated by writing rows and marking the page, as
+ * `Apply` does.
  */
 final class SearchIndexTest extends TestCase
 {

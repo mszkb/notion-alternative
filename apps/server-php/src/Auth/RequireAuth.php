@@ -11,8 +11,8 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Rejects requests without a valid session (port of `requireAuth` in
- * apps/server/src/auth/plugin.ts) and stores the {@see AuthContext} as request attribute.
+ * Rejects requests without a valid session (401) and stores the {@see AuthContext} as request
+ * attribute.
  */
 final class RequireAuth implements MiddlewareInterface
 {

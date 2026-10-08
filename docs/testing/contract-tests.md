@@ -36,7 +36,7 @@ Ein gestarteter Server bekommt genau diese Variablen. Ein externer Server (`SERV
 
 | Variable | Wert | Zweck |
 | --- | --- | --- |
-| `HOST`, `PORT` | `127.0.0.1`, freier Port | nur beim Start durch die Suite |
+| `PORT` | freier Port | nur beim Start durch die Suite |
 | `DATA_DIR`, `DATABASE_PATH` | temporäres Verzeichnis, `…/app.sqlite` | frische Datenbank pro Lauf |
 | `LOG_LEVEL` | `warn` | |
 | `ALLOW_REGISTRATION` | `true` | jeder Test legt eigene Konten an |
@@ -47,8 +47,7 @@ Ein gestarteter Server bekommt genau diese Variablen. Ein externer Server (`SERV
 | `ATTACHMENT_MAX_MB` | `1` (überschreibbar) | `too_large`, `413` beim Upload |
 | `WORKSPACE_STORAGE_MB` | `0.003` (= 3 000 Byte, überschreibbar) | `quota_exceeded`, `storage_limit` beim Import |
 | `PUSH_ALLOWED_HOSTS` | `127.0.0.1` | Fake-Push-Dienst |
-| `NODE_EXTRA_CA_CERTS` | Pfad zu `fixtures/push-receiver.crt` | für Server in Node |
-| `PUSH_RECEIVER_CA` | derselbe Pfad | `php -d curl.cainfo=$PUSH_RECEIVER_CA …` im Standardbefehl |
+| `PUSH_RECEIVER_CA` | Pfad zu `fixtures/push-receiver.crt` | `php -d curl.cainfo=$PUSH_RECEIVER_CA …` im Standardbefehl |
 
 Weitere Annahmen über den Server:
 

@@ -10,7 +10,7 @@ use NotionAlt\Database\Migrator;
 use NotionAlt\Database\Sql;
 use PHPUnit\Framework\TestCase;
 
-/** Same cases as apps/server/test/rate-limit.test.ts, plus persistence across instances. */
+/** Fixed-window limits, also across instances (= PHP processes). */
 final class AttemptLimiterTest extends TestCase
 {
     private \PDO $db;

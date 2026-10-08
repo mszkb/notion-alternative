@@ -8,7 +8,7 @@ use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Workspaces\Workspaces;
 
-/** Port of apps/server/src/history/history.ts (ADR 0013). */
+/** Version history of a page from the change log (ADR 0013). */
 final class History
 {
     /** Changes of one device less than this apart form one version. */

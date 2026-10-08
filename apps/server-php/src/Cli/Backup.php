@@ -13,10 +13,10 @@ use NotionAlt\Database\Sql;
 use NotionAlt\Support\Ids;
 
 /**
- * Backup and restore (port of apps/server/src/backup/backup.ts, #75): the SQLite database with
- * `VACUUM INTO` (a consistent copy while the server runs) plus the attachment files of the
- * volume, and `manifest.json` in the same format as the Node server, so backups restore in both
- * directions as long as no newer migration ran. Not included: configuration and S3 contents.
+ * Backup and restore (#75): the SQLite database with `VACUUM INTO` (a consistent copy while the
+ * server runs) plus the attachment files of the volume, and `manifest.json` with checksums.
+ * Backups of older versions (also of the former Node server) restore and are migrated.
+ * Not included: configuration and S3 contents.
  *
  * @phpstan-type Manifest array{format: string, version: int, createdAt: string, migration: ?string, attachmentStorage: string, files: list<array{path: string, size: int, sha256: string}>, missingAttachments: list<string>}
  */

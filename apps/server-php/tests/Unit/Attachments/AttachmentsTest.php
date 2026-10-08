@@ -18,12 +18,12 @@ use NotionAlt\Support\Ids;
 use NotionAlt\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
-/** Port of the internal cases of apps/server/test/attachments.test.ts (#124). */
+/** Attachment storage, purge and headers beyond the contract tests (#124). */
 final class AttachmentsTest extends TestCase
 {
     use TempDir;
 
-    public function testContentDispositionLikeNode(): void
+    public function testContentDispositionKeepsTheApiFormat(): void
     {
         self::assertSame("inline; filename=\"foto.png\"; filename*=UTF-8''foto.png", AttachmentRoutes::disposition('inline', 'foto.png'));
         self::assertSame(

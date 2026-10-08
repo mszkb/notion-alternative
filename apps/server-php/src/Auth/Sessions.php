@@ -8,7 +8,7 @@ use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Support\Ids;
 
-/** Port of apps/server/src/auth/sessions.ts. The database stores only the SHA-256 of the token. */
+/** Session tokens; the database stores only the SHA-256 of the token. */
 final class Sessions
 {
     public const COOKIE = 'session';

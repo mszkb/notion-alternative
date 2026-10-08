@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace NotionAlt\Push;
 
-/** Unpadded base64url (RFC 4648 §5), like Node's `Buffer#toString('base64url')`. */
+/** Unpadded base64url (RFC 4648 §5). */
 final class Base64Url
 {
     public static function encode(string $data): string

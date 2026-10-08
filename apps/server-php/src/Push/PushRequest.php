@@ -7,8 +7,8 @@ namespace NotionAlt\Push;
 use OpenSSLAsymmetricKey;
 
 /**
- * One content-free push hint as HTTP request (RFC 8030/8291/8292), without sending it;
- * port of the pure parts of `sendPush` and `isAllowedEndpoint` in `apps/server/src/push/service.ts`.
+ * One content-free push hint as HTTP request (RFC 8030/8291/8292), without sending it, and the
+ * allowlist check of endpoints.
  */
 final class PushRequest
 {

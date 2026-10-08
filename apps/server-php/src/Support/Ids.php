@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace NotionAlt\Support;
 
-/** Ids and timestamps in the formats of the Node server. */
+/** Ids (UUID v4), timestamps (ISO 8601 with milliseconds) and base64url. */
 final class Ids
 {
     /** Like `crypto.randomUUID()`: random UUID v4, lowercase. */

@@ -21,13 +21,10 @@ use NotionAlt\Database\Migrations\M0014PushHints;
 use NotionAlt\Database\Migrations\M0015Metrics;
 
 /**
- * Runs the migrations with Kysely's bookkeeping (`kysely_migration`, `kysely_migration_lock`,
- * same DDL, names and ISO timestamps), so a database created by the Node server is continued and
- * vice versa (ADR 0018).
- *
- * Unlike Kysely on SQLite (one process, no transaction), PHP serves requests in parallel
- * processes: the lock row is really taken, and each migration runs in its own transaction
- * together with its bookkeeping row.
+ * Runs the migrations. The bookkeeping tables keep their historical names (`kysely_migration`,
+ * `kysely_migration_lock`, from the former Node server), so existing databases are continued
+ * (ADR 0018). PHP serves requests in parallel processes: the lock row is really taken, and each
+ * migration runs in its own transaction together with its bookkeeping row.
  */
 final class Migrator
 {
@@ -57,8 +54,7 @@ final class Migrator
     }
 
     /**
-     * All migrations, in the order of apps/server/src/db/migrate.ts. A new migration must be added
-     * to both servers while both exist (ADR 0018).
+     * All migrations, in order. A new one is added at the end (see README, "Migrationen").
      *
      * @return array<string, Migration>
      */
@@ -111,7 +107,7 @@ final class Migrator
     }
 
     /**
-     * Names of the migrations not yet applied. Fails like Kysely if the database contains a
+     * Names of the migrations not yet applied. Fails if the database contains a
      * migration this server does not know (e.g. from a newer version) or the order is broken.
      *
      * @return list<string>
@@ -137,7 +133,7 @@ final class Migrator
     }
 
     /**
-     * Executed migrations in the order Kysely uses: by timestamp, then by name.
+     * Executed migrations by timestamp, then by name.
      *
      * @return list<string>
      */
@@ -175,7 +171,7 @@ final class Migrator
         }
     }
 
-    /** Same DDL and lock row as Kysely's Migrator. */
+    /** Bookkeeping tables and lock row (historical DDL, see the class comment). */
     private function ensureMigrationTables(): void
     {
         $this->db->exec('create table if not exists "kysely_migration" ("name" varchar(255) not null primary key, "timestamp" varchar(255) not null)');

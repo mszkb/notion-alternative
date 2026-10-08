@@ -37,7 +37,7 @@ async function waitForDeliveries(key: string, timeoutMs = 15_000): Promise<Deliv
   throw new Error(`no push delivery for ${key}`)
 }
 
-/** Longer than the Node server bundles hints (2 s), so a missing delivery is really missing. */
+/** Longer than the server bundles hints (2 s), so a missing delivery is really missing. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 4000))
 
 function subscriptionKeys(seed = 1) {

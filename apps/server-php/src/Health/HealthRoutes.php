@@ -11,7 +11,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Interfaces\RouteCollectorProxyInterface;
 
-/** Port of apps/server/src/health/routes.ts. */
+/** Liveness (`/api/health`) and readiness with database check (`/api/ready`). */
 final class HealthRoutes
 {
     /**

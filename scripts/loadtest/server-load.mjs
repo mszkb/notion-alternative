@@ -88,15 +88,24 @@ function stats(values) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Resource sampling: /proc for a server this script started, /api/metrics otherwise.
+// Resource sampling: /proc of the server this script started and its worker processes (php -S
+// forks PHP_CLI_SERVER_WORKERS children). A server given by BASE_URL is not sampled.
 
 const samples = []
 let lastCpu = null
 function readProc(pid) {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1].split(' ')
-    const ticks = Number(stat[11]) + Number(stat[12]) // utime + stime
-    const rss = Number(readFileSync(`/proc/${pid}/statm`, 'utf8').split(' ')[1]) * 4096
+    let ticks = Number(stat[11]) + Number(stat[12]) // utime + stime
+    let rss = Number(readFileSync(`/proc/${pid}/statm`, 'utf8').split(' ')[1]) * 4096
+    const children = readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8').trim()
+    for (const child of children ? children.split(' ') : []) {
+      const sub = readProc(Number(child))
+      if (sub) {
+        ticks += sub.ticks
+        rss += sub.rss
+      }
+    }
     return { ticks, rss }
   } catch {
     return null
@@ -111,14 +120,6 @@ async function sample(phase) {
     if (lastCpu) cpu = ((proc.ticks - lastCpu.ticks) * 1000) / (now - lastCpu.at) // % of one core (10 ms ticks)
     lastCpu = { ticks: proc.ticks, at: now }
     samples.push({ phase, rssMb: proc.rss / 1e6, cpu })
-    return
-  }
-  try {
-    const text = await (await fetch(`${baseUrl}/api/metrics`)).text()
-    const rss = Number(/^process_resident_memory_bytes (\S+)/m.exec(text)?.[1])
-    if (rss) samples.push({ phase, rssMb: rss / 1e6, cpu: null })
-  } catch {
-    // Metrics disabled or not reachable (behind nginx): no resource figures.
   }
 }
 let currentPhase = 'start'
@@ -157,7 +158,7 @@ async function startServer() {
   workDir = mkdtempSync(join(tmpdir(), 'notion-alt-load-'))
   const port = 3900 + Math.floor(Math.random() * 90)
   baseUrl = `http://127.0.0.1:${port}`
-  // PHP's built-in web server with several workers; RAM/CPU below cover its main process only.
+  // PHP's built-in web server with several workers.
   server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', 'public', 'public/index.php'], {
     cwd: join(root, 'apps/server-php'),
     env: {

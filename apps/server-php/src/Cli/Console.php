@@ -20,8 +20,8 @@ use NotionAlt\Shared\AuthSchemas;
 use NotionAlt\Support\Ids;
 
 /**
- * Commands of `bin/console` (one-off commands of apps/server/src/index.ts plus a password reset,
- * ADR 0018). Output is one JSON line on stdout, errors go to stderr; returns the exit code.
+ * Commands of `bin/console` for operators (ADR 0018). Output is one JSON line on stdout, errors go
+ * to stderr; returns the exit code.
  */
 final class Console
 {
@@ -157,8 +157,8 @@ final class Console
     }
 
     /**
-     * New password for an account (e.g. after the switch from Node, whose scrypt hashes are not
-     * taken over, ADR 0018). Ends all sessions of the account.
+     * New password for an account (forgotten password, or an account from before ADR 0018 whose
+     * hash is not taken over). Ends all sessions of the account.
      *
      * @param list<string> $args
      */

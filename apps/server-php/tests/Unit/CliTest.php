@@ -18,7 +18,7 @@ use NotionAlt\Support\Ids;
 use NotionAlt\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
-/** bin/console and bin/cron.php (#127); backup cases of apps/server/test/backup.test.ts. */
+/** bin/console and bin/cron.php (#127). */
 final class CliTest extends TestCase
 {
     use TempDir;

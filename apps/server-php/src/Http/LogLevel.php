@@ -10,7 +10,7 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Minimum log level of a request (Fastify's route option `logLevel`). As route middleware,
+ * Minimum log level of a request's log line. As route middleware,
  * `new LogLevel('warn')` keeps the request line ("request completed", info) of that route out of
  * the log.
  */

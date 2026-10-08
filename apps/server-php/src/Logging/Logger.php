@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NotionAlt\Logging;
 
 /**
- * JSON lines in the format of the Node server's logger (pino): numeric `level`, `time` in
+ * JSON lines in pino's format (log tooling keeps working): numeric `level`, `time` in
  * milliseconds, `msg`, plus fields. Written to stderr (CLI, built-in server) or `error_log()`.
  */
 class Logger

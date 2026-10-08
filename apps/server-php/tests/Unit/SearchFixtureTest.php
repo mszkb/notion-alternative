@@ -12,10 +12,10 @@ use NotionAlt\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Same pages, same queries, same hits as `searchWorkspace` in the Node server (fixture search.json
- * from apps/server/scripts/dump-php-search-fixture.ts): order, snippets and FTS queries.
+ * Frozen expectations (fixture search.json, recorded with the former Node server): same pages and
+ * queries give the same hits, order, snippets and FTS queries.
  */
-final class SearchNodeFixtureTest extends TestCase
+final class SearchFixtureTest extends TestCase
 {
     use TempDir;
 

@@ -7,7 +7,7 @@ namespace NotionAlt\Shared;
 use NotionAlt\Validation\ObjectSchema;
 use NotionAlt\Validation\V;
 
-/** Inputs of apps/server/src/attachments/routes.ts and `INLINE_IMAGE_TYPES` of packages/shared/src/content.ts. */
+/** Inputs of the attachment routes and `INLINE_IMAGE_TYPES` of packages/shared/src/content.ts. */
 final class AttachmentSchemas
 {
     /** Raster images that may be shown inline; everything else is only offered as download. */

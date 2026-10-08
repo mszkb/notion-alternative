@@ -27,7 +27,7 @@ final class AuthTest extends TestCase
         (new Migrator($this->db))->migrateToLatest();
     }
 
-    /** Accounts of the Node server need a new password (ADR 0018, `bin/console reset-password`). */
+    /** Accounts of the former Node server need a new password (ADR 0018, `bin/console reset-password`). */
     public function testLoginWithANodeHashFails(): void
     {
         Sql::run(

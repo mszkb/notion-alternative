@@ -15,7 +15,7 @@ final class Operation
         public readonly string $entityId,
         public readonly string $kind,
         public readonly ?int $baseRevision,
-        /** The payload exactly as sent (objects as `stdClass`), stored unchanged like in Node. */
+        /** The payload exactly as sent (objects as `stdClass`, so `{}` stays `{}`), stored unchanged. */
         public readonly \stdClass $payload,
         public readonly string $createdAt,
     ) {}

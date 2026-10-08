@@ -13,8 +13,7 @@ use Slim\Interfaces\RouteInterface;
 use Slim\Routing\RouteContext;
 
 /**
- * Counts every request with its route template (never the concrete path), like the `onResponse`
- * hook of the Node server. Added twice: outside the error middleware (sees the final status) and
+ * Counts every request with its route template (never the concrete path). Added twice: outside the error middleware (sees the final status) and
  * innermost with `$inner = true` (sees the matched route).
  */
 final class MetricsMiddleware implements MiddlewareInterface
@@ -36,7 +35,7 @@ final class MetricsMiddleware implements MiddlewareInterface
             $holder = $request->getAttribute(self::ATTRIBUTE);
             $route = $request->getAttribute(RouteContext::ROUTE);
             if ($holder instanceof \ArrayObject && $route instanceof RouteInterface) {
-                // `/api/workspaces/{id}` → `/api/workspaces/:id`, as Fastify names it.
+                // `/api/workspaces/{id}` → `/api/workspaces/:id`, the label format of the dashboards.
                 $holder['route'] = preg_replace('/\{(\w+)\}/', ':$1', $route->getPattern());
             }
 

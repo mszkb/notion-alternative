@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NotionAlt\Import;
 
 /**
- * One import at a time across all PHP workers (the Node server holds a flag in memory): an
+ * One import at a time across all PHP workers (they share no memory): an
  * exclusive, non-blocking `flock` on a file next to the database. The operating system releases
  * it when the request ends, also after a crash.
  */

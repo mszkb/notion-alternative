@@ -21,7 +21,7 @@ final class WorkspaceSchemas
         return V::object(['name' => self::name()]);
     }
 
-    /** Route parameters of `/api/workspaces/:id` (apps/server/src/workspaces/routes.ts). */
+    /** Route parameters of `/api/workspaces/:id`. */
     public static function params(): ObjectSchema
     {
         return V::object(['id' => V::uuid()]);

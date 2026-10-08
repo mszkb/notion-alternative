@@ -7,9 +7,8 @@ namespace NotionAlt\Http;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * Client address like Fastify's `request.ip` with `trustProxy: (address, hop) => hop === 0 &&
- * isPrivateAddress(address)` (apps/server/src/app.ts): exactly one proxy hop is trusted, and only
- * if the connection comes from a private or loopback address. The client is then the last entry
+ * Client address for rate limits: exactly one proxy hop is trusted, and only if the connection
+ * comes from a private or loopback address. The client is then the last entry
  * of `X-Forwarded-For`; earlier entries are client-controlled and ignored.
  */
 final class ClientIp
@@ -32,7 +31,7 @@ final class ClientIp
         return $last === '' ? $remoteAddress : $last;
     }
 
-    /** Port of `isPrivateAddress` in apps/server/src/app.ts. */
+    /** Loopback, 10/8, 172.16/12, 192.168/16, fc00::/7 (also IPv4-mapped). */
     public static function isPrivateAddress(string $address): bool
     {
         $ip = (string) preg_replace('/^::ffff:/i', '', $address);
@@ -45,7 +44,7 @@ final class ClientIp
         }
         $numbers = [];
         foreach ($parts as $part) {
-            // `Number(part)` accepts digits only here (an empty part is 0 in JS, but no IP has one).
+            // Decimal octets only.
             if (preg_match('/^\d{1,3}$/', $part) !== 1 || (int) $part > 255) {
                 return false;
             }

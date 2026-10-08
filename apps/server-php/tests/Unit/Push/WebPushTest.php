@@ -12,7 +12,7 @@ use NotionAlt\Push\VapidKeys;
 use NotionAlt\Push\WebPushCrypto;
 use PHPUnit\Framework\TestCase;
 
-/** Port of apps/server/test/push-crypto.test.ts plus the pure parts of push.test.ts. */
+/** RFC 8291 test vector, VAPID JWTs and stored keys. */
 final class WebPushTest extends TestCase
 {
     // RFC 8291, Appendix A.
@@ -24,7 +24,7 @@ final class WebPushTest extends TestCase
     private const RFC_SALT = 'DGv6ra1nlYgDCS1FRnbzlw';
     private const RFC_BODY = 'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN';
 
-    /** `JSON.stringify(generateVapidKeys())` from the Node server, as stored in `settings`. */
+    /** A key pair stored in `settings` by the former Node server; it stays valid. */
     private const NODE_VAPID = '{"publicKey":"BG4K-CjY_04Mt69wdHayTgphvPy7ZqgbfkGcBFb8m7hvOEyvs7jbSjk6WVM5_tL_QBilC5dW7ySVtNRCjHGTAIM","privateKey":"-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg31C0lPomjD0jsY/r\n/BDSuHGb2TQhqbRhUGVzmU41Jg+hRANCAARuCvgo2P9ODLevcHR2sk4KYbz8u2ao\nG35BnARW/Ju4bzhMr7O420o5OllTOf7S/0AYpQuXVu8klbTUQoxxkwCD\n-----END PRIVATE KEY-----\n"}';
 
     private const DEFAULT_ALLOWED_HOSTS = [

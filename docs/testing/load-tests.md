@@ -24,8 +24,8 @@ Belastbarkeit großer Workspaces ([#77](https://github.com/mszkb/notion-alternat
 
 **Ziele:**
 
-- Ohne `BASE_URL` startet das Server-Skript den PHP-Server (`php -S` mit 8 Workern) mit einer temporären Datenbank und misst RAM/CPU des Hauptprozesses über `/proc`. Die Messwerte unten stammen noch vom Node-Server (bis #129); für PHP-FPM unter Last steht eine neue Messung aus.
-- Mit `BASE_URL=http://127.0.0.1:3000` nimmt es einen laufenden Server. Den RAM liest es dann aus `/api/metrics`, wenn `METRICS_ENABLED=true` ist und der Endpunkt erreichbar ist.
+- Ohne `BASE_URL` startet das Server-Skript den PHP-Server (`php -S` mit 8 Workern) mit einer temporären Datenbank und misst RAM/CPU des Servers samt Worker-Prozessen über `/proc`. Die Messwerte unten stammen noch vom Node-Server (bis #129); für PHP-FPM unter Last steht eine neue Messung aus.
+- Mit `BASE_URL=http://127.0.0.1:3000` nimmt es einen laufenden Server; RAM und CPU misst es dann nicht.
 - Gegen eine produktive Instanz nur mit `ALLOW_REGISTRATION=true` und auf eigene Gefahr. Das Skript legt ein Konto mit großem Workspace an.
 
 Die Zielgröße aus dem Issue ist `PAGES=10000`, also 10 000 Seiten und 500 000 Blöcke.
