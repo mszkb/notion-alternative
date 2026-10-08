@@ -2,7 +2,7 @@
 
 Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spalte „Auto“ = automatisierter Test vorhanden.
 
-Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-tests.md) als HTTP-Black-Box gegen jeden Server (Node, später PHP).
+Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-tests.md) als HTTP-Black-Box gegen den Server (`apps/server`); sie sind seine Spezifikation.
 
 ## Offline / Online
 
@@ -111,7 +111,7 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 
 ⁹ Dexie-Version 1 → 2 mit Inhalten und Queue-Eintrag in `apps/web/src/local/conflicts.test.ts`; die erhaltenen Operationen werden danach normal gepusht. Version 2 → 3 in `apps/web/src/local/attachments.test.ts`, Version 3 → 4 (gespeicherter Suchindex, #98) in `apps/web/src/local/search.test.ts`: Inhalte und Queue bleiben, der erste Start baut den Index auf und speichert ihn. Invalidierung des gespeicherten Index (Änderungen ohne laufende Suche, Änderung während des Speicherns, Re-Sync, beschädigter oder veralteter Cache) ebenda.
 
-¹⁰ Server: `packages/contract-tests/test/push.test.ts` (Versand an andere Geräte, entschlüsselter Payload ohne Inhalte, Bündelung, `410`, Allowlist), `apps/server-php/tests/Unit/Push/WebPushTest.php` (RFC-8291-Testvektor, VAPID), `PushNotifierTest.php` (Bündelung). Client: `apps/web/e2e/pwa-push.spec.ts` – Push-Event per Chromium-CDP an den Service Worker löst den Sync aus; Aktivieren nur per Klick (Browser-Subscription in Headless-Chromium gestubbt). Zustellung über einen echten Push-Dienst manuell prüfen.
+¹⁰ Server: `packages/contract-tests/test/push.test.ts` (Versand an andere Geräte, entschlüsselter Payload ohne Inhalte, Bündelung, `410`, Allowlist), `apps/server/tests/Unit/Push/WebPushTest.php` (RFC-8291-Testvektor, VAPID), `PushNotifierTest.php` (Bündelung). Client: `apps/web/e2e/pwa-push.spec.ts` – Push-Event per Chromium-CDP an den Service Worker löst den Sync aus; Aktivieren nur per Klick (Browser-Subscription in Headless-Chromium gestubbt). Zustellung über einen echten Push-Dienst manuell prüfen.
 
 ¹¹ Eigenschaftstest gegen den echten Server in `apps/web/src/sync/convergence.integration.test.ts`: drei `LocalStore`-Geräte, 60 zufällige Schritte (Bearbeiten, Anlegen, Löschen, Verschieben, Sync) mit verlorenen Push-Antworten und abgebrochenen Pulls, feste Seeds. Danach: leere Queues, identische Blöcke auf allen Geräten und dem Server, jede Bearbeitung in einem Block oder Konfliktobjekt auffindbar.
 
@@ -123,9 +123,9 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 
 ¹⁵ [`docs/testing/mobile-offline-checklist.md`](mobile-offline-checklist.md)
 
-¹⁶ `apps/server-php/tests/Unit/CliTest.php` und `scripts/backup-restore-test.sh` (T-BAK-01, nightly): Backup im laufenden Betrieb (SQLite-Online-Backup + Anhänge, Manifest mit SHA-256), Restore in leere Umgebung (Inhalte, Anhang-Bytes, Konten, Sitzungen, VAPID-Schlüssel), Schutz vor Überschreiben, beschädigtes Backup; T-MIG-01: Backup einer Datenbank auf Migrationsstand `0007_push` wird restauriert und auf den aktuellen Stand migriert. `scripts/backup-restore-test.sh` (nächtlich auf der Gitea-Instanz, `msz/gitea-workflows`): derselbe Ablauf mit den Befehlen aus [`backup.md`](../operations/backup.md) gegen den Docker-Compose-Stack (`MODE=local` ohne Docker). Clients nach Restore: `apps/web/src/sync/restore.integration.test.ts` (echter Server, Restore eines älteren Backups: Gerät synchronisiert neu und sendet Fehlendes und neuere Stände erneut), `apps/web/src/sync/resync.test.ts`.
+¹⁶ `apps/server/tests/Unit/CliTest.php` und `scripts/backup-restore-test.sh` (T-BAK-01, nightly): Backup im laufenden Betrieb (SQLite-Online-Backup + Anhänge, Manifest mit SHA-256), Restore in leere Umgebung (Inhalte, Anhang-Bytes, Konten, Sitzungen, VAPID-Schlüssel), Schutz vor Überschreiben, beschädigtes Backup; T-MIG-01: Backup einer Datenbank auf Migrationsstand `0007_push` wird restauriert und auf den aktuellen Stand migriert. `scripts/backup-restore-test.sh` (nächtlich auf der Gitea-Instanz, `msz/gitea-workflows`): derselbe Ablauf mit den Befehlen aus [`backup.md`](../operations/backup.md) gegen den Docker-Compose-Stack (`MODE=local` ohne Docker). Clients nach Restore: `apps/web/src/sync/restore.integration.test.ts` (echter Server, Restore eines älteren Backups: Gerät synchronisiert neu und sendet Fehlendes und neuere Stände erneut), `apps/web/src/sync/resync.test.ts`.
 
-¹⁷ Manuell gestartete Skripte, nicht in CI (Laufzeit): `scripts/loadtest/server-load.mjs`, `apps/web/scripts/loadtest-browser.mjs` (Szenario `apps/web/src/local/load-scenario.ts`), `apps/web/e2e/load-app.spec.ts` (T-LOAD-03, nur mit `LOAD_PAGES`). Ergebnisse, Zielwerte und offene Grenzen: [`load-tests.md`](load-tests.md). Regression des Suchindex-Engpasses: `apps/server-php/tests/Unit/MigratorTest.php` (0009), Link-Index nach Re-Sync: `apps/web/src/sync/resync.test.ts`.
+¹⁷ Manuell gestartete Skripte, nicht in CI (Laufzeit): `scripts/loadtest/server-load.mjs`, `apps/web/scripts/loadtest-browser.mjs` (Szenario `apps/web/src/local/load-scenario.ts`), `apps/web/e2e/load-app.spec.ts` (T-LOAD-03, nur mit `LOAD_PAGES`). Ergebnisse, Zielwerte und offene Grenzen: [`load-tests.md`](load-tests.md). Regression des Suchindex-Engpasses: `apps/server/tests/Unit/MigratorTest.php` (0009), Link-Index nach Re-Sync: `apps/web/src/sync/resync.test.ts`.
 
 ¹⁸ Server: `packages/contract-tests/test/devices.test.ts` (neue ID nach erneuter Anmeldung, Session von vor der Entfernung endet mit `401`). Client: `apps/web/src/local/store.test.ts` (Warteschlange zieht auf die neue ID um, Ablehnungen wegen der Entfernung werden zurückgesetzt, anderer Tab übernimmt die ID), `apps/web/src/device.test.ts`, `apps/web/src/sync/engine.test.ts` (Tab mit veralteter ID sendet erneut). E2E: `apps/web/e2e/devices.spec.ts`.
 

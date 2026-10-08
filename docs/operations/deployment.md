@@ -18,7 +18,7 @@ Kürzer mit `make up`: legt `.env` aus `.env.example` an, falls sie fehlt, baut 
 | Container | Aufgabe | Daten |
 | --- | --- | --- |
 | `frontend` | nginx: SPA ausliefern, `/api` per FastCGI an `backend` | – |
-| `backend` | PHP-FPM mit der API (`apps/server-php`, [ADR 0018](../adr/0018-php-backend.md)), Port 9000 nur im Docker-Netz | Volume `data` → `/data` (SQLite `app.sqlite`) |
+| `backend` | PHP-FPM mit der API (`apps/server`, [ADR 0018](../adr/0018-php-backend.md)), Port 9000 nur im Docker-Netz | Volume `data` → `/data` (SQLite `app.sqlite`) |
 
 Nur `frontend` veröffentlicht einen Port, standardmäßig **nur auf `127.0.0.1`**. Für den Zugriff von anderen Geräten einen TLS-Reverse-Proxy (z. B. Caddy, Traefik) auf dem Host davorschalten und `COOKIE_SECURE=true` setzen. HTTPS ist auch Voraussetzung für die PWA (Service Worker, Web Push).
 
@@ -26,7 +26,7 @@ Nur `frontend` veröffentlicht einen Port, standardmäßig **nur auf `127.0.0.1`
 
 ### Backend-Container
 
-Im Backend laufen die periodischen Aufgaben (`bin/cron.php`: abgelaufene Sitzungen, Suchindex, Push-Hinweise, Aufräumen gelöschter Anhänge) alle 5 Minuten in einer Schleife des Entrypoints; der Healthcheck schickt eine FastCGI-Anfrage an `/api/health`. Befehle: `docker compose exec -T backend php bin/console <Befehl>` (`backup`, `restore`, `migrate-attachments-to-s3`, `reset-password`, siehe [`apps/server-php/README.md`](../../apps/server-php/README.md#cron-und-kommandozeile)). Ohne Docker, auf gewöhnlichem Webspace: [Installation auf Webspace](../user/webhosting.md).
+Im Backend laufen die periodischen Aufgaben (`bin/cron.php`: abgelaufene Sitzungen, Suchindex, Push-Hinweise, Aufräumen gelöschter Anhänge) alle 5 Minuten in einer Schleife des Entrypoints; der Healthcheck schickt eine FastCGI-Anfrage an `/api/health`. Befehle: `docker compose exec -T backend php bin/console <Befehl>` (`backup`, `restore`, `migrate-attachments-to-s3`, `reset-password`, siehe [`apps/server/README.md`](../../apps/server/README.md#cron-und-kommandozeile)). Ohne Docker, auf gewöhnlichem Webspace: [Installation auf Webspace](../user/webhosting.md).
 
 **Umstieg von der Node-Version** (bis Oktober 2026): Datenbank und Anhänge bleiben im Volume und werden beim ersten Start weiter migriert. Passwörter werden nicht übernommen (Argon2id statt scrypt, ADR 0018), der Login mit dem alten Passwort schlägt fehl: Jedes Konto bekommt mit `docker compose exec backend php bin/console reset-password <E-Mail>` ein neues Passwort. Vorher ein Backup ziehen.
 
@@ -73,7 +73,7 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 - **`docker stats` zeigt keinen Speicher** und `mem_limit` greift nicht, wenn der Kernel mit `cgroup_disable=memory` startet (bei vielen Pi-Images Standard). Abhilfe: `cgroup_enable=memory` an `/boot/firmware/cmdline.txt` anhängen und neu starten.
 - **Rootless Docker** funktioniert; das Backend sieht je nach Port-Treiber nicht die echte Client-IP.
 - **SD-Karte:** SQLite schreibt regelmäßig; für Dauerbetrieb SSD per USB und [Backup](backup.md).
-- **`better-sqlite3`** bringt `linux-arm64`-Binaries im npm-Paket mit, ein Compiler ist nicht nötig. Scheitert der Build mit `node-gyp`, wurde vermutlich das Basis-Image auf Alpine/musl oder eine Version ohne Prebuild umgestellt.
+- Das Backend-Image (`php:8.3-fpm`) gibt es offiziell für `linux/arm64`; der Server braucht keine zusätzlich kompilierten PHP-Erweiterungen.
 
 ## Konfiguration (`.env`)
 
@@ -92,7 +92,7 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 | `PUSH_SUBJECT` | `mailto:admin@localhost` | Kontakt für Web Push (VAPID); eine echte Adresse eintragen, manche Push-Dienste lehnen Platzhalter ab |
 | `PUSH_ALLOWED_HOSTS` | Google, Mozilla, Apple, Microsoft | Push-Dienste, an die der Server senden darf (kommagetrennt, `*.` für Subdomains) |
 
-Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`, `ATTACHMENTS_DIR`): siehe `apps/server-php/src/Config/ConfigLoader.php`. Statt Umgebungsvariablen geht auch eine `config.php` ([`apps/server-php/README.md`](../../apps/server-php/README.md#konfiguration)).
+Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`, `ATTACHMENTS_DIR`): siehe `apps/server/src/Config/ConfigLoader.php`. Statt Umgebungsvariablen geht auch eine `config.php` ([`apps/server/README.md`](../../apps/server/README.md#konfiguration)).
 
 ### Login-Rate-Limiting
 

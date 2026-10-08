@@ -10,11 +10,11 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: docker
-    directories: [/apps/server-php, /apps/web]
+    directories: [/apps/server, /apps/web]
     schedule:
       interval: weekly
   - package-ecosystem: composer
-    directory: /apps/server-php
+    directory: /apps/server
     schedule:
       interval: weekly
     groups:

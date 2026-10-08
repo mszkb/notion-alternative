@@ -17,7 +17,7 @@ Dann `http://127.0.0.1:8080` öffnen und das erste Konto anlegen. Details: [Depl
 ```sh
 corepack enable
 pnpm install
-(cd apps/server-php && composer install)   # PHP ≥ 8.2
+(cd apps/server && composer install)   # PHP ≥ 8.2
 pnpm dev        # PHP-Server :3000, Web :5173
 pnpm test
 pnpm --filter @notion-alt/web test:e2e   # Playwright, startet Server und Vite selbst

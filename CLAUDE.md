@@ -8,12 +8,12 @@ Self-hosted, **local-first / offline-first** Wissens- und Dokumentenplattform (N
 
 ## Status
 
-Phase 0 abgeschlossen, Phase 1 (Foundation) umgesetzt: Monorepo, Server mit Auth (inkl. Login-Rate-Limiting, Passwort ändern) und Workspaces, Metriken, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Phase 3 (Sync) begonnen: Geräteverwaltung, serverseitiges Änderungslog (`apps/server/src/sync/`) Push der Offline-Queue, Delta-Pull, Tombstones, Re-Sync, Sync-Trigger (`apps/web/src/sync/`), Block-Merge mit Konfliktobjekten und Konfliktansicht, serverseitige Suche (FTS5). Phase 4 (PWA) umgesetzt (HTTPS: ADR 0011): Manifest, eigener Service Worker, Installationsflow, Web Push ohne Bibliothek. Phase 5 begonnen: Dateianhänge (ADR 0012). Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+Phase 0 abgeschlossen, Phase 1 (Foundation) umgesetzt: Monorepo, Server mit Auth (inkl. Login-Rate-Limiting, Passwort ändern) und Workspaces, Metriken, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Phase 3 (Sync) begonnen: Geräteverwaltung, serverseitiges Änderungslog (`apps/server/src/Sync/`) Push der Offline-Queue, Delta-Pull, Tombstones, Re-Sync, Sync-Trigger (`apps/web/src/sync/`), Block-Merge mit Konfliktobjekten und Konfliktansicht, serverseitige Suche (FTS5). Phase 4 (PWA) umgesetzt (HTTPS: ADR 0011): Manifest, eigener Service Worker, Installationsflow, Web Push ohne Bibliothek. Phase 5 begonnen: Dateianhänge (ADR 0012). Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
 
 Entschieden (`Accepted`):
 
 - **Stack** ([ADR 0006](docs/adr/0006-tech-stack.md)): TypeScript; Vue 3 SPA (Vite, ohne Nuxt); SQLite (Server, inkl. FTS5); Dateien im Volume oder S3; Docker Compose mit 2 Containern (`frontend`, `backend`). Server-Teil (Fastify) ersetzt durch ADR 0018.
-- **PHP-Backend** ([ADR 0018](docs/adr/0018-php-backend.md)): PHP 8.2+ mit Slim 4 in `apps/server-php` ist **der** Server (der Node-Server ist seit #129 entfernt); gleiches HTTP-API und dieselbe SQLite-Datei wie vorher; Webhosting (Release-ZIP) als Hauptweg, Docker (nginx + PHP-FPM) bleibt; Passwörter mit Argon2id (`password_hash`); die Contract-Tests sind die Spezifikation.
+- **PHP-Backend** ([ADR 0018](docs/adr/0018-php-backend.md)): PHP 8.2+ mit Slim 4 in `apps/server` ist **der** Server (der Node-Server ist seit #129 entfernt); gleiches HTTP-API und dieselbe SQLite-Datei wie vorher; Webhosting (Release-ZIP) als Hauptweg, Docker (nginx + PHP-FPM) bleibt; Passwörter mit Argon2id (`password_hash`); die Contract-Tests sind die Spezifikation.
 - **Lokale DB** ([ADR 0001](docs/adr/0001-local-storage.md)): IndexedDB über Dexie.
 - **Konflikte** ([ADR 0003](docs/adr/0003-conflict-resolution.md)): Block-Merge + sichtbare Konfliktanzeige.
 - **Sync** ([ADR 0002](docs/adr/0002-sync-protocol.md)): REST-Batch (`/api/sync/push`, `/pull`, `/snapshot`), Operationen auf Blockebene.
@@ -85,7 +85,7 @@ Issues mit dem Label `ready` arbeitet ein lokaler Runner autonom ab (Ablauf, Lab
 
 ## Befehle
 
-Node 22 und pnpm (`corepack enable`) für Web-App und Tests; PHP ≥ 8.2 mit Composer für den Server (`composer install` in `apps/server-php`).
+Node 22 und pnpm (`corepack enable`) für Web-App und Tests; PHP ≥ 8.2 mit Composer für den Server (`composer install` in `apps/server`).
 
 | Befehl | Zweck |
 | --- | --- |
@@ -100,13 +100,13 @@ Node 22 und pnpm (`corepack enable`) für Web-App und Tests; PHP ≥ 8.2 mit Com
 | `pnpm build` | SPA bauen |
 | `scripts/build-php-release.sh` | Release-ZIP für Webhosting (SPA + `api/`), siehe `docs/user/webhosting.md` |
 | `docker compose up -d --build` | Produktiv-Stack auf `:8080` |
-| `composer test` / `analyse` / `cs` (in `apps/server-php`) | Server: PHPUnit, PHPStan (Level max), PHP-CS-Fixer; `bin/console` (Backup, Restore, Passwort) und `bin/cron.php`, siehe `apps/server-php/README.md` |
+| `composer test` / `analyse` / `cs` (in `apps/server`) | Server: PHPUnit, PHPStan (Level max), PHP-CS-Fixer; `bin/console` (Backup, Restore, Passwort) und `bin/cron.php`, siehe `apps/server/README.md` |
 
-Struktur: `apps/server-php` (Server, Slim 4, ADR 0018), `apps/web` (Vue SPA), `packages/shared` (zod-Schemas/Typen, Markdown-Inline-Parser, Sortierschlüssel für beide), `packages/contract-tests` (HTTP-Black-Box-Tests der API gegen jeden Server).
+Struktur: `apps/server` (Server, Slim 4, ADR 0018), `apps/web` (Vue SPA), `packages/shared` (zod-Schemas/Typen, Markdown-Inline-Parser, Sortierschlüssel für beide), `packages/contract-tests` (HTTP-Black-Box-Tests der API gegen jeden Server).
 
 Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/` (Block-Editor, DOM↔Markdown), `src/layouts/`, `src/views/`, `src/components/`, `e2e/` (Playwright).
 
-- Neue DB-Migration: Klasse in `apps/server-php/src/Database/Migrations/` anlegen, in `Migrator::all()` registrieren und das erwartete Schema im `MigratorTest` ergänzen (siehe `apps/server-php/README.md`); Migrationen nie nachträglich ändern. Die Tabelle `kysely_migration` bleibt Quelle des Migrationsstands.
+- Neue DB-Migration: Klasse in `apps/server/src/Database/Migrations/` anlegen, in `Migrator::all()` registrieren und das erwartete Schema im `MigratorTest` ergänzen (siehe `apps/server/README.md`); Migrationen nie nachträglich ändern. Die Tabelle `kysely_migration` bleibt Quelle des Migrationsstands.
 - Lokale Inhalte nur über `LocalStore` schreiben (`apps/web/src/local/store.ts`): Er schreibt Entität und Operation in einer Transaktion. Dexie-Transaktions-Scopes müssen `async`-Funktionen sein, sonst committet Dexie bei nativen `await`s zu früh.
 - Exportformat (`jsonExportSchema`) ändern: `EXPORT_SCHEMA_VERSION` erhöhen, Migration in `packages/shared/src/import.ts` ergänzen, JSON Schema und Fixture neu erzeugen (siehe `packages/contract-tests/fixtures/exports/README.md`); bestehende Fixtures nie ändern.
 - Lokales Schema ändern: neue `this.version(n + 1)` in `apps/web/src/local/db.ts` mit Upgrade; bestehende Versionen nie ändern (T-MIG-02).
@@ -115,9 +115,9 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Oberfläche: Farben, Abstände, Schriftgrößen, Radien und Schatten nur über die Tokens in `apps/web/src/styles.css` (`docs/product/ux-guide.md`).
 - Service Worker: `apps/web/src/sw/service-worker.ts`, gebaut von `apps/web/service-worker.plugin.ts` (Precache-Liste, Version) – nur im Production-Build. PWA-E2E (`e2e/pwa-*.spec.ts`) laufen im Playwright-Projekt `pwa` gegen `vite preview`. Komponenten mit entprellten Eingaben melden ihren Flush über `registerPendingEdits` an (Update-Neuladen).
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
-- Eingaben im Server immer mit `Validation::parseInput(schema, …)` validieren; die Schemas in `apps/server-php/src/Shared` sind Ports der zod-Schemas aus `@notion-alt/shared` (gleiche Pfade und Codes).
-- Sync-Push: `Apply::batch` (`apps/server-php/src/Sync/Apply.php`) wendet einen Batch in einer Transaktion mit einem Savepoint je Operation an (#95). Prüfungen pro Operation gehören in `applyIn`; ein `reject` verwirft nur den Savepoint dieser Operation.
-- Neue synchronisierte Entitätstabelle: in `TABLES` von `apps/server-php/src/Sync/Snapshot.php` aufnehmen (seitenweiser Snapshot, #97) und per Migration einen Index auf `(workspace_id, id)` anlegen.
+- Eingaben im Server immer mit `Validation::parseInput(schema, …)` validieren; die Schemas in `apps/server/src/Shared` sind Ports der zod-Schemas aus `@notion-alt/shared` (gleiche Pfade und Codes).
+- Sync-Push: `Apply::batch` (`apps/server/src/Sync/Apply.php`) wendet einen Batch in einer Transaktion mit einem Savepoint je Operation an (#95). Prüfungen pro Operation gehören in `applyIn`; ein `reject` verwirft nur den Savepoint dieser Operation.
+- Neue synchronisierte Entitätstabelle: in `TABLES` von `apps/server/src/Sync/Snapshot.php` aufnehmen (seitenweiser Snapshot, #97) und per Migration einen Index auf `(workspace_id, id)` anlegen.
 - Lokaler Suchindex (#98): Neue Schreibpfade im `LocalStore` melden betroffene Seiten mit `mark()`. Sonst bleibt der gespeicherte Index veraltet. Ändern sich die Felder oder Optionen des Index, `SEARCH_INDEX_FORMAT` erhöhen.
 - Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`Workspaces::findForUser`).
 - Betrieb, Konfiguration: `docs/operations/deployment.md`; Backup, Restore, Upgrade: `docs/operations/backup.md`. Ändern sich die Backup-Befehle, beides anpassen: Doku und `scripts/backup-restore-test.sh`.

@@ -160,7 +160,7 @@ async function startServer() {
   baseUrl = `http://127.0.0.1:${port}`
   // PHP's built-in web server with several workers.
   server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', 'public', 'public/index.php'], {
-    cwd: join(root, 'apps/server-php'),
+    cwd: join(root, 'apps/server'),
     env: {
       ...process.env,
       PHP_CLI_SERVER_WORKERS: '8',

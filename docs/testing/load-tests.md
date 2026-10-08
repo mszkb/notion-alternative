@@ -50,7 +50,7 @@ Gemessen am 2026-10-04 nach #95 (Push-Batch in einer Transaktion) und #97 (seite
 | Serversuche (FTS5, 50 Anfragen) | p50 51 ms, p95 58 ms, max 68 ms |
 | Lange Seiten: 20 Seiten à 500 Blöcke | 1 199 Ops/s, Push à 500 p50 409 ms (vor #99: 325 Ops/s, p50 1,5 s) |
 
-**SQLite:** Der WAL-Modus und `busy_timeout = 5000` sind gesetzt (`apps/server-php/src/Database/Database.php`). Parallele Pushes serialisieren sich an der Schreibsperre. Die Wartezeit erscheint als längere Antwortzeit (max 416 ms bei 10 Geräten), nicht als Fehler.
+**SQLite:** Der WAL-Modus und `busy_timeout = 5000` sind gesetzt (`apps/server/src/Database/Database.php`). Parallele Pushes serialisieren sich an der Schreibsperre. Die Wartezeit erscheint als längere Antwortzeit (max 416 ms bei 10 Geräten), nicht als Fehler.
 
 ### Client, Chromium
 

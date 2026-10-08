@@ -29,7 +29,7 @@ Mit dem Owner abgestimmt ([#116](https://github.com/mszkb/notion-alternative/iss
 
 ## Entscheidung
 
-**Option 2: PHP 8.2+ mit Slim 4**, in `apps/server-php`, parallel zum Node-Server, bis die Contract-Tests ([#118](https://github.com/mszkb/notion-alternative/issues/118)) gegen beide grün sind. Danach wird PHP Standard und der Node-Server entfernt ([#129](https://github.com/mszkb/notion-alternative/issues/129)).
+**Option 2: PHP 8.2+ mit Slim 4**, in `apps/server-php` (seit #129 `apps/server`), parallel zum Node-Server, bis die Contract-Tests ([#118](https://github.com/mszkb/notion-alternative/issues/118)) gegen beide grün sind. Danach wird PHP Standard und der Node-Server entfernt ([#129](https://github.com/mszkb/notion-alternative/issues/129)).
 
 **Gleich bleibt:** das HTTP-API bis auf das Byte, also Pfade, Statuscodes, Fehlerobjekt `{error:{code,message,…}}`, Cookies und Sync-Protokoll ([ADR 0002](0002-sync-protocol.md)). Die SPA bleibt unverändert, installierte PWAs laufen ohne Update weiter.
 

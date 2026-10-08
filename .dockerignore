@@ -9,4 +9,4 @@ docs
 !apps/**/*.md
 **/test-results
 **/playwright-report
-apps/server-php/vendor
+apps/server/vendor

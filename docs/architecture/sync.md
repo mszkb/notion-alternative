@@ -54,7 +54,7 @@ Protokoll und Operationen: [ADR 0002](../adr/0002-sync-protocol.md).
 
 ### Änderungslog (Server)
 
-Umsetzung: `apps/server-php/src/Sync/` (Migration `0003_sync`). Payload-Schemas je Entität und Art liegen in `packages/shared/src/operations.ts` und gelten für Client und Server; ein Client-Test prüft, dass alle Operationen des `LocalStore` sie erfüllen.
+Umsetzung: `apps/server/src/Sync/` (Migration `0003_sync`). Payload-Schemas je Entität und Art liegen in `packages/shared/src/operations.ts` und gelten für Client und Server; ein Client-Test prüft, dass alle Operationen des `LocalStore` sie erfüllen.
 
 `applyOperation` wendet **eine** Operation in **einer** SQLite-Transaktion an: Entität schreiben und `changes`-Eintrag anlegen, oder nichts davon. Prüfreihenfolge und Ergebnisse:
 

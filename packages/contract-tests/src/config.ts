@@ -16,10 +16,10 @@ export const EXPORT_FIXTURES = fileURLToPath(new URL('../fixtures/exports/', imp
 
 /**
  * The PHP server (ADR 0018) with PHP's built-in web server; curl must trust the fake push
- * service's certificate. Needs `composer install` in apps/server-php.
+ * service's certificate. Needs `composer install` in apps/server.
  */
 export const DEFAULT_SERVER_CMD =
-  'php -d curl.cainfo="$PUSH_RECEIVER_CA" -S 127.0.0.1:$PORT -t apps/server-php/public apps/server-php/public/index.php'
+  'php -d curl.cainfo="$PUSH_RECEIVER_CA" -S 127.0.0.1:$PORT -t apps/server/public apps/server/public/index.php'
 
 function fromEnv(name: string, fallback: string): string {
   const value = process.env[name]

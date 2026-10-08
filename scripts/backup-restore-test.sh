@@ -2,7 +2,7 @@
 # T-BAK-01 against the real Docker Compose stack (nightly job "Backup and restore", docs/operations/backup.md):
 # create data, back up while running, wipe everything, restore into an empty volume, verify.
 # MODE=local runs the same steps against the PHP server without Docker (composer install in
-# apps/server-php).
+# apps/server).
 set -euo pipefail
 MODE="${MODE:-docker}"
 cd "$(dirname "$0")/.."
@@ -31,7 +31,7 @@ start() {
     docker compose up -d --build --wait --wait-timeout 300
   else
     DATA_DIR="$WORK/data" LOG_LEVEL=warn ALLOW_REGISTRATION=true \
-      php -S "127.0.0.1:$PORT" -t apps/server-php/public apps/server-php/public/index.php >/dev/null 2>&1 &
+      php -S "127.0.0.1:$PORT" -t apps/server/public apps/server/public/index.php >/dev/null 2>&1 &
     SERVER_PID=$!
     for _ in $(seq 100); do curl -fsS "$BASE/api/ready" >/dev/null 2>&1 && return; sleep 0.2; done
     exit 1
@@ -39,7 +39,7 @@ start() {
 }
 backend() { # runs a server command in the backend environment
   if [ "$MODE" = docker ]; then docker compose exec -T backend php bin/console "$@"
-  else DATA_DIR="$WORK/data" php apps/server-php/bin/console "$@"; fi
+  else DATA_DIR="$WORK/data" php apps/server/bin/console "$@"; fi
 }
 copy_out() { # backup dir in the backend -> $WORK/backup
   if [ "$MODE" = docker ]; then docker compose cp "backend:$1" "$WORK/backup"
@@ -54,7 +54,7 @@ restore() {
     # Streamed in instead of bind-mounted, so it also works against a remote Docker host.
     tar -C "$WORK/backup" -c . | docker compose run --rm --no-deps -T backend \
       sh -c 'mkdir /tmp/restore && tar -x -C /tmp/restore && php bin/console restore /tmp/restore'
-  else DATA_DIR="$WORK/data" php apps/server-php/bin/console restore "$WORK/backup"; fi
+  else DATA_DIR="$WORK/data" php apps/server/bin/console restore "$WORK/backup"; fi
 }
 
 json() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const v=JSON.parse(s);console.log($1)})"; }

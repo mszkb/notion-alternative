@@ -1,5 +1,5 @@
 {
-    "name": "notion-alt/server-php",
+    "name": "notion-alt/server",
     "description": "PHP server of the self-hosted notion alternative (ADR 0018)",
     "type": "project",
     "license": "proprietary",

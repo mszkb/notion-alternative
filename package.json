@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm run \"/^dev:/\"",
-    "dev:api": "php -S 127.0.0.1:3000 -t apps/server-php/public apps/server-php/public/index.php",
+    "dev:api": "php -S 127.0.0.1:3000 -t apps/server/public apps/server/public/index.php",
     "dev:web": "pnpm --filter @notion-alt/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r --filter '!@notion-alt/contract-tests' test",

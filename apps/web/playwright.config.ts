@@ -42,7 +42,7 @@ export default defineConfig({
       // contract tests: the port comes as PORT, `{port}` in the command is replaced by it.
       command: (
         process.env.SERVER_CMD ||
-        'php -S 127.0.0.1:{port} -t apps/server-php/public apps/server-php/public/index.php'
+        'php -S 127.0.0.1:{port} -t apps/server/public apps/server/public/index.php'
       ).replaceAll('{port}', String(API_PORT)),
       cwd: '../..',
       url: `http://127.0.0.1:${API_PORT}/api/ready`,

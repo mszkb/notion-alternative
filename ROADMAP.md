@@ -139,7 +139,7 @@ Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alte
 
 ## Ohne Phase – Backend in PHP (Slim 4)
 
-Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), [ADR 0018](docs/adr/0018-php-backend.md)). Der PHP-Server in `apps/server-php` hat den Node-Server abgelöst.
+Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), [ADR 0018](docs/adr/0018-php-backend.md)). Der PHP-Server in `apps/server` hat den Node-Server abgelöst.
 
 - [x] ADR 0018 angenommen ([#117](https://github.com/mszkb/notion-alternative/issues/117); Argon2id, keine Übernahme der scrypt-Hashes)
 - [x] Contract-Tests gegen beliebige Server-URL ([`contract-tests.md`](docs/testing/contract-tests.md), [#118](https://github.com/mszkb/notion-alternative/issues/118))

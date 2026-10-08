@@ -1,19 +1,19 @@
 # Contract-Tests (HTTP-Black-Box)
 
-Das Paket `packages/contract-tests` (`@notion-alt/contract-tests`, Issue [#118](https://github.com/mszkb/notion-alternative/issues/118)) prüft die HTTP-API eines laufenden Servers nur über `fetch`: Pfade, Statuscodes, Cookies, Header, Fehlerobjekte `{error:{code,message,…}}` und das Sync-Protokoll ([ADR 0002](../adr/0002-sync-protocol.md)). Es kennt keine Interna (keine Datenbank, kein `app.inject`). Seit dem Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129)) sind sie die **Spezifikation** des Servers (`apps/server-php`, [ADR 0018](../adr/0018-php-backend.md)); was sich über HTTP nicht prüfen lässt, testet PHPUnit in `apps/server-php/tests`.
+Das Paket `packages/contract-tests` (`@notion-alt/contract-tests`, Issue [#118](https://github.com/mszkb/notion-alternative/issues/118)) prüft die HTTP-API eines laufenden Servers nur über `fetch`: Pfade, Statuscodes, Cookies, Header, Fehlerobjekte `{error:{code,message,…}}` und das Sync-Protokoll ([ADR 0002](../adr/0002-sync-protocol.md)). Es kennt keine Interna (keine Datenbank, kein `app.inject`). Seit dem Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129)) sind sie die **Spezifikation** des Servers (`apps/server`, [ADR 0018](../adr/0018-php-backend.md)); was sich über HTTP nicht prüfen lässt, testet PHPUnit in `apps/server/tests`.
 
 ## Ausführen
 
 ```sh
 # PHP-Server wird automatisch gestartet (temporäres Datenverzeichnis, freier Port);
-# vorher einmal `composer install` in apps/server-php
+# vorher einmal `composer install` in apps/server
 pnpm --filter @notion-alt/contract-tests test
 
 # einzelne Datei
 pnpm --filter @notion-alt/contract-tests exec vitest run test/sync-push.test.ts
 
 # anderer Befehl (läuft im Repo-Wurzelverzeichnis, Port als $PORT bzw. {port})
-SERVER_CMD='php -S 127.0.0.1:$PORT -t apps/server-php/public apps/server-php/public/index.php' pnpm --filter @notion-alt/contract-tests test
+SERVER_CMD='php -S 127.0.0.1:$PORT -t apps/server/public apps/server/public/index.php' pnpm --filter @notion-alt/contract-tests test
 
 # bereits laufender Server (wird weder gestartet noch beendet)
 SERVER_URL=http://127.0.0.1:3000 pnpm --filter @notion-alt/contract-tests test
@@ -28,7 +28,7 @@ SERVER_URL=http://127.0.0.1:3000 pnpm --filter @notion-alt/contract-tests test
 `src/global-setup.ts` (Vitest `globalSetup`) startet vor dem Lauf:
 
 1. einen **Fake-Push-Dienst** (`src/push-receiver.ts`): HTTPS auf `127.0.0.1` mit freiem Port und dem selbstsignierten Zertifikat `fixtures/push-receiver.crt` (gültig bis 2126, nur für Tests). `POST /send/<key>` antwortet `201`, `POST /gone/<key>` antwortet `410`. Die Tests lesen die Zustellungen über einen zweiten, unverschlüsselten Port.
-2. ohne `SERVER_URL` den **Server** (`src/server.ts`): `SERVER_CMD` (Standard: `php -d curl.cainfo="$PUSH_RECEIVER_CA" -S 127.0.0.1:$PORT -t apps/server-php/public apps/server-php/public/index.php`) über die Shell im Repo-Wurzelverzeichnis, als eigene Prozessgruppe. Der Befehl bekommt die Umgebung unten, `{port}` im Befehl wird durch den Port ersetzt. Der Start gilt als fertig, sobald `GET /api/ready` mit `200` antwortet (höchstens 60 s). Nach dem Lauf werden Prozessgruppe (SIGTERM, nach 5 s SIGKILL) und Datenverzeichnis entfernt.
+2. ohne `SERVER_URL` den **Server** (`src/server.ts`): `SERVER_CMD` (Standard: `php -d curl.cainfo="$PUSH_RECEIVER_CA" -S 127.0.0.1:$PORT -t apps/server/public apps/server/public/index.php`) über die Shell im Repo-Wurzelverzeichnis, als eigene Prozessgruppe. Der Befehl bekommt die Umgebung unten, `{port}` im Befehl wird durch den Port ersetzt. Der Start gilt als fertig, sobald `GET /api/ready` mit `200` antwortet (höchstens 60 s). Nach dem Lauf werden Prozessgruppe (SIGTERM, nach 5 s SIGKILL) und Datenverzeichnis entfernt.
 
 ### Umgebung des Servers
 
@@ -85,7 +85,7 @@ Ohne Fehlerfall bleiben `GET /api/health`, `GET /api/auth/status` und `GET /api/
 
 `cursor_expired`: Es gibt keine API für die Log-Kompaktierung. Ein importierter Workspace gilt aber bis zu seiner importierten Historie als kompaktiert (`compacted_seq` = Anzahl Änderungen, mindestens 1); darüber testen die Contract-Tests `410 cursor_expired`, die Nummerierung danach und `/api/sync/log` mit `compactedSeq`.
 
-### Nur in PHPUnit (`apps/server-php/tests`, brauchen Interna oder Serverzeit)
+### Nur in PHPUnit (`apps/server/tests`, brauchen Interna oder Serverzeit)
 
 - Savepoint je Operation, Merge und Konflikte auf Datenbankebene (`SyncApplyTest`), Snapshot-Seiten (`SyncSnapshotTest`), Suchindex samt `search_dirty`/`reindexMarked` und die Treffer des früheren Node-Servers (`SearchIndexTest`, `SearchNodeFixtureTest`).
 - Ablauf des Rate-Limit-Fensters (`AttemptLimiterTest`), Client-Adresse hinter Proxys (`ClientIpTest`), Passwort-Hashes (`PasswordTest`).
@@ -104,9 +104,9 @@ Für PHPUnit und andere Implementierungen:
 | --- | --- | --- |
 | Export-ZIPs | `packages/contract-tests/fixtures/exports/v<schema_version>.zip` | ein vollständiger Export pro veröffentlichter Schemaversion; nie ändern ([README](../../packages/contract-tests/fixtures/exports/README.md)) |
 | JSON Schema des Exports | `docs/architecture/export.schema.json` | Format von `workspace.json` |
-| RFC-8291-Testvektor | `apps/server-php/tests/Unit/Push/WebPushTest.php` | Schlüssel, Salt, Klartext und erwarteter Body aus RFC 8291, Anhang A; dort auch die VAPID-Prüfung (ES256-JWT, RFC 8292) |
+| RFC-8291-Testvektor | `apps/server/tests/Unit/Push/WebPushTest.php` | Schlüssel, Salt, Klartext und erwarteter Body aus RFC 8291, Anhang A; dort auch die VAPID-Prüfung (ES256-JWT, RFC 8292) |
 | Push entschlüsseln | `packages/contract-tests/src/push-crypto.ts` | Gegenstück des User Agents (RFC 8291), prüft gesendete Hinweise |
-| SigV4-Testvektor | `apps/server-php/tests/Unit/Attachments/S3SignerTest.php` | „GET Object“-Beispiel aus der AWS-S3-Dokumentation mit erwarteter Signatur |
+| SigV4-Testvektor | `apps/server/tests/Unit/Attachments/S3SignerTest.php` | „GET Object“-Beispiel aus der AWS-S3-Dokumentation mit erwarteter Signatur |
 | Zertifikat des Fake-Push-Dienstes | `packages/contract-tests/fixtures/push-receiver.{crt,key}` | selbstsigniert für `127.0.0.1`/`localhost`, nur für Tests |
 
 ## Neue Tests

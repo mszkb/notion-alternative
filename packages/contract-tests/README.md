@@ -1,6 +1,6 @@
 # Contract-Tests
 
-Black-Box-Tests des HTTP-API ([#118](https://github.com/mszkb/notion-alternative/issues/118), [ADR 0018](../../docs/adr/0018-php-backend.md)) gegen den Server (`apps/server-php`) oder jede andere Implementierung; sie sind die Spezifikation des Servers. Sie sprechen nur HTTP (`fetch`) und legen alle Daten über das API an.
+Black-Box-Tests des HTTP-API ([#118](https://github.com/mszkb/notion-alternative/issues/118), [ADR 0018](../../docs/adr/0018-php-backend.md)) gegen den Server (`apps/server`) oder jede andere Implementierung; sie sind die Spezifikation des Servers. Sie sprechen nur HTTP (`fetch`) und legen alle Daten über das API an.
 
 ```sh
 pnpm --filter @notion-alt/contract-tests test                  # startet den PHP-Server selbst (php -S)

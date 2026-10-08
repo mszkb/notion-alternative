@@ -17,7 +17,7 @@ VERSION=${1:-$(git describe --tags --always 2>/dev/null || echo dev)}
 OUT=dist/php-release
 STAGE=$OUT/notion-alt
 APP=$STAGE/api/app
-SRC=apps/server-php
+SRC=apps/server
 
 rm -rf "$OUT"
 mkdir -p "$APP"

@@ -63,8 +63,6 @@ docker compose exec -T backend rm -rf "$dir"
 ls -1d "$target"/backup-* | head -n -14 | xargs -r rm -rf
 ```
 
-Falls `node` auf dem Host fehlt, die Ausgabe stattdessen mit `sed -n 's/.*"dir":"\([^"]*\)".*/\1/p'` auslesen.
-
 **cron** (täglich 3:15 Uhr, `crontab -e`):
 
 ```text
@@ -131,7 +129,7 @@ Der Restore läuft bei gestopptem Backend in einem einmaligen Container mit dems
 
 ```sh
 backup=~/notion-alt-backups/backup-2026-10-03T18-00-00-000Z
-chmod -R a+rX "$backup"            # the container runs as user "node"
+chmod -R a+rX "$backup"            # the container runs as user "www-data"
 docker compose stop frontend backend
 docker compose run --rm --no-deps -v "$backup:/restore:ro" backend php bin/console restore /restore
 # {"restored":"/restore","attachments":1}

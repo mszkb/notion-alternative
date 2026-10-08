@@ -38,7 +38,7 @@ Mit SSH-Zugang:
 php api/app/bin/console backup /home/<Benutzer>/notion-backups
 ```
 
-Ohne SSH: den Datenordner per FTP sichern, während niemand die App benutzt, oder in der App den Export nutzen ([Export und Import](export.md)). Weitere Befehle (`restore`, `reset-password`) stehen in [`apps/server-php/README.md`](../../apps/server-php/README.md#cron-und-kommandozeile).
+Ohne SSH: den Datenordner per FTP sichern, während niemand die App benutzt, oder in der App den Export nutzen ([Export und Import](export.md)). Weitere Befehle (`restore`, `reset-password`) stehen in [`apps/server/README.md`](../../apps/server/README.md#cron-und-kommandozeile).
 
 ## Umzug von der Docker-Version
 

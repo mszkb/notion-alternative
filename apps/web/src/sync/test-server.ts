@@ -1,8 +1,8 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-/** The PHP server (ADR 0018); needs `composer install` in apps/server-php. */
-export const SERVER_DIR = fileURLToPath(new URL('../../../server-php/', import.meta.url))
+/** The PHP server (ADR 0018); needs `composer install` in apps/server. */
+export const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url))
 
 /**
  * Starts the real server for an integration test (PHP's built-in web server), in its own
