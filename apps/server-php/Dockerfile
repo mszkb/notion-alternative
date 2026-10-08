@@ -1,4 +1,4 @@
-# Build context: repository root (see docker-compose.php.yml).
+# Build context: repository root (see docker-compose.yml).
 # PHP backend (ADR 0018, #128): PHP-FPM on port 9000. The frontend container (nginx with the SPA)
 # talks FastCGI to it, so the stack stays at two containers (ADR 0010). Official PHP images have
 # pdo_sqlite (with FTS5), curl, openssl, mbstring and sodium built in, also for linux/arm64.

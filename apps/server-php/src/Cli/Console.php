@@ -15,6 +15,7 @@ use NotionAlt\Database\Migrator;
 use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Http\Json;
+use NotionAlt\Metrics\Metrics;
 use NotionAlt\Shared\AuthSchemas;
 use NotionAlt\Support\Ids;
 
@@ -31,6 +32,7 @@ final class Console
           restore <backup dir> [--force]  restore a backup (stop serving the app first)
           migrate-attachments-to-s3       copy attachment files from the volume to S3
           reset-password <email>          set a new password (read from stdin, or generated) and end all sessions
+          metrics                         print the Prometheus metrics (METRICS_ENABLED)
         TXT;
 
     /** @var resource */
@@ -68,6 +70,7 @@ final class Console
                 'restore' => $this->restore($rest),
                 'migrate-attachments-to-s3' => $this->migrateToS3(),
                 'reset-password' => $this->resetPassword($rest),
+                'metrics' => $this->metrics(),
                 default => $this->usage(),
             };
         } catch (\Throwable $error) {
@@ -192,6 +195,15 @@ final class Console
         return $this->out($generated
             ? ['email' => $email, 'password' => $password, 'endedSessions' => $sessions]
             : ['email' => $email, 'endedSessions' => $sessions]);
+    }
+
+    /** The text of `GET /api/metrics`, e.g. for node_exporter's textfile collector. */
+    private function metrics(): int
+    {
+        $db = $this->open();
+        fwrite($this->stdout, (new Metrics(true, static fn(): \PDO => $db, $this->config->databasePath))->render());
+
+        return 0;
     }
 
     private function isInteractive(): bool
