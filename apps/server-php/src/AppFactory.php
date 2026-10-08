@@ -10,9 +10,11 @@ use NotionAlt\Auth\AuthRoutes;
 use NotionAlt\Config\Config;
 use NotionAlt\Devices\DeviceRoutes;
 use NotionAlt\Health\HealthRoutes;
+use NotionAlt\History\HistoryRoutes;
 use NotionAlt\Http\ErrorHandler;
 use NotionAlt\Http\JsonBodyMiddleware;
 use NotionAlt\Http\RequestLogMiddleware;
+use NotionAlt\Import\ImportRoutes;
 use NotionAlt\Logging\Logger;
 use NotionAlt\Search\SearchRoutes;
 use NotionAlt\Sync\SyncRoutes;
@@ -54,6 +56,8 @@ final class AppFactory
             SyncRoutes::register($api, $db, $config->attachments);
             SearchRoutes::register($api, $db);
             AttachmentRoutes::register($api, $db, $config->attachments, $store);
+            HistoryRoutes::register($api, $db);
+            ImportRoutes::register($api, $db, $config, $logger);
         });
 
         return $app;

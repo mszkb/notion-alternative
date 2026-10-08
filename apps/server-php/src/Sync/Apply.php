@@ -113,14 +113,32 @@ final class Apply
      */
     public static function attachmentUsage(\PDO $db, string $workspaceId): array
     {
+        return self::usage($db, '(select owner_id from workspaces where id = ?)', $workspaceId);
+    }
+
+    /**
+     * Attachment storage of an account (all its workspaces), see {@see self::attachmentUsage()}.
+     *
+     * @return array{usedBytes: int, count: int}
+     */
+    public static function accountAttachmentUsage(\PDO $db, string $ownerId): array
+    {
+        return self::usage($db, '?', $ownerId);
+    }
+
+    /**
+     * @return array{usedBytes: int, count: int}
+     */
+    private static function usage(\PDO $db, string $owner, string $param): array
+    {
         $rows = Sql::rows(
             $db,
-            'select sum(attachments.size) as bytes,
+            "select sum(attachments.size) as bytes,
                 sum(case when attachments.deleted_at is null then 1 else 0 end) as count
              from attachments inner join workspaces on workspaces.id = attachments.workspace_id
-             where workspaces.owner_id = (select owner_id from workspaces where id = ?)
-               and (attachments.deleted_at is null or attachments.stored_at is not null)',
-            [$workspaceId],
+             where workspaces.owner_id = {$owner}
+               and (attachments.deleted_at is null or attachments.stored_at is not null)",
+            [$param],
         );
         $row = $rows[0] ?? [];
 

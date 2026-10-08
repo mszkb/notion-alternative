@@ -18,10 +18,10 @@ use Slim\Routing\RouteContext;
  * decoded body is in the request attribute `body` (read it with {@see self::body()}); a request
  * without body has none, like `request.body === undefined`.
  *
- * Routes with the argument {@see self::RAW_BODY_LIMIT} also accept `application/octet-stream`
- * (as {@see RawBody}, even when empty) and use that limit for every content type, like a route
- * with its own `bodyLimit` and an octet-stream parser in Fastify. Needs the routing middleware
- * to run first.
+ * Route arguments as Fastify route options: {@see self::BODY_LIMIT} replaces the limit for every
+ * content type (`bodyLimit`), {@see self::OCTET_STREAM} also accepts `application/octet-stream`
+ * as {@see RawBody}, even when empty (an octet-stream parser). Needs the routing middleware to
+ * run first.
  */
 final class JsonBodyMiddleware implements MiddlewareInterface
 {
@@ -30,8 +30,11 @@ final class JsonBodyMiddleware implements MiddlewareInterface
     /** Fastify's default `bodyLimit` as set in apps/server/src/app.ts. */
     public const DEFAULT_LIMIT = 1024 * 1024;
 
-    /** Route argument: body limit in bytes of a route that takes `application/octet-stream`. */
-    public const RAW_BODY_LIMIT = 'rawBodyLimit';
+    /** Route argument: body limit in bytes of this route. */
+    public const BODY_LIMIT = 'bodyLimit';
+
+    /** Route argument (`'1'`): the route accepts `application/octet-stream`. */
+    public const OCTET_STREAM = 'octetStream';
 
     private const INVALID_JSON = "Body is not valid JSON but content-type is set to 'application/json'";
 
@@ -54,8 +57,9 @@ final class JsonBodyMiddleware implements MiddlewareInterface
             return $handler->handle($request);
         }
         $route = $request->getAttribute(RouteContext::ROUTE);
-        $rawLimit = $route instanceof RouteInterface ? $route->getArgument(self::RAW_BODY_LIMIT) : null;
-        $limit = $rawLimit !== null ? (int) $rawLimit : $this->limit;
+        $routeLimit = $route instanceof RouteInterface ? $route->getArgument(self::BODY_LIMIT) : null;
+        $octetStream = $route instanceof RouteInterface && $route->getArgument(self::OCTET_STREAM) === '1';
+        $limit = $routeLimit !== null ? (int) $routeLimit : $this->limit;
         $length = $request->getHeaderLine('Content-Length');
         if ($length !== '' && ctype_digit($length) && (int) $length > $limit) {
             throw self::tooLarge();
@@ -64,7 +68,7 @@ final class JsonBodyMiddleware implements MiddlewareInterface
         $contentType = $request->getHeaderLine('Content-Type');
         $mediaType = strtolower(trim(explode(';', $contentType, 2)[0]));
 
-        if ($rawLimit !== null && $mediaType === 'application/octet-stream') {
+        if ($octetStream && $mediaType === 'application/octet-stream') {
             return $handler->handle($request->withAttribute(self::ATTRIBUTE, new RawBody($raw)));
         }
         if ($raw === '' && $mediaType !== 'application/json') {

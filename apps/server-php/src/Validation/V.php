@@ -36,6 +36,12 @@ final class V
         return new CoerceNumberSchema($schema);
     }
 
+    /** `z.literal(value)`. */
+    public static function literal(int|string $value): LiteralSchema
+    {
+        return new LiteralSchema($value);
+    }
+
     public static function boolean(): BooleanSchema
     {
         return new BooleanSchema();

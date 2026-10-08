@@ -239,7 +239,7 @@ final class HttpTest extends TestCase
             $body = JsonBodyMiddleware::body($request);
 
             return Json::respond($response, $body instanceof RawBody ? ['raw' => bin2hex($body->bytes)] : ['body' => $body === Undefined::Value ? null : $body]);
-        })->setArgument(JsonBodyMiddleware::RAW_BODY_LIMIT, '4');
+        })->setArguments([JsonBodyMiddleware::BODY_LIMIT => '4', JsonBodyMiddleware::OCTET_STREAM => '1']);
         $app->get('/api/limited', static fn(): never => throw new HttpError(429, 'too_many_attempts', 'Too many attempts, try again later', ['retryAfter' => 60]));
         $app->get('/api/boom', static fn(): never => throw new \LogicException('kaputt'));
 

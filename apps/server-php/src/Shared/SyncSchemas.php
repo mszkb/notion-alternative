@@ -193,13 +193,13 @@ final class SyncSchemas
     }
 
     /** `documentIconSchema` (#136): an emoji, stored as text. */
-    private static function documentIcon(): StringSchema
+    public static function documentIcon(): StringSchema
     {
         return V::string()->min(1)->max(16);
     }
 
     /** `documentCoverSchema` (#136): `gradient:<name>` or `attachment:<uuid>`. */
-    private static function documentCover(): StringSchema
+    public static function documentCover(): StringSchema
     {
         return V::string()->regex(
             '/^(gradient:(' . implode('|', self::COVER_GRADIENTS) . ')|attachment:' . StringSchema::UUID_PATTERN . ')$/D',
@@ -217,7 +217,7 @@ final class SyncSchemas
     }
 
     /** `blockAttrsSchema`. */
-    private static function blockAttrs(): ObjectSchema
+    public static function blockAttrs(): ObjectSchema
     {
         return V::object([
             'level' => V::int()->min(1)->max(3)->optional(),

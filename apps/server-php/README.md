@@ -1,6 +1,6 @@
 # PHP-Server (Slim 4)
 
-Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`; Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121)): `POST /api/sync/push`; Sync-Pull, Änderungslog und Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122)): `GET /api/sync/pull`, `GET /api/sync/log`, `GET /api/sync/snapshot` (auch seitenweise); Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123)): `GET /api/search`; Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124)): `GET /api/attachments/usage`, `PUT/GET /api/attachments/:id/content`. Die übrigen Endpunkte folgen in #125–#127.
+Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`; Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121)): `POST /api/sync/push`; Sync-Pull, Änderungslog und Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122)): `GET /api/sync/pull`, `GET /api/sync/log`, `GET /api/sync/snapshot` (auch seitenweise); Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123)): `GET /api/search`; Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124)): `GET /api/attachments/usage`, `PUT/GET /api/attachments/:id/content`; Verlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126)): `GET /api/documents/:id/history`, `GET /api/documents/:id/history/:seq`, `POST /api/import`. Die übrigen Endpunkte folgen in #125 und #127.
 
 ## Voraussetzungen
 
@@ -48,7 +48,7 @@ Zum Ausprobieren, z. B. auf einem Raspberry Pi (64-Bit-OS): Das bestehende Front
 ALLOW_REGISTRATION=true docker compose -f docker-compose.yml -f docker-compose.php.yml up -d --build
 ```
 
-Die App ist dann unter `http://127.0.0.1:8080` erreichbar (Zugriff von außen wie beim Node-Stack, siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)). Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen. Noch nicht portiert und daher in der App ohne Funktion: Web Push (#125), Versionsverlauf und Import (#126). Das endgültige Image folgt in #128.
+Die App ist dann unter `http://127.0.0.1:8080` erreichbar (Zugriff von außen wie beim Node-Stack, siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)). Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen. Noch nicht portiert und daher in der App ohne Funktion: Web Push (#125). Das endgültige Image folgt in #128.
 
 ## Konfiguration
 
@@ -112,6 +112,13 @@ Port von `apps/server/src/attachments/` (ADR 0012), gleiche Ablage wie der Node-
 - Größe und SHA-256 werden gegen die synchronisierten Metadaten geprüft; Quota (`WORKSPACE_STORAGE_MB`) und Dateigröße prüft schon der Sync-Push.
 - `GET …/content` streamt die Datei; nur Rasterbilder inline, alles andere als Download, mit `nosniff`, `sandbox`-CSP und `no-store` (gleiche Header wie Node, `Content-Disposition` nach RFC 6266 bis auf das Zeichen gleich).
 - `Purge::deletedAttachments` entfernt Dateien gelöschter Anhänge nach `ATTACHMENT_RETENTION_DAYS`; aufgerufen wird es vom Cron (#127).
+
+## Verlauf, Import und Export
+
+- **Verlauf** (`src/History`, ADR 0013): Port von `apps/server/src/history/`. Versionen sind Bearbeitungssitzungen pro Gerät (Abstand höchstens 10 Minuten), neueste zuerst, höchstens 200. Ein Stand wird aus dem Änderungslog der Seite und ihrer Blöcke zurückgerechnet; Blöcke nach Sortierschlüssel und ID.
+- **Import** (`src/Import`, ADR 0004): `POST /api/import` legt aus einem JSON-Export (nur die aktuelle `schema_version`; ältere hebt der Client an) einen neuen Workspace an, in einer Transaktion: Entitäten mit IDs und Revisionen, Verlauf als Änderungslog, Suchindex. Prüfungen wie in Node: Referenzen und Baumstruktur (`400 invalid_import`), Speicherlimit (`413 storage_limit`), vorhandene IDs (`409 ids_exist`). Body-Limit `IMPORT_MAX_MB` (Routen-Argument `JsonBodyMiddleware::BODY_LIMIT`). Der Export wird als Ganzes dekodiert und geprüft; `memory_limit` sollte bei großen Importen etwa das Zehnfache der Exportgröße erlauben.
+- **Sperre:** Der Node-Server erlaubt einen Import zur Zeit (Flag im Speicher). PHP hat keinen gemeinsamen Speicher zwischen den Workern, deshalb hält der Import ein exklusives, nicht blockierendes `flock` auf `import.lock` neben der Datenbank; ist es belegt, antwortet der Server mit `429 import_running`. Das Betriebssystem gibt die Sperre am Ende der Anfrage frei, auch nach einem Absturz (ADR 0018 sah eine Zeile mit Ablaufzeit vor; `flock` braucht keinen Ablauf). Auf Netzlaufwerken ohne `flock`-Unterstützung (manche NFS-Mounts) ist die Sperre wirkungslos.
+- **Export:** braucht keine eigenen Endpunkte. Der Client baut ihn aus der lokalen Datenbank, `GET /api/sync/log` (Verlauf, auch nach Kompaktierung) und den Anhängen (`GET /api/attachments/:id/content`).
 
 ## Bausteine
 

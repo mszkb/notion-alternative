@@ -45,7 +45,7 @@ final class AttachmentRoutes
         $api->get('/attachments/usage', $routes->usage(...))->add($auth);
         $api->put('/attachments/{id}/content', $routes->upload(...))
             ->add($auth)
-            ->setArgument(JsonBodyMiddleware::RAW_BODY_LIMIT, (string) $config->maxBytes);
+            ->setArguments([JsonBodyMiddleware::BODY_LIMIT => (string) $config->maxBytes, JsonBodyMiddleware::OCTET_STREAM => '1']);
         $api->get('/attachments/{id}/content', $routes->download(...))->add($auth);
     }
 
