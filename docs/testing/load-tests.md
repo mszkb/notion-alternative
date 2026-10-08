@@ -107,6 +107,8 @@ Gemessen am 2026-10-04 mit `e2e/load-app.spec.ts`, Chromium 141 headless, Vite-E
 
 ¹ Seit ADR 0017 lädt das Öffnen der großen Seite ihre 2 000 Blöcke zuerst vom Server; der Wert enthält diesen Abruf und ist deshalb nicht mit den Zeilen davor vergleichbar. Gemessen mit `LOAD_PAGES=10000 LOAD_PREVIEW=1`, ohne Dexie-Query-Cache (387c871).
 
+**Erstes Öffnen einer noch nicht geladenen Seite** (zweiter Lauf mit Zeitmarken, 1,5 s gesamt): rund 0,3 s vom Klick bis zum Start des Ladens (Navigation, Seitenansicht), 0,19 s Warten auf die Sync-Sperre (der Sync nach dem Kaltstart lief noch), 0,13 s Abruf vom PHP-Server, 0,39 s Schreiben in IndexedDB (`applyDocumentContent`), danach rund 0,5 s Rendern der 2 000 Blöcke. Bei 1 000 Seiten: Abruf 30 ms, Schreiben 0,26 s, gesamt 0,9 s. Das Ziel (< 1 s) gilt damit nur für bereits geladene Seiten; das erste Öffnen einer großen Seite auf einem neuen Gerät liegt bei 10 000 Seiten bei 1,5–1,9 s. Ansatzpunkte, falls nötig: Schreiben und Rendern überlappen (Blöcke aus der Antwort direkt anzeigen) und die Schreibtransaktion verkleinern.
+
 Der Kaltstart wird direkt nach dem Erstsync gemessen. Der Test findet die große Seite per CSS-Selektor; `getByRole` über 10 000 Baumknoten hätte die Messung selbst verlängert.
 
 **Messfehler bis 2026-10-04:** Die ersten drei Zeilen enthalten das Playwright-Tracing (rund 1 s pro Schritt, beim Tippen etwa 14 ms pro Taste) und den Vue-Entwicklungsmodus. Ohne beides liegen Kaltstart, Öffnen der großen Seite und Tippen schon vor jeder weiteren Änderung im Ziel. Der Erstsync dauerte im Production-Build länger als im Entwicklungsserver (9,8 statt 8,7 min); die Ursache ist nicht untersucht, beide Zahlen sind vor der Suchmarken-Korrektur gemessen.
