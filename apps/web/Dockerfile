@@ -1,5 +1,5 @@
 # Build context: repository root (see docker-compose.yml).
-FROM node:22-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 RUN corepack enable
 WORKDIR /repo
 COPY . .
