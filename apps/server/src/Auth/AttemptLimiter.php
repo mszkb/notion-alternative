@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NotionAlt\Auth;
 
 use NotionAlt\Database\Sql;
+use NotionAlt\Database\Transaction;
 
 /**
  * Attempt counter with a fixed window per key (login and registration limits). PHP keeps no
@@ -51,30 +52,33 @@ final class AttemptLimiter
 
     public function record(string $key): void
     {
-        $now = ($this->now)();
-        // Expired windows are pruned on every write, so the table only holds live keys.
-        Sql::run($this->db, 'delete from auth_attempts where reset_at <= ?', [$now]);
-        $key = $this->key($key);
-        if (Sql::rows($this->db, 'select 1 from auth_attempts where key = ?', [$key]) === []) {
-            // Keys of this limiter sort between `<name>:` and `<name>;` (the next character).
-            $range = [$this->name . ':', $this->name . ';'];
-            $count = Sql::run($this->db, 'select count(*) from auth_attempts where key >= ? and key < ?', $range)->fetchColumn();
-            $excess = self::int($count) - $this->maxEntries + 1;
-            if ($excess > 0) {
-                Sql::run(
-                    $this->db,
-                    'delete from auth_attempts where key in (
-                       select key from auth_attempts where key >= ? and key < ? order by reset_at limit ?)',
-                    [...$range, $excess],
-                );
+        // One write transaction: concurrent requests must not both count below the cap.
+        Transaction::run($this->db, function () use ($key): void {
+            $now = ($this->now)();
+            // Expired windows are pruned on every write, so the table only holds live keys.
+            Sql::run($this->db, 'delete from auth_attempts where reset_at <= ?', [$now]);
+            $key = $this->key($key);
+            if (Sql::rows($this->db, 'select 1 from auth_attempts where key = ?', [$key]) === []) {
+                // Keys of this limiter sort between `<name>:` and `<name>;` (the next character).
+                $range = [$this->name . ':', $this->name . ';'];
+                $count = Sql::run($this->db, 'select count(*) from auth_attempts where key >= ? and key < ?', $range)->fetchColumn();
+                $excess = self::int($count) - $this->maxEntries + 1;
+                if ($excess > 0) {
+                    Sql::run(
+                        $this->db,
+                        'delete from auth_attempts where key in (
+                           select key from auth_attempts where key >= ? and key < ? order by reset_at limit ?)',
+                        [...$range, $excess],
+                    );
+                }
             }
-        }
-        Sql::run(
-            $this->db,
-            'insert into auth_attempts (key, count, reset_at) values (?, 1, ?)
-             on conflict (key) do update set count = count + 1',
-            [$key, $now + $this->windowMs],
-        );
+            Sql::run(
+                $this->db,
+                'insert into auth_attempts (key, count, reset_at) values (?, 1, ?)
+                 on conflict (key) do update set count = count + 1',
+                [$key, $now + $this->windowMs],
+            );
+        });
     }
 
     public function reset(string $key): void
