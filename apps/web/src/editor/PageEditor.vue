@@ -1299,21 +1299,25 @@ async function chooseSlash(option: SlashOption) {
     if (textLength(el) === 0) {
       await makeDivider(block)
     } else {
-      await flush(block.id)
+      // Writes queue in order; inserting without waiting lets the next keystroke land in the
+      // new block.
+      void flush(block.id)
       const divider = draftBlock({ type: 'divider', attrs: {}, content: '' })
-      await structural(
-        divider.id,
-        (list) => insertAfter(list, block.id, divider),
-        () => store.createBlock(props.documentId, divider, { afterId: block.id }),
-      )
-      await insertParagraphAfter(divider.id)
+      await Promise.all([
+        structural(
+          divider.id,
+          (list) => insertAfter(list, block.id, divider),
+          () => store.createBlock(props.documentId, divider, { afterId: block.id }),
+        ),
+        insertParagraphAfter(divider.id),
+      ])
     }
   } else if (option.kind === 'type') {
     if (textLength(el) === 0 || block.type === option.type) {
       // An empty block turns into the chosen type, as in Notion.
       await setType(block, option.type, option.attrs, 0)
     } else {
-      await flush(block.id)
+      void flush(block.id)
       await insertBlockAfter(block.id, option.type, option.attrs, '')
     }
   } else if (option.kind === 'file') {
