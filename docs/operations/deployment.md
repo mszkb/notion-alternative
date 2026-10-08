@@ -107,6 +107,8 @@ Das Backend begrenzt fehlgeschlagene Logins und Registrierungsversuche im Arbeit
 
 Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`frontend`) anhängt; das Backend vertraut genau einem Proxy-Hop. Ein weiterer Reverse Proxy davor (z. B. für TLS) erscheint deshalb als Client-IP; dann teilen sich alle Nutzer das IP-Limit. Abhilfe: [Echte Client-IP hinter einem TLS-Proxy](#echte-client-ip-hinter-einem-tls-proxy) oder `LOGIN_MAX_FAILURES_PER_IP` erhöhen. Bei rootless Docker sieht nginx je nach Port-Treiber ebenfalls nicht die echte Adresse.
 
+`TRUST_PROXY` (Standard `true`) schaltet das Vertrauen in `X-Forwarded-For` ab. Im Docker-Stack muss es an bleiben. Auf Webhosting ohne vorgeschalteten Proxy, vor allem auf einem Server im eigenen Netz, `TRUST_PROXY=false` setzen: Sonst kann ein Client im LAN die Adresse frei angeben und das IP-Limit umgehen (das Limit pro E-Mail-Adresse gilt weiter).
+
 ## Zugriff von Smartphones (HTTPS)
 
 Für Installation, Offline-Neustart und Web Push auf Smartphones braucht die App HTTPS mit einem vertrauenswürdigen Zertifikat ([ADR 0011](../adr/0011-https-for-mobile-devices.md)):

@@ -9,15 +9,17 @@ use Psr\Http\Message\ServerRequestInterface;
 /**
  * Client address for rate limits: exactly one proxy hop is trusted, and only if the connection
  * comes from a private or loopback address. The client is then the last entry
- * of `X-Forwarded-For`; earlier entries are client-controlled and ignored.
+ * of `X-Forwarded-For`; earlier entries are client-controlled and ignored. With `TRUST_PROXY=false`
+ * (no proxy in front, e.g. Apache in a home network) the header is never used.
  */
 final class ClientIp
 {
-    public static function of(ServerRequestInterface $request): string
+    public static function of(ServerRequestInterface $request, bool $trustProxy = true): string
     {
         $remote = $request->getServerParams()['REMOTE_ADDR'] ?? '';
+        $remote = \is_string($remote) ? $remote : '';
 
-        return self::resolve(\is_string($remote) ? $remote : '', $request->getHeaderLine('X-Forwarded-For'));
+        return $trustProxy ? self::resolve($remote, $request->getHeaderLine('X-Forwarded-For')) : $remote;
     }
 
     public static function resolve(string $remoteAddress, string $forwardedFor): string
