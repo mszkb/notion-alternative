@@ -24,7 +24,7 @@ Belastbarkeit großer Workspaces ([#77](https://github.com/mszkb/notion-alternat
 
 **Ziele:**
 
-- Ohne `BASE_URL` startet das Server-Skript den PHP-Server (`php -S` mit 8 Workern) mit einer temporären Datenbank und misst RAM/CPU des Servers samt Worker-Prozessen über `/proc`. Die Messwerte unten stammen noch vom Node-Server (bis #129); für PHP-FPM unter Last steht eine neue Messung aus.
+- Ohne `BASE_URL` startet das Server-Skript den PHP-Server (`php -S` mit 8 Workern) mit einer temporären Datenbank und misst RAM/CPU des Servers samt Worker-Prozessen über `/proc`. Messwerte des PHP-Servers stehen unter „Server (PHP)“; die älteren Tabellen stammen vom früheren Node-Server. Mit PHP-FPM hinter nginx ist noch nicht gemessen.
 - Mit `BASE_URL=http://127.0.0.1:3000` nimmt es einen laufenden Server; RAM und CPU misst es dann nicht.
 - Gegen eine produktive Instanz nur mit `ALLOW_REGISTRATION=true` und auf eigene Gefahr. Das Skript legt ein Konto mit großem Workspace an.
 
@@ -34,7 +34,26 @@ Die Zielgröße aus dem Issue ist `PAGES=10000`, also 10 000 Seiten und 500 000 
 
 **Testumgebung:** Cloud-Container mit 4 vCPU (Xeon, 2,1 GHz) und 16 GB RAM, Node 22.22, Chromium 141 headless. Ein Raspberry Pi 4 ist grob um den Faktor 3–4 langsamer. Messungen dort stehen noch aus.
 
-### Server, 10 000 Seiten / 500 000 Blöcke
+### Server (PHP), 10 000 Seiten / 500 000 Blöcke
+
+Gemessen am 2026-10-08 nach der Umstellung auf PHP (#129), `php -S` mit 8 Workern, PHP 8.3 mit OPcache aus, gleicher Container wie unten. Der Seed stammt aus einem ungestörten Lauf; die übrigen Zeilen aus einem zweiten Lauf nach dem Fix unten, bei dem nebenher Tests liefen (Zeiten eher zu hoch).
+
+| Szenario | PHP | Node (zum Vergleich, unten) |
+| --- | --- | --- |
+| Seed: 510 000 Operationen in 1 020 Pushes à 500 | **2 444 Ops/s**; Push à 500 p50 183 ms, p95 280 ms; RSS ≤ 281 MB (alle Worker); Datenbank 703 MB | 3 149 Ops/s, p50 160 ms |
+| 10 Geräte gleichzeitig, je 20 × (Push + Delta-Pull) | 10 000 × `applied`, **keine Fehler**; Push p50 56 ms, p95 584 ms, max 2,1 s; Pull p50 11 ms, p95 157 ms | Push p95 153 ms, max 416 ms |
+| Vollständiger Pull (520 000 Changes, 1 000 pro Seite) | 6,0 s; Seite p50 9 ms | 3,2 s |
+| Snapshot seitenweise à 2 000 (#97) | 4,4 s für 256 Seiten; Seite p50 15 ms; RSS-Spitze 304 MB | 2,8 s |
+| Neues Gerät „bei Bedarf“: Snapshot ohne Blöcke | **77 ms, 3,3 MB** | 77 ms |
+| „Alles offline verfügbar machen“ (Pakete à 100) | 18,2 s, Paket p50 172 ms | 24,1 s |
+| Änderungslog für den JSON-Export | 5,8 s | 3,1 s |
+| Serversuche (FTS5, 50 Anfragen) | p50 67 ms, p95 85 ms | p50 51 ms |
+
+**Gefundener Fehler:** Im ersten Lauf scheiterten 42 von 200 gleichzeitigen Pushes mit `500` („database is locked“). Der Suchindex wurde nach dem Push in einer *deferred* Transaktion neu aufgebaut: erst lesen, dann schreiben. Committet ein anderer Worker dazwischen, bricht SQLite sofort ab, statt `busy_timeout` abzuwarten. Seit 1349dc0 nimmt sie die Schreibsperre vorab (`begin immediate`); ein Contract-Test mit sechs Geräten gleichzeitig deckt den Fall ab. Unter Node gab es das nicht, dort lief alles in einem Prozess.
+
+**Einordnung:** Lesende Pfade liegen nahe an Node, Pull und Log sind etwa um den Faktor 2 langsamer (JSON-Kodierung in PHP). Bei vielen gleichzeitigen Schreibern warten die Worker auf die Schreibsperre von SQLite; das zeigt sich als längere Antwortzeit (p95 0,6 s), nicht als Fehler. Für die Zielgruppe (Einzelpersonen mit wenigen Geräten) unkritisch.
+
+### Server (Node, bis #129), 10 000 Seiten / 500 000 Blöcke
 
 Gemessen am 2026-10-04 nach #95 (Push-Batch in einer Transaktion) und #97 (seitenweiser Snapshot).
 
