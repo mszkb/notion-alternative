@@ -21,7 +21,7 @@ Jedes Gerät hat außerdem eine vollständige lokale Kopie seiner Workspaces. Si
 Im laufenden Betrieb (SQLite-Online-Backup, konsistent auch während Schreibzugriffen):
 
 ```sh
-docker compose exec -T backend node dist/index.js backup
+docker compose exec -T backend php bin/console backup
 # {"dir":"/data/backups/backup-2026-10-03T18-00-00-000Z","files":3,"missing":[]}
 ```
 
@@ -55,8 +55,8 @@ set -eu
 cd ~/notion-alternative
 target=~/notion-alt-backups
 mkdir -p "$target"
-dir=$(docker compose exec -T backend node dist/index.js backup \
-  | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).dir))")
+dir=$(docker compose exec -T backend php bin/console backup \
+  | sed -n 's/.*"dir":"\([^"]*\)".*/\1/p')
 docker compose cp "backend:$dir" "$target/"
 docker compose exec -T backend rm -rf "$dir"
 # Keep the last 14 backups.
@@ -120,7 +120,7 @@ Den Befehl an das Ende des Backup-Skripts hängen. Mit `ATTACHMENT_STORAGE=s3` d
 
 ```sh
 cd ~/notion-alt-backups/backup-2026-10-03T18-00-00-000Z
-node -e "const m=require('./manifest.json');for(const f of m.files)console.log(f.sha256+'  '+f.path)" | sha256sum -c --quiet && echo OK
+jq -r '.files[] | "\(.sha256)  \(.path)"' manifest.json | sha256sum -c --quiet && echo OK
 ```
 
 Der Restore prüft dasselbe selbst und bricht bei der ersten fehlenden oder veränderten Datei ab, bevor er etwas überschreibt. Der beste Test bleibt ein **Probe-Restore** in eine leere Umgebung (unten, mit eigenem `COMPOSE_PROJECT_NAME` und anderem `PORT`), z. B. einmal im Quartal und nach jedem größeren Upgrade.
@@ -133,7 +133,7 @@ Der Restore läuft bei gestopptem Backend in einem einmaligen Container mit dems
 backup=~/notion-alt-backups/backup-2026-10-03T18-00-00-000Z
 chmod -R a+rX "$backup"            # the container runs as user "node"
 docker compose stop frontend backend
-docker compose run --rm --no-deps -v "$backup:/restore:ro" backend node dist/index.js restore /restore
+docker compose run --rm --no-deps -v "$backup:/restore:ro" backend php bin/console restore /restore
 # {"restored":"/restore","attachments":1}
 docker compose up -d --wait
 ```
@@ -186,7 +186,7 @@ Geräte erhalten die neue App-Version beim nächsten Öffnen („Eine neue Versi
 git checkout <vorheriger Commit>
 docker compose build
 docker compose stop frontend backend
-docker compose run --rm --no-deps -v "$backup:/restore:ro" backend node dist/index.js restore /restore --force
+docker compose run --rm --no-deps -v "$backup:/restore:ro" backend php bin/console restore /restore --force
 docker compose up -d --wait
 ```
 

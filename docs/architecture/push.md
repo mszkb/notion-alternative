@@ -25,7 +25,7 @@ Beispiel-Payload:
 
 ## Umsetzung (Phase 4)
 
-- **Ohne Bibliothek:** Verschlüsselung (RFC 8291, `aes128gcm`) und VAPID (RFC 8292, ES256) mit `node:crypto` in `apps/server/src/push/crypto.ts`, geprüft gegen den Testvektor aus RFC 8291 Anhang A. Keine neue Abhängigkeit, arm64-unkritisch.
+- **Ohne Bibliothek:** Verschlüsselung (RFC 8291, `aes128gcm`) und VAPID (RFC 8292, ES256) mit ext-openssl in `apps/server-php/src/Push/` (`WebPushCrypto`, `Vapid`), geprüft gegen den Testvektor aus RFC 8291 Anhang A. Keine neue Abhängigkeit, arm64-unkritisch.
 - **Schlüssel:** VAPID-Keypair und Installations-ID entstehen beim ersten Bedarf in der Tabelle `settings` und sind damit Teil des Datenbank-Backups. Gehen sie verloren, müssen alle Geräte Benachrichtigungen neu aktivieren.
 - **Subscriptions** (`push_subscriptions`) gehören zu einem registrierten Gerät; Entfernen des Geräts oder des Kontos löscht sie. Endpunkte nur über `https` und nur zu erlaubten Push-Diensten (`PUSH_ALLOWED_HOSTS`, Standard: Google, Mozilla, Apple, Microsoft) – die URL stammt vom Client, ohne Allowlist könnte der Server beliebige Adressen ansprechen (SSRF).
 - **Versand:** Nach jedem Push mit angewendeten Operationen (auch `merged`/`conflict`) bekommen die **anderen** Geräte des Workspace-Inhabers einen Hinweis; Änderungen innerhalb von 2 s werden zu einer Nachricht pro Gerät gebündelt (`Topic` pro Workspace, `TTL` 24 h). `404`/`410` des Push-Dienstes oder fünf Fehlschläge in Folge entfernen die Subscription.

@@ -69,6 +69,13 @@ Mit dem Owner abgestimmt ([#116](https://github.com/mszkb/notion-alternative/iss
 - **Webhosting:** Release-ZIP hochladen (SPA + `api/` mit `vendor/`), Datenverzeichnis außerhalb des Webroots, Cron eintragen ([#128](https://github.com/mszkb/notion-alternative/issues/128)).
 - **Docker Compose:** bleibt mit zwei Containern (nginx + PHP-FPM statt Node), auch für `linux/arm64`.
 
+## Umsetzung (2026-10-08)
+
+- Alle Endpunkte portiert ([#119](https://github.com/mszkb/notion-alternative/issues/119)–[#127](https://github.com/mszkb/notion-alternative/issues/127)); die Contract-Tests laufen vollständig grün gegen PHP. Der Node-Server ist entfernt ([#129](https://github.com/mszkb/notion-alternative/issues/129)), seine Fixtures für Migrationen und Suche sind eingefroren.
+- Zustand ohne Prozess wie oben, mit zwei Abweichungen: Die Import-Sperre ist ein nicht blockierendes `flock` statt einer Zeile mit Ablaufzeit (das Betriebssystem gibt sie auch nach einem Absturz frei). Push-Hinweise werden über die Tabelle `push_hints` gebündelt und nach der Antwort verschickt (`fastcgi_finish_request`), Reste per Cron. Metriken liegen in der Tabelle `metrics`. APCu wird nicht genutzt.
+- Docker: zwei Container bleiben; `frontend` (nginx) spricht FastCGI mit `backend` (PHP-FPM), der Cron läuft als Schleife im Entrypoint.
+- Offen: Der PHP-Server prüft beim Login noch scrypt-Hashes des Node-Servers und ersetzt sie (`src/Auth/Scrypt.php`); das weicht von „keine Übernahme“ oben ab und wartet auf die Entscheidung des Owners (entfernen oder hier festhalten).
+
 ## Konsequenzen
 
 - ADR 0006, 0007 und 0010 sind in den Server-Teilen ersetzt; die Frontend-Teile gelten weiter. Bis zur Umstellung (#129) bleibt der Node-Server die laufende Implementierung.

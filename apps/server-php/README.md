@@ -1,6 +1,6 @@
 # PHP-Server (Slim 4)
 
-Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`; Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121)): `POST /api/sync/push`; Sync-Pull, Änderungslog und Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122)): `GET /api/sync/pull`, `GET /api/sync/log`, `GET /api/sync/snapshot` (auch seitenweise); Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123)): `GET /api/search`; Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124)): `GET /api/attachments/usage`, `PUT/GET /api/attachments/:id/content`; Verlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126)): `GET /api/documents/:id/history`, `GET /api/documents/:id/history/:seq`, `POST /api/import`; Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125)): `GET /api/push/public-key`, `POST/DELETE /api/push/subscriptions` und Hinweise nach dem Sync-Push. Metriken, Cron und CLI ([#127](https://github.com/mszkb/notion-alternative/issues/127)): `GET /api/metrics`, `bin/cron.php`, `bin/console`. Damit sind alle Endpunkte des Node-Servers portiert; offen sind das endgültige Docker-Image und das Paket für Webhosting (#128).
+Das Backend in PHP für Shared Hosting und Docker ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Es hat den Node-Server (`apps/server`, Fastify) abgelöst ([#129](https://github.com/mszkb/notion-alternative/issues/129)) und übernimmt dessen HTTP-API bis aufs Byte, SQLite-Datei, Migrationen und Ablage der Anhänge. Die Spezifikation sind die Contract-Tests ([`docs/testing/contract-tests.md`](../../docs/testing/contract-tests.md)). Verweise auf `apps/server/…` unten meinen den Node-Server im Stand vor seiner Entfernung (Git-Historie, z. B. Commit `886e471`).
 
 ## Voraussetzungen
 
@@ -23,7 +23,7 @@ curl http://127.0.0.1:8000/api/ready    # {"status":"ok","checks":{"database":"o
 
 `public/index.php` ist Front-Controller und Router-Skript des eingebauten Servers: Alle Anfragen (auch Pfade mit Punkt, z. B. `/api/attachments/x.png`) gehen an Slim. Die Datenbank wird beim ersten Zugriff angelegt und migriert; `/api/health` braucht keine Datenbank.
 
-Die SPA im Entwicklungsmodus (`pnpm dev`) spricht weiter mit dem Node-Server auf `:3000`.
+`pnpm dev` im Wurzelverzeichnis startet diesen Server auf `127.0.0.1:3000` (`php -S`) und Vite auf `:5173` mit Proxy für `/api`.
 
 ## Apache / Shared Hosting
 
@@ -45,10 +45,10 @@ Das Paket für Shared Hosting (SPA + `api/` + `vendor/`) und das Docker-Image fo
 `apps/server-php/Dockerfile` baut PHP-FPM (offizielles Image `php:8.3-fpm-bookworm`, auch `linux/arm64`) mit OPcache, `clear_env = no` (Konfiguration aus der Umgebung), `memory_limit = 512M` und einem Entrypoint, der migriert und `bin/cron.php` alle 5 Minuten startet. Der Healthcheck `bin/fpm-healthcheck.php` schickt eine FastCGI-Anfrage für `/api/health` an `127.0.0.1:9000`. Das Frontend (nginx) spricht mit `apps/web/nginx.php.conf` FastCGI mit dem Backend; `X-Forwarded-For` setzt nginx wie beim Proxy, damit die Rate-Limits die echte Client-Adresse sehen.
 
 ```sh
-ALLOW_REGISTRATION=true docker compose -f docker-compose.yml -f docker-compose.php.yml up -d --build
+ALLOW_REGISTRATION=true docker compose up -d --build
 ```
 
-Die App ist dann unter `http://127.0.0.1:8080` erreichbar. Beide Varianten nutzen dasselbe Volume `data`. Nach einem Login am PHP-Server kann der Node-Server das Konto nicht mehr prüfen (Argon2id, ADR 0018); zum Wechseln das Volume mit `docker compose … down -v` verwerfen.
+Die App ist dann unter `http://127.0.0.1:8080` erreichbar. Ein Volume `data` der Node-Version wird weiterverwendet und migriert; Konten brauchen danach ein neues Passwort (`docker compose exec backend php bin/console reset-password <E-Mail>`, ADR 0018).
 
 ## Webhosting (Release-ZIP)
 
@@ -56,7 +56,7 @@ Die App ist dann unter `http://127.0.0.1:8080` erreichbar. Beide Varianten nutze
 
 ## Konfiguration
 
-Dieselben Variablen, Defaults und Prüfungen wie `apps/server/src/config.ts` (siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)), ohne `HOST` und `PORT` (die bestimmt der Webserver). Leere Werte gelten als nicht gesetzt.
+Dieselben Variablen, Defaults und Prüfungen wie der frühere Node-Server (`apps/server/src/config.ts`) (siehe [`docs/operations/deployment.md`](../../docs/operations/deployment.md)), ohne `HOST` und `PORT` (die bestimmt der Webserver). Leere Werte gelten als nicht gesetzt.
 
 Quellen, die spätere gewinnt:
 
@@ -100,13 +100,9 @@ Ungültige Werte führen zu einer Fehlermeldung, die nur Variablennamen nennt (z
 
 Anders als Kysely unter SQLite (ein Prozess) laufen PHP-Anfragen parallel: Der Migrator setzt den Lock-Eintrag wirklich (`is_locked = 1`) und führt jede Migration samt Buchungszeile in einer eigenen Transaktion aus. Bleibt der Lock nach einem Absturz stehen, nennt die Fehlermeldung das SQL zum Freigeben.
 
-**Neue Migration:** solange beide Server existieren, in beiden anlegen (ADR 0018). Die Node-Migration schreiben, dann die Fixtures neu erzeugen und die PHP-Klasse mit derselben DDL ergänzen (in `Migrator::all()` eintragen):
+**Neue Migration:** Klasse in `src/Database/Migrations` anlegen, in `Migrator::all()` eintragen, im `MigratorTest` die Liste `ALL` ergänzen und die neuen Tabellen und Indizes in `tests/fixtures/node-schema.json` nachtragen (erwartetes `sqlite_master` nach allen Migrationen). Bestehende Migrationen nie ändern (T-MIG-01).
 
-```sh
-pnpm --filter @notion-alt/server exec tsx scripts/dump-php-fixtures.ts
-```
-
-Das Skript schreibt nach `tests/fixtures/`: `node-schema.json` (`sqlite_master` einer frischen Node-Datenbank), `node-0004.sqlite` und `node-latest.sqlite` (Datenbank mit Inhalt vor und nach den Node-Migrationen 0005–0013) und `inline-plaintext.json` (Erwartungswerte für den PHP-Port von `inlineToPlainText`, den Migration 0005 braucht).
+Die Fixtures in `tests/fixtures/` sind eingefroren: `node-schema.json`, `node-0004.sqlite` und `node-latest.sqlite` hat der Node-Server bis Migration `0015_metrics` erzeugt (Datenbank mit Inhalt vor und nach seinen Migrationen 0005–0015), `inline-plaintext.json` sind die Erwartungswerte für den Port von `inlineToPlainText` (Migration 0005), `search.json` die Treffer der Node-Suche. Sie belegen, dass eine Datenbank der Node-Version weiterläuft.
 
 ## Dateianhänge
 
@@ -152,7 +148,7 @@ Backups haben dasselbe Format wie beim Node-Server (`manifest.json`, `app.sqlite
 
 ## Metriken
 
-Mit `METRICS_ENABLED=true` gibt es `GET /api/metrics` im Prometheus-Textformat wie beim Node-Server (ohne `true` antwortet die Route mit 404). Da PHP zwischen Anfragen keine Zähler hält, liegen die Serien in der Tabelle `metrics` (Migration `0015_metrics`, in Node angelegt, aber ungenutzt). Jede Anfrage wird nach der Antwort gezählt (`http_requests_total`, `http_request_duration_seconds` mit Routen-Vorlage wie `/api/workspaces/:id`, nie dem konkreten Pfad), dazu `sync_push_operations_total` und `sqlite_file_size_bytes`. Die Prozess- und Event-Loop-Werte von Node (`process_*`, `nodejs_eventloop_lag_seconds`) gibt es unter PHP nicht. Das kostet pro Anfrage einen kleinen Schreibzugriff; ohne `METRICS_ENABLED` entfällt er.
+Mit `METRICS_ENABLED=true` gibt es `GET /api/metrics` (im Docker-Stack nur über `php bin/console metrics`, weil das Backend FastCGI spricht) im Prometheus-Textformat wie beim Node-Server (ohne `true` antwortet die Route mit 404). Da PHP zwischen Anfragen keine Zähler hält, liegen die Serien in der Tabelle `metrics` (Migration `0015_metrics`, in Node angelegt, aber ungenutzt). Jede Anfrage wird nach der Antwort gezählt (`http_requests_total`, `http_request_duration_seconds` mit Routen-Vorlage wie `/api/workspaces/:id`, nie dem konkreten Pfad), dazu `sync_push_operations_total` und `sqlite_file_size_bytes`. Die Prozess- und Event-Loop-Werte von Node (`process_*`, `nodejs_eventloop_lag_seconds`) gibt es unter PHP nicht. Das kostet pro Anfrage einen kleinen Schreibzugriff; ohne `METRICS_ENABLED` entfällt er.
 
 ## Verlauf, Import und Export
 
@@ -168,7 +164,7 @@ Reine Funktionen ohne HTTP, für die späteren Endpunkte vorab portiert; nur `ex
 - `src/Push` (Web Push, #125): `WebPushCrypto::encrypt` (RFC 8291, aes128gcm), `Vapid::authorization` (RFC 8292, ES256-JWT), `VapidKeys` (liest und schreibt das JSON, das der Node-Server in `settings` unter `vapid` speichert; ein vorhandenes Schlüsselpaar gilt weiter), `PushRequest::syncAvailable` (Header und verschlüsselter Hinweis ohne Inhalte) und `PushRequest::isAllowedEndpoint`. Tests: RFC-8291-Testvektor, JWT-Prüfung mit dem öffentlichen Schlüssel, Node-Schlüssel laden.
 - `src/Attachments/S3Signer.php` (S3, #124): AWS Signature V4 mit Header und Objekt-URLs (Path-Style oder virtueller Host). Tests: AWS-Beispiel und vom Node-Client aufgezeichnete Anfragen. Presigned URLs gibt es wie im Node-Server nicht. Genutzt von `S3Client` (siehe Dateianhänge).
 - `src/Sync` (Sync-Push, #121): Port von `apps/server/src/sync/apply.ts` (`Apply::batch`: eine Transaktion je Batch, ein Savepoint je Operation; Revisionen, Tombstones, Block-Merge und Konfliktobjekte nach ADR 0003, Einträge in `changes`, Markierung für den Suchindex), `Mapping` (Port von `mapping.ts`) und `SyncRoutes` (`POST /api/sync/push`). Payloads bleiben `stdClass`, damit `{}` wie in Node als `{}` gespeichert wird. Die Eingabeschemas stehen in `src/Shared/SyncSchemas.php`. Nach dem Batch plant `PushRoutes::afterChanges` die Hinweise an die anderen Geräte (siehe Web Push). Tests: `tests/Unit/SyncApplyTest.php`.
-- `src/Search/SearchIndex.php` (Suche, #123): Port von `apps/server/src/search/index.ts` mit PDO – `reindexDocument` (Zeile über die Rowid aus `search_documents`), `markForReindex`/`reindexMarked` (`search_dirty`), `toFtsQuery` und `searchWorkspace` (nur Workspaces des Owners, gleiche Treffer, Reihenfolge und Snippets wie Node). Die Route `GET /api/search` liegt in `SearchRoutes`, ihr Eingabeschema in `src/Shared/SearchSchemas.php`. Tests: Fälle aus `search.test.ts`/`migrations.test.ts` und `tests/fixtures/search.json` (Treffer des Node-Servers, erzeugt mit `pnpm --filter @notion-alt/server exec tsx scripts/dump-php-search-fixture.ts`).
+- `src/Search/SearchIndex.php` (Suche, #123): Port von `apps/server/src/search/index.ts` mit PDO – `reindexDocument` (Zeile über die Rowid aus `search_documents`), `markForReindex`/`reindexMarked` (`search_dirty`), `toFtsQuery` und `searchWorkspace` (nur Workspaces des Owners, gleiche Treffer, Reihenfolge und Snippets wie Node). Die Route `GET /api/search` liegt in `SearchRoutes`, ihr Eingabeschema in `src/Shared/SearchSchemas.php`. Tests: Fälle aus `search.test.ts`/`migrations.test.ts` und `tests/fixtures/search.json` (Treffer des Node-Servers, eingefroren).
 
 ## Tests und Werkzeuge
 

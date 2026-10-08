@@ -17,22 +17,18 @@ Kürzer mit `make up`: legt `.env` aus `.env.example` an, falls sie fehlt, baut 
 
 | Container | Aufgabe | Daten |
 | --- | --- | --- |
-| `frontend` | nginx: SPA ausliefern, `/api` an `backend` weiterleiten | – |
-| `backend` | Fastify-API | Volume `data` → `/data` (SQLite `app.sqlite`) |
+| `frontend` | nginx: SPA ausliefern, `/api` per FastCGI an `backend` | – |
+| `backend` | PHP-FPM mit der API (`apps/server-php`, [ADR 0018](../adr/0018-php-backend.md)), Port 9000 nur im Docker-Netz | Volume `data` → `/data` (SQLite `app.sqlite`) |
 
 Nur `frontend` veröffentlicht einen Port, standardmäßig **nur auf `127.0.0.1`**. Für den Zugriff von anderen Geräten einen TLS-Reverse-Proxy (z. B. Caddy, Traefik) auf dem Host davorschalten und `COOKIE_SECURE=true` setzen. HTTPS ist auch Voraussetzung für die PWA (Service Worker, Web Push).
 
 `BIND_ADDRESS=0.0.0.0` macht die App ohne TLS im ganzen Netz erreichbar – Passwörter und Session-Cookies gehen dann im Klartext über das Netz. Nur in vertrauenswürdigen Netzen und zum Testen verwenden.
 
-### PHP-Backend (ADR 0018)
+### Backend-Container
 
-Der PHP-Server ersetzt den Node-Server ([#129](https://github.com/mszkb/notion-alternative/issues/129)). Bis dahin läuft er über eine zweite Compose-Datei: `backend` ist dann PHP-FPM (`apps/server-php/Dockerfile`, Port 9000 nur im Docker-Netz), `frontend` spricht FastCGI mit ihm (`apps/web/nginx.php.conf`). Weiterhin zwei Container, gleiches Volume `data`.
+Im Backend laufen die periodischen Aufgaben (`bin/cron.php`: abgelaufene Sitzungen, Suchindex, Push-Hinweise, Aufräumen gelöschter Anhänge) alle 5 Minuten in einer Schleife des Entrypoints; der Healthcheck schickt eine FastCGI-Anfrage an `/api/health`. Befehle: `docker compose exec -T backend php bin/console <Befehl>` (`backup`, `restore`, `migrate-attachments-to-s3`, `reset-password`, siehe [`apps/server-php/README.md`](../../apps/server-php/README.md#cron-und-kommandozeile)). Ohne Docker, auf gewöhnlichem Webspace: [Installation auf Webspace](../user/webhosting.md).
 
-```sh
-docker compose -f docker-compose.yml -f docker-compose.php.yml up -d --build
-```
-
-Im PHP-Container laufen die periodischen Aufgaben (`bin/cron.php`) alle 5 Minuten in einer Schleife des Entrypoints; der Healthcheck schickt eine FastCGI-Anfrage an `/api/health`. Befehle wie Backup: `docker compose exec -T backend php bin/console backup` (siehe [`apps/server-php/README.md`](../../apps/server-php/README.md#cron-und-kommandozeile)). Ohne Docker, auf gewöhnlichem Webspace: [Installation auf Webspace](../user/webhosting.md).
+**Umstieg von der Node-Version** (bis Oktober 2026): Datenbank und Anhänge bleiben im Volume und werden beim ersten Start weiter migriert. Passwörter werden nicht übernommen (Argon2id statt scrypt, ADR 0018): Jedes Konto bekommt mit `docker compose exec backend php bin/console reset-password <E-Mail>` ein neues Passwort. Vorher ein Backup ziehen.
 
 ## Server mit SSH-Tunnel (Referenz)
 
@@ -96,7 +92,7 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 | `PUSH_SUBJECT` | `mailto:admin@localhost` | Kontakt für Web Push (VAPID); eine echte Adresse eintragen, manche Push-Dienste lehnen Platzhalter ab |
 | `PUSH_ALLOWED_HOSTS` | Google, Mozilla, Apple, Microsoft | Push-Dienste, an die der Server senden darf (kommagetrennt, `*.` für Subdomains) |
 
-Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`, `ATTACHMENTS_DIR`): siehe `apps/server/src/config.ts`.
+Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`, `ATTACHMENTS_DIR`): siehe `apps/server-php/src/Config/ConfigLoader.php`. Statt Umgebungsvariablen geht auch eine `config.php` ([`apps/server-php/README.md`](../../apps/server-php/README.md#konfiguration)).
 
 ### Login-Rate-Limiting
 
@@ -170,7 +166,7 @@ Fehlen Pflichtangaben, startet das Backend nicht und nennt nur die Variablenname
 # 1. S3-Variablen in .env eintragen (ATTACHMENT_STORAGE=s3 …)
 docker compose up -d backend
 # 2. Bestehende Dateien kopieren und per SHA-256 prüfen (wiederholbar, idempotent)
-docker compose exec backend node dist/index.js migrate-attachments-to-s3
+docker compose exec backend php bin/console migrate-attachments-to-s3
 # Ausgabe z. B. {"copied":42,"skipped":0,"failed":[]}; bei failed ≠ [] nicht weitermachen
 ```
 
@@ -183,16 +179,18 @@ Danach liefert das Backend aus dem Bucket. Die alten Dateien unter `/data/attach
 Mit `METRICS_ENABLED=true` liefert das Backend unter `GET /api/metrics` Metriken im Prometheus-Textformat:
 
 - `http_requests_total` und `http_request_duration_seconds` je Methode, Routen-Template (z. B. `/api/workspaces/:id`) und Status
-- Prozess: `process_resident_memory_bytes`, `process_heap_used_bytes`, `process_uptime_seconds`, `nodejs_eventloop_lag_seconds`
+- `sync_push_operations_total` je Ergebnis
 - `sqlite_file_size_bytes` für Datenbank- und WAL-Datei
 
-Labels enthalten keine personenbezogenen Daten, IDs oder konkreten Pfade. nginx (`frontend`) beantwortet `/api/metrics` immer mit `404`; der Endpunkt ist nur im Backend-Container bzw. im internen Docker-Netz erreichbar. Einmalig abrufen:
+Die Zähler liegen in der Tabelle `metrics` (PHP hält zwischen Anfragen nichts im Speicher); jede Anfrage kostet damit einen kleinen Schreibzugriff, ohne `METRICS_ENABLED` entfällt er.
+
+Labels enthalten keine personenbezogenen Daten, IDs oder konkreten Pfade. nginx (`frontend`) beantwortet `/api/metrics` immer mit `404`, und das Backend spricht nur FastCGI. Abrufen:
 
 ```sh
-docker compose exec backend node -e "fetch('http://127.0.0.1:3000/api/metrics').then(r => r.text()).then(console.log)"
+docker compose exec -T backend php bin/console metrics
 ```
 
-Einen Prometheus-Server betreibt das Projekt bewusst nicht (genau zwei Container, ADR 0006); ein vorhandener Prometheus kann das Backend über ein gemeinsames Docker-Netz abfragen.
+Einen Prometheus-Server betreibt das Projekt bewusst nicht (genau zwei Container, ADR 0006). Für einen vorhandenen Prometheus die Ausgabe z. B. per Cron auf dem Host in das Verzeichnis des Textfile-Collectors von `node_exporter` schreiben.
 
 ## Migrationen
 
@@ -203,7 +201,7 @@ Datenbank-Migrationen laufen beim Start des Backends automatisch und nur vorwär
 Backup im laufenden Betrieb, Restore, Automatisierung (cron/systemd), Off-site-Kopie, Prüfung und Upgrade: [`backup.md`](backup.md). Kurzfassung:
 
 ```sh
-docker compose exec -T backend node dist/index.js backup       # -> /data/backups/backup-<Zeit>
+docker compose exec -T backend php bin/console backup       # -> /data/backups/backup-<Zeit>
 docker compose cp backend:/data/backups/backup-<Zeit> ~/notion-alt-backups/
 ```
 

@@ -1,33 +1,34 @@
 # Contract-Tests (HTTP-Black-Box)
 
-Das Paket `packages/contract-tests` (`@notion-alt/contract-tests`, Issue [#118](https://github.com/mszkb/notion-alternative/issues/118)) prüft die HTTP-API eines laufenden Servers nur über `fetch`: Pfade, Statuscodes, Cookies, Header, Fehlerobjekte `{error:{code,message,…}}` und das Sync-Protokoll ([ADR 0002](../adr/0002-sync-protocol.md)). Es kennt keine Interna (keine Datenbank, kein `app.inject`). Damit lässt sich derselbe Vertrag gegen den Node-Server und später gegen den PHP-Server (`apps/server-php`, [ADR 0018](../adr/0018-php-backend.md)) prüfen. Die Unit-Tests in `apps/server/test` bleiben unverändert bestehen.
+Das Paket `packages/contract-tests` (`@notion-alt/contract-tests`, Issue [#118](https://github.com/mszkb/notion-alternative/issues/118)) prüft die HTTP-API eines laufenden Servers nur über `fetch`: Pfade, Statuscodes, Cookies, Header, Fehlerobjekte `{error:{code,message,…}}` und das Sync-Protokoll ([ADR 0002](../adr/0002-sync-protocol.md)). Es kennt keine Interna (keine Datenbank, kein `app.inject`). Seit dem Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129)) sind sie die **Spezifikation** des Servers (`apps/server-php`, [ADR 0018](../adr/0018-php-backend.md)); was sich über HTTP nicht prüfen lässt, testet PHPUnit in `apps/server-php/tests`.
 
 ## Ausführen
 
 ```sh
-# Node-Server wird automatisch gestartet (temporäres Datenverzeichnis, freier Port)
+# PHP-Server wird automatisch gestartet (temporäres Datenverzeichnis, freier Port);
+# vorher einmal `composer install` in apps/server-php
 pnpm --filter @notion-alt/contract-tests test
 
 # einzelne Datei
 pnpm --filter @notion-alt/contract-tests exec vitest run test/sync-push.test.ts
 
-# anderer Server, z. B. PHP (läuft im Repo-Wurzelverzeichnis, Port als $PORT bzw. {port})
-SERVER_CMD='php -d curl.cainfo=$PUSH_RECEIVER_CA -S 127.0.0.1:$PORT -t apps/server-php/public apps/server-php/public/index.php' pnpm --filter @notion-alt/contract-tests test
+# anderer Befehl (läuft im Repo-Wurzelverzeichnis, Port als $PORT bzw. {port})
+SERVER_CMD='php -S 127.0.0.1:$PORT -t apps/server-php/public apps/server-php/public/index.php' pnpm --filter @notion-alt/contract-tests test
 
 # bereits laufender Server (wird weder gestartet noch beendet)
 SERVER_URL=http://127.0.0.1:3000 pnpm --filter @notion-alt/contract-tests test
 ```
 
-- `pnpm test` im Wurzelverzeichnis führt die Contract-Tests **nicht** aus (`--filter '!@notion-alt/contract-tests'`); die GitHub-CI bleibt bei Unit-Tests. `pnpm typecheck` prüft das Paket mit.
+- `pnpm test` im Wurzelverzeichnis führt die Contract-Tests **nicht** aus (`--filter '!@notion-alt/contract-tests'`); die GitHub-CI startet sie im Job `checks` als eigenen Schritt. `pnpm typecheck` prüft das Paket mit.
 - `CONTRACT_SERVER_LOG=1` gibt die Ausgabe des gestarteten Servers mit aus; bricht der Start ab, steht sie ohnehin in der Fehlermeldung.
-- Playwright (`apps/web/playwright.config.ts`) startet mit gesetztem `SERVER_CMD` ebenfalls diesen Befehl statt des Node-Servers (Port `3100` als `PORT`/`{port}`, Arbeitsverzeichnis: Repo-Wurzel).
+- Playwright (`apps/web/playwright.config.ts`) startet ebenfalls den PHP-Server (`php -S`, Port `3100`); mit gesetztem `SERVER_CMD` diesen Befehl (`PORT`/`{port}`, Arbeitsverzeichnis: Repo-Wurzel).
 
 ### Ablauf
 
 `src/global-setup.ts` (Vitest `globalSetup`) startet vor dem Lauf:
 
 1. einen **Fake-Push-Dienst** (`src/push-receiver.ts`): HTTPS auf `127.0.0.1` mit freiem Port und dem selbstsignierten Zertifikat `fixtures/push-receiver.crt` (gültig bis 2126, nur für Tests). `POST /send/<key>` antwortet `201`, `POST /gone/<key>` antwortet `410`. Die Tests lesen die Zustellungen über einen zweiten, unverschlüsselten Port.
-2. ohne `SERVER_URL` den **Server** (`src/server.ts`): `SERVER_CMD` (Standard: `pnpm --filter @notion-alt/server exec tsx src/index.ts`) über die Shell im Repo-Wurzelverzeichnis, als eigene Prozessgruppe. Der Befehl bekommt die Umgebung unten, `{port}` im Befehl wird durch den Port ersetzt. Der Start gilt als fertig, sobald `GET /api/ready` mit `200` antwortet (höchstens 60 s). Nach dem Lauf werden Prozessgruppe (SIGTERM, nach 5 s SIGKILL) und Datenverzeichnis entfernt.
+2. ohne `SERVER_URL` den **Server** (`src/server.ts`): `SERVER_CMD` (Standard: `php -d curl.cainfo="$PUSH_RECEIVER_CA" -S 127.0.0.1:$PORT -t apps/server-php/public apps/server-php/public/index.php`) über die Shell im Repo-Wurzelverzeichnis, als eigene Prozessgruppe. Der Befehl bekommt die Umgebung unten, `{port}` im Befehl wird durch den Port ersetzt. Der Start gilt als fertig, sobald `GET /api/ready` mit `200` antwortet (höchstens 60 s). Nach dem Lauf werden Prozessgruppe (SIGTERM, nach 5 s SIGKILL) und Datenverzeichnis entfernt.
 
 ### Umgebung des Servers
 
@@ -46,8 +47,8 @@ Ein gestarteter Server bekommt genau diese Variablen. Ein externer Server (`SERV
 | `ATTACHMENT_MAX_MB` | `1` (überschreibbar) | `too_large`, `413` beim Upload |
 | `WORKSPACE_STORAGE_MB` | `0.003` (= 3 000 Byte, überschreibbar) | `quota_exceeded`, `storage_limit` beim Import |
 | `PUSH_ALLOWED_HOSTS` | `127.0.0.1` | Fake-Push-Dienst |
-| `NODE_EXTRA_CA_CERTS` | Pfad zu `fixtures/push-receiver.crt` | Node vertraut dem Fake-Push-Dienst |
-| `PUSH_RECEIVER_CA` | derselbe Pfad | für andere Server, z. B. `php -d curl.cainfo=$PUSH_RECEIVER_CA …` |
+| `NODE_EXTRA_CA_CERTS` | Pfad zu `fixtures/push-receiver.crt` | für Server in Node |
+| `PUSH_RECEIVER_CA` | derselbe Pfad | `php -d curl.cainfo=$PUSH_RECEIVER_CA …` im Standardbefehl |
 
 Weitere Annahmen über den Server:
 
@@ -78,31 +79,35 @@ Nur über die API. Jeder Test registriert ein frisches Konto mit eindeutiger E-M
 | `history.test.ts` | `GET /api/documents/:id/history`, `GET /api/documents/:id/history/:seq` |
 | `attachments.test.ts` | `GET /api/attachments/usage`, `PUT/GET /api/attachments/:id/content` (`size_mismatch`, `checksum_mismatch`, `not_uploaded`, `deleted`, `415`, `413`, Header gegen XSS), Speicherlimits (#64) |
 | `import.test.ts` | `POST /api/import` (`ids_exist`, `invalid_import`, `invalid_input`, `413 storage_limit`) |
-| `export-roundtrip.test.ts` | T-EXP-02: reicher Workspace → ZIP → Import → Entitäten, Log, Anhang-Bytes und Markdown gleich; alle Fixtures in `apps/server/test/fixtures/exports/` |
+| `export-roundtrip.test.ts` | T-EXP-02: reicher Workspace → ZIP → Import → Entitäten, Log, Anhang-Bytes und Markdown gleich; alle Fixtures in `fixtures/exports/` |
 | `push.test.ts` | `GET /api/push/public-key`, `POST/DELETE /api/push/subscriptions` (`device_not_registered`, `endpoint_not_allowed`, `invalid_keys`, `endpoint_taken`, `too_many_subscriptions`), Hinweis ohne Inhalte nur an andere Geräte, `410` entfernt die Subscription |
 
 Ohne Fehlerfall bleiben `GET /api/health`, `GET /api/auth/status` und `GET /api/metrics` (kein Fehler möglich) sowie `GET /api/ready` (`503` nur bei kaputter Datenbank).
 
 `cursor_expired`: Es gibt keine API für die Log-Kompaktierung. Ein importierter Workspace gilt aber bis zu seiner importierten Historie als kompaktiert (`compacted_seq` = Anzahl Änderungen, mindestens 1); darüber testen die Contract-Tests `410 cursor_expired`, die Nummerierung danach und `/api/sync/log` mit `compactedSeq`.
 
-### Nur in `apps/server/test` (brauchen Interna oder Serverzeit)
+### Nur in PHPUnit (`apps/server-php/tests`, brauchen Interna oder Serverzeit)
 
-- Kompaktierung eines Teils des Logs (`compactChangeLog`), abgelaufene Sitzungen, Ablauf des Rate-Limit-Fensters (`AttemptLimiter`), Löschen von Anhängen nach der Aufbewahrungsfrist (`purgeDeletedAttachments`), Zeitlücke zwischen Versionen (ADR 0013).
-- Fehler mitten im Batch (Trigger, `500`) und atomares Schreiben von Entität und Änderung, Zyklen in bereits kaputten Daten, Suchindex nach Absturz (`search_dirty`, `reindexMarked`), `429 import_running` (Nebenläufigkeit).
-- `isPrivateAddress` mit öffentlichen Proxy-Adressen, Bündelung „ein Hinweis pro Burst“ (Node-Timer), Abbruch nach fünf Fehlversuchen beim Push-Versand, kaputte gespeicherte Push-Schlüssel.
-- Migrationen, Backup/Restore, Konfiguration, Metrik-Registry, S3 (`s3.integration.test.ts`).
+- Savepoint je Operation, Merge und Konflikte auf Datenbankebene (`SyncApplyTest`), Snapshot-Seiten (`SyncSnapshotTest`), Suchindex samt `search_dirty`/`reindexMarked` und die Treffer des früheren Node-Servers (`SearchIndexTest`, `SearchNodeFixtureTest`).
+- Ablauf des Rate-Limit-Fensters (`AttemptLimiterTest`), Client-Adresse hinter Proxys (`ClientIpTest`), Passwort-Hashes (`PasswordTest`).
+- Zeitlücke zwischen Versionen (ADR 0013), Attribut-Reihenfolge und `ids_exist` beim Import, `429 import_running` über die `flock`-Sperre (`HistoryImportTest`).
+- Bündelung der Push-Hinweise über `push_hints`, Abbruch nach fünf Fehlversuchen, `410` (`Push/PushNotifierTest`); RFC-8291-Testvektor und VAPID (`Push/WebPushTest`).
+- Löschen von Anhängen nach der Aufbewahrungsfrist, Volume- und S3-Ablage mit Fake-Transport, `Content-Disposition` (`Attachments/AttachmentsTest`), SigV4 (`Attachments/S3SignerTest`).
+- Migrationen gegen die eingefrorenen Node-Fixtures (`MigratorTest`), Backup/Restore, Cron, `reset-password` (`CliTest`), Metriken (`MetricsTest`), Konfiguration (`ConfigTest`), HTTP-Grundlagen wie Body-Grenzen (`HttpTest`).
+
+Mit dem Node-Server entfallen sind: die Kompaktierung eines Teils des Logs (`compactChangeLog`, es gibt keine API dafür) und ein Fehler mitten im Batch per Datenbank-Trigger (`500`).
 
 ## Wiederverwendbare Fixtures
 
-Für den PHP-Server (PHPUnit) und andere Implementierungen:
+Für PHPUnit und andere Implementierungen:
 
 | Fixture | Ort | Inhalt |
 | --- | --- | --- |
-| Export-ZIPs | `apps/server/test/fixtures/exports/v<schema_version>.zip` | ein vollständiger Export pro veröffentlichter Schemaversion; nie ändern ([README](../../apps/server/test/fixtures/exports/README.md)) |
+| Export-ZIPs | `packages/contract-tests/fixtures/exports/v<schema_version>.zip` | ein vollständiger Export pro veröffentlichter Schemaversion; nie ändern ([README](../../packages/contract-tests/fixtures/exports/README.md)) |
 | JSON Schema des Exports | `docs/architecture/export.schema.json` | Format von `workspace.json` |
-| RFC-8291-Testvektor | `apps/server/test/push-crypto.test.ts` (`RFC`) | Schlüssel, Salt, Klartext und erwarteter Body aus RFC 8291, Anhang A; dort auch die VAPID-Prüfung (ES256-JWT, RFC 8292) |
+| RFC-8291-Testvektor | `apps/server-php/tests/Unit/Push/WebPushTest.php` | Schlüssel, Salt, Klartext und erwarteter Body aus RFC 8291, Anhang A; dort auch die VAPID-Prüfung (ES256-JWT, RFC 8292) |
 | Push entschlüsseln | `packages/contract-tests/src/push-crypto.ts` | Gegenstück des User Agents (RFC 8291), prüft gesendete Hinweise |
-| SigV4-Testvektor | `apps/server/test/s3-sign.test.ts` | „GET Object“-Beispiel aus der AWS-S3-Dokumentation mit erwarteter Signatur |
+| SigV4-Testvektor | `apps/server-php/tests/Unit/Attachments/S3SignerTest.php` | „GET Object“-Beispiel aus der AWS-S3-Dokumentation mit erwarteter Signatur |
 | Zertifikat des Fake-Push-Dienstes | `packages/contract-tests/fixtures/push-receiver.{crt,key}` | selbstsigniert für `127.0.0.1`/`localhost`, nur für Tests |
 
 ## Neue Tests

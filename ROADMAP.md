@@ -139,7 +139,7 @@ Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alte
 
 ## Ohne Phase – Backend in PHP (Slim 4)
 
-Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), [ADR 0018](docs/adr/0018-php-backend.md)). Der PHP-Server entsteht in `apps/server-php` parallel zum Node-Server.
+Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), [ADR 0018](docs/adr/0018-php-backend.md)). Der PHP-Server in `apps/server-php` hat den Node-Server abgelöst.
 
 - [x] ADR 0018 angenommen ([#117](https://github.com/mszkb/notion-alternative/issues/117); Argon2id, keine Übernahme der scrypt-Hashes)
 - [x] Contract-Tests gegen beliebige Server-URL ([`contract-tests.md`](docs/testing/contract-tests.md), [#118](https://github.com/mszkb/notion-alternative/issues/118))
@@ -153,7 +153,7 @@ Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/no
 - [x] Versionsverlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126); Sperre per `flock`)
 - [x] CLI, Cron, Metriken ([#127](https://github.com/mszkb/notion-alternative/issues/127); `bin/console`, `bin/cron.php`, Tabelle `metrics`)
 - [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128); ZIP, `.htaccess`, Einrichtungs-Check und PHP-FPM-Image gebaut, offen: echter Webspace-Test und Gitea-Nightly gegen PHP)
-- [ ] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129))
+- [x] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129); Contract-Tests sind die Spezifikation, Fixtures eingefroren)
 
 ## Phase 8 – Collaboration
 

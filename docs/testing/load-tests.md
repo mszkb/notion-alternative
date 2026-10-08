@@ -6,7 +6,7 @@ Belastbarkeit großer Workspaces ([#77](https://github.com/mszkb/notion-alternat
 
 | Was | Befehl | Misst |
 | --- | --- | --- |
-| Server | `pnpm --filter @notion-alt/server build && node scripts/loadtest/server-load.mjs` | Seed per Sync-Push (volle Batches à 500 Operationen), mehrere Geräte gleichzeitig (Push + Delta-Pull), vollständiger Pull, Snapshot seitenweise (Re-Sync, #97), Änderungslog (JSON-Export), Serversuche; RAM/CPU des Serverprozesses |
+| Server | `node scripts/loadtest/server-load.mjs` (startet den PHP-Server mit `php -S`) | Seed per Sync-Push (volle Batches à 500 Operationen), mehrere Geräte gleichzeitig (Push + Delta-Pull), vollständiger Pull, Snapshot seitenweise (Re-Sync, #97), Änderungslog (JSON-Export), Serversuche; RAM/CPU des Serverprozesses |
 | Client (Chromium) | `pnpm --filter @notion-alt/web loadtest:browser` | Snapshot seitenweise in die lokale Datenbank schreiben (neues Gerät/Re-Sync), Seitenliste, Blöcke einer Seite, Aufbau, Speichern und Laden des Suchindex (MiniSearch, #98), Suchanfragen, JS-Heap |
 | App (Chromium, [#96](https://github.com/mszkb/notion-alternative/issues/96)) | `LOAD_PAGES=1000 pnpm --filter @notion-alt/web exec playwright test e2e/load-app.spec.ts --project chromium` | Die echte App gegen einen echten Server: Seed über ein zweites Gerät; Erstsync als neues Gerät bis „Synchronisiert um“; Kaltstart aus IndexedDB, bis der Seitenbaum sichtbar ist; Öffnen einer Seite mit `LOAD_BIG_BLOCKS` (2 000) Blöcken; Tippen am Ende dieser Seite. Ohne `LOAD_PAGES` wird der Test übersprungen, auch in der CI. Optionen siehe unten. |
 | Client (Node) | `pnpm --filter @notion-alt/web loadtest` | Dasselbe Szenario mit fake-indexeddb. Nur für schnelle Vergleiche: Die IndexedDB-Zeiten sind dort viel zu hoch, weil Index-Cursor quadratisch laufen (10 000 Zeilen per `anyOf`: 51 s statt 0,5 s). |
@@ -24,7 +24,7 @@ Belastbarkeit großer Workspaces ([#77](https://github.com/mszkb/notion-alternat
 
 **Ziele:**
 
-- Ohne `BASE_URL` startet das Server-Skript `apps/server/dist` mit einer temporären Datenbank und misst RAM/CPU über `/proc`.
+- Ohne `BASE_URL` startet das Server-Skript den PHP-Server (`php -S` mit 8 Workern) mit einer temporären Datenbank und misst RAM/CPU des Hauptprozesses über `/proc`. Die Messwerte unten stammen noch vom Node-Server (bis #129); für PHP-FPM unter Last steht eine neue Messung aus.
 - Mit `BASE_URL=http://127.0.0.1:3000` nimmt es einen laufenden Server. Den RAM liest es dann aus `/api/metrics`, wenn `METRICS_ENABLED=true` ist und der Endpunkt erreichbar ist.
 - Gegen eine produktive Instanz nur mit `ALLOW_REGISTRATION=true` und auf eigene Gefahr. Das Skript legt ein Konto mit großem Workspace an.
 
@@ -50,7 +50,7 @@ Gemessen am 2026-10-04 nach #95 (Push-Batch in einer Transaktion) und #97 (seite
 | Serversuche (FTS5, 50 Anfragen) | p50 51 ms, p95 58 ms, max 68 ms |
 | Lange Seiten: 20 Seiten à 500 Blöcke | 1 199 Ops/s, Push à 500 p50 409 ms (vor #99: 325 Ops/s, p50 1,5 s) |
 
-**SQLite:** Der WAL-Modus und `busy_timeout = 5000` sind gesetzt (`apps/server/src/db/database.ts`). Parallele Pushes serialisieren sich an der Schreibsperre. Die Wartezeit erscheint als längere Antwortzeit (max 416 ms bei 10 Geräten), nicht als Fehler.
+**SQLite:** Der WAL-Modus und `busy_timeout = 5000` sind gesetzt (`apps/server-php/src/Database/Database.php`). Parallele Pushes serialisieren sich an der Schreibsperre. Die Wartezeit erscheint als längere Antwortzeit (max 416 ms bei 10 Geräten), nicht als Fehler.
 
 ### Client, Chromium
 
