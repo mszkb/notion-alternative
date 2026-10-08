@@ -19,5 +19,7 @@ final class Config
         public readonly AttachmentsConfig $attachments,
         public readonly PushConfig $push,
         public readonly AuthRateLimitConfig $authRateLimit,
+        /** Take the client address from `X-Forwarded-For` of a private-network proxy (rate limits). */
+        public readonly bool $trustProxy = true,
     ) {}
 }

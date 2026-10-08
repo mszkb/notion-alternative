@@ -109,6 +109,7 @@ final class ConfigLoader
         $cookieSecure = $this->boolean('COOKIE_SECURE', false);
         $sessionTtlDays = (int) $this->number('SESSION_TTL_DAYS', 30, true, 1, 365);
         $metricsEnabled = $this->boolean('METRICS_ENABLED', false);
+        $trustProxy = $this->boolean('TRUST_PROXY', true);
         $windowMinutes = (int) $this->number('AUTH_RATE_LIMIT_WINDOW_MINUTES', 15, true, 1, 1440);
         $loginPerIp = (int) $this->number('LOGIN_MAX_FAILURES_PER_IP', 20, true, 1);
         $loginPerEmail = (int) $this->number('LOGIN_MAX_FAILURES_PER_EMAIL', 5, true, 1);
@@ -141,6 +142,7 @@ final class ConfigLoader
             cookieSecure: $cookieSecure,
             sessionTtlDays: $sessionTtlDays,
             metricsEnabled: $metricsEnabled,
+            trustProxy: $trustProxy,
             importMaxBytes: self::megabytes($importMaxMb),
             attachments: new AttachmentsConfig(
                 dir: $attachmentsDir !== null

@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import type { Operation } from '@notion-alt/shared'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { type Account, blockPayload, docPayload, op, push, signUp } from '../src/client'
+import {
+  type Account,
+  blockPayload,
+  docPayload,
+  op,
+  push,
+  registerDevice,
+  signUp,
+} from '../src/client'
 
 let alice: Account
 
@@ -88,5 +96,39 @@ describe('POST /api/sync/push', () => {
     const results = await push(alice, ...ops)
     expect(results).toHaveLength(500)
     expect(results.at(-1)).toMatchObject({ status: 'applied', seq: 500 })
+  })
+
+  it('applies pushes of several devices at the same time without errors', async () => {
+    // Parallel requests contend for SQLite's write lock: they must wait for it (busy_timeout),
+    // never fail with SQLITE_BUSY (a transaction that reads before writing cannot wait).
+    const doc = createDoc()
+    const devices = [alice.deviceId]
+    for (let i = 1; i < 6; i++) devices.push(await registerDevice(alice.client, `Gerät ${i}`))
+    const blocks = devices.map((deviceId) =>
+      op({ ...alice, deviceId }, 'block', 'create', randomUUID(), blockPayload(doc.entityId)),
+    )
+    await push(alice, doc, ...blocks)
+    const results = await Promise.all(
+      blocks.map(async (block) => {
+        const statuses: string[] = []
+        for (let revision = 1; revision <= 8; revision++) {
+          const target = { ...alice, deviceId: block.deviceId }
+          const update = op(
+            target,
+            'block',
+            'update',
+            block.entityId,
+            {
+              content: `Fassung ${revision}`,
+            },
+            revision,
+          )
+          const [result] = await push(alice, update)
+          statuses.push(result!.status)
+        }
+        return statuses
+      }),
+    )
+    expect(results.flat()).toEqual(Array(48).fill('applied'))
   })
 })

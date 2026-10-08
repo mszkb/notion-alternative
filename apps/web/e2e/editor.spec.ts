@@ -1,4 +1,4 @@
-import { blockInput, blocks, createVia, expect, newPage, test, waitForSaved } from './fixtures'
+import { blockInput, blocks, expect, newPage, newSubpage, test, waitForSaved } from './fixtures'
 
 test('block editor: headings, text, lists, quote, code and inline formatting', async ({
   signedIn: page,
@@ -63,7 +63,7 @@ test('page tree, breadcrumbs, links, backlinks, tags, favorites and search', asy
   await waitForSaved(page)
 
   // Nested page with breadcrumbs.
-  await createVia(page, '+ Unterseite', 'Kind')
+  await newSubpage(page, 'Kind')
   await expect(page.getByRole('navigation', { name: 'Pfad' })).toContainText('Ziel')
   const tree = page.getByRole('tree')
   await expect(tree.getByRole('group').getByRole('link', { name: 'Kind' })).toBeVisible()
@@ -117,7 +117,7 @@ test('page tree, breadcrumbs, links, backlinks, tags, favorites and search', asy
 
 test('deleting a page removes its subtree', async ({ signedIn: page }) => {
   await newPage(page, 'Eltern')
-  await createVia(page, '+ Unterseite', 'Kind')
+  await newSubpage(page, 'Kind')
   await page.getByRole('navigation', { name: 'Pfad' }).getByRole('link', { name: 'Eltern' }).click()
 
   page.once('dialog', (dialog) => void dialog.accept())

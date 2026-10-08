@@ -81,6 +81,8 @@ export async function startServer(extraEnv: Record<string, string> = {}): Promis
       DATA_DIR: dataDir,
       DATABASE_PATH: path.join(dataDir, 'app.sqlite'),
       LOG_LEVEL: 'warn',
+      // Several workers for PHP's built-in server, so requests really run in parallel.
+      PHP_CLI_SERVER_WORKERS: '4',
       ...SERVER_SETTINGS,
       // The server must trust the fake push service (default command: `php -d curl.cainfo=…`).
       PUSH_RECEIVER_CA: PUSH_RECEIVER_CERT,

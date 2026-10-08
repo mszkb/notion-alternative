@@ -88,6 +88,21 @@ final class CliTest extends TestCase
         Backup::verify($dir);
     }
 
+    public function testVerifyRejectsSymlinks(): void
+    {
+        ['dir' => $dir, 'manifest' => $manifest] = Backup::create($this->config, $this->tempDir() . '/backups');
+        $secret = $this->tempDir() . '/secret.txt';
+        file_put_contents($secret, 'geheim');
+        $link = "{$dir}/attachments/{$this->ws}/" . Ids::uuid();
+        mkdir(\dirname($link), 0o777, true);
+        symlink($secret, $link);
+        $manifest['files'][] = ['path' => substr($link, \strlen($dir) + 1), 'size' => 6, 'sha256' => hash('sha256', 'geheim')];
+        file_put_contents("{$dir}/manifest.json", Backup::prettyJson($manifest));
+
+        $this->expectExceptionMessageMatches('/^Unsafe path in backup: attachments\//');
+        Backup::verify($dir);
+    }
+
     public function testResetPasswordEndsSessions(): void
     {
         Sql::run($this->db, "insert into sessions (id, user_id, created_at, expires_at) values ('s', ?, 'now', '9999')", [$this->user]);

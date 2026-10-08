@@ -31,7 +31,11 @@ test('a subpage is created with the "+" that appears on hover', async ({ signedI
     .locator('.tree-row')
     .first()
   await row.hover()
+  const parentUrl = page.url()
   await row.getByRole('button', { name: 'Unterseite anlegen' }).click()
+  // Typing before the new page is open would rename the parent.
+  await page.waitForURL((url) => url.href !== parentUrl)
+  await expect(page.getByLabel('Titel')).toHaveValue('')
   await page.getByLabel('Titel').fill('Kind')
   await expect(page.getByRole('navigation', { name: 'Pfad' })).toContainText('Eltern')
   await expect(page.getByRole('tree')).toContainText('Kind')

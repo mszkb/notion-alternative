@@ -9,6 +9,7 @@ use NotionAlt\Config\ConfigLoader;
 use NotionAlt\Database\Database;
 use NotionAlt\Database\Migrator;
 use NotionAlt\Http\BasePath;
+use NotionAlt\Http\DeferredJson;
 use NotionAlt\Http\HttpError;
 use NotionAlt\Http\Json;
 use NotionAlt\Http\JsonBodyMiddleware;
@@ -77,6 +78,17 @@ final class HttpTest extends TestCase
     }
 
     /** Routes with their own limit and octet-stream parser (attachment uploads). */
+    /** Import: the JSON body is decoded only when the route asks, with the usual errors. */
+    public function testDeferredJsonBodies(): void
+    {
+        $json = ['Content-Type' => 'application/json'];
+        self::assertSame('{"deferred":true,"body":{"a":1}}', (string) $this->request('POST', '/api/deferred', '{"a":1}', $json)->getBody());
+        $broken = $this->request('POST', '/api/deferred', '{"a"', $json);
+        self::assertSame(400, $broken->getStatusCode());
+        self::assertSame('{"error":{"code":"bad_request","message":"Body is not valid JSON but content-type is set to \'application/json\'"}}', (string) $broken->getBody());
+        self::assertSame(400, $this->request('POST', '/api/deferred', '{"__proto__":{}}', $json)->getStatusCode());
+    }
+
     public function testRawBodyRoutes(): void
     {
         $octet = ['Content-Type' => 'application/octet-stream'];
@@ -240,6 +252,11 @@ final class HttpTest extends TestCase
 
             return Json::respond($response, $body instanceof RawBody ? ['raw' => bin2hex($body->bytes)] : ['body' => $body === Undefined::Value ? null : $body]);
         })->setArguments([JsonBodyMiddleware::BODY_LIMIT => '4', JsonBodyMiddleware::OCTET_STREAM => '1']);
+        $app->post('/api/deferred', static function (ServerRequestInterface $request, ResponseInterface $response): ResponseInterface {
+            $before = JsonBodyMiddleware::body($request) instanceof DeferredJson;
+
+            return Json::respond($response, ['deferred' => $before, 'body' => JsonBodyMiddleware::decodedBody($request)]);
+        })->setArgument(JsonBodyMiddleware::DEFER_JSON, '1');
         $app->get('/api/limited', static fn(): never => throw new HttpError(429, 'too_many_attempts', 'Too many attempts, try again later', ['retryAfter' => 60]));
         $app->get('/api/boom', static fn(): never => throw new \LogicException('kaputt'));
 

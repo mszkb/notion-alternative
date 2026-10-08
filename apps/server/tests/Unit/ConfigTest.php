@@ -25,6 +25,8 @@ final class ConfigTest extends TestCase
         self::assertFalse($config->cookieSecure);
         self::assertSame(30, $config->sessionTtlDays);
         self::assertFalse($config->metricsEnabled);
+        self::assertTrue($config->trustProxy);
+        self::assertFalse(ConfigLoader::load(['TRUST_PROXY' => 'false'], self::APP)->trustProxy);
         self::assertSame(50_000_000, $config->importMaxBytes);
         self::assertSame('/srv/app/data/attachments', $config->attachments->dir);
         self::assertSame(25_000_000, $config->attachments->maxBytes);

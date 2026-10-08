@@ -61,7 +61,7 @@ final class AuthRoutes
     private function registerUser(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $db = ($this->db)();
-        $ip = ClientIp::of($request);
+        $ip = ClientIp::of($request, $this->config->trustProxy);
         $byIp = $this->limiter($db, 'register_ip', $this->config->authRateLimit->registerMaxAttemptsPerIp);
         $this->enforceLimit([[$byIp, $ip]]);
         $byIp->record($ip);
@@ -93,7 +93,7 @@ final class AuthRoutes
         $db = ($this->db)();
         /** @var array{email: string, password: string} $input */
         $input = Validation::parseInput(AuthSchemas::loginInput(), JsonBodyMiddleware::body($request));
-        $ip = ClientIp::of($request);
+        $ip = ClientIp::of($request, $this->config->trustProxy);
         [$byIp, $byEmail] = $this->loginLimiters($db);
         $this->enforceLimit([[$byIp, $ip], [$byEmail, $input['email']]]);
 
@@ -145,7 +145,7 @@ final class AuthRoutes
         $input = Validation::parseInput(AuthSchemas::changePasswordInput(), JsonBodyMiddleware::body($request));
         $auth = AuthContext::of($request);
         $email = $auth->user['email'];
-        $ip = ClientIp::of($request);
+        $ip = ClientIp::of($request, $this->config->trustProxy);
         // Guessing the current password through a stolen session counts like failed logins.
         [$byIp, $byEmail] = $this->loginLimiters($db);
         $this->enforceLimit([[$byIp, $ip], [$byEmail, $email]]);
