@@ -1,116 +1,193 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- response bodies are plain JSON, checked by the assertions */
-import { randomUUID } from 'node:crypto'
-import type { Operation } from '@notion-alt/shared'
+import { randomBytes, randomUUID } from 'node:crypto'
+import type { Operation, SyncPushResult } from '@notion-alt/shared'
 import { inject } from 'vitest'
 
-/** Only HTTP (#118): the same calls work against any server implementation. */
 export const PASSWORD = 'correct horse battery staple'
 
-export interface Reply<T = any> {
+/** Parsed JSON of a response; tests read it like the app does. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- response bodies are untyped
+export type Json = any
+
+export interface Response {
   status: number
-  body: T
   headers: Headers
-  raw: Uint8Array
+  body: Buffer
+  json: () => Json
+  text: () => string
 }
 
+export interface RequestOptions {
+  /** Sent as JSON. */
+  json?: unknown
+  /** Raw body (e.g. attachment content). */
+  body?: Uint8Array | string
+  headers?: Record<string, string>
+}
+
+export const serverUrl = () => inject('serverUrl')
+
+/** True if the suite started the server itself; false for SERVER_URL. */
+export const managedServer = () => inject('managedServer')
+
+/**
+ * A random client address. The server trusts one proxy hop from a private address (the test
+ * runner connects from loopback), so `X-Forwarded-For` gives every client its own rate limits.
+ */
+export function randomIp(): string {
+  const [a, b, c] = randomBytes(3)
+  return `10.${a}.${b}.${c}`
+}
+
+export const uniqueEmail = (name = 'user') => `${name}-${randomUUID()}@example.com`
+
+/** HTTP client with its own session cookie and client address. */
 export class Client {
   cookie: string | null = null
-  readonly base = inject('serverUrl')
 
-  async request<T = any>(
-    method: string,
-    path: string,
-    body?: unknown,
-    headers: Record<string, string> = {},
-  ): Promise<Reply<T>> {
-    const binary = body instanceof Uint8Array
-    const response = await fetch(`${this.base}/api${path}`, {
+  constructor(
+    readonly ip: string = randomIp(),
+    readonly baseUrl: string = serverUrl(),
+  ) {}
+
+  async request(method: string, path: string, options: RequestOptions = {}): Promise<Response> {
+    const headers: Record<string, string> = { 'x-forwarded-for': this.ip, ...options.headers }
+    if (this.cookie) headers.cookie = this.cookie
+    let body: string | Buffer | undefined
+    if (options.json !== undefined) {
+      headers['content-type'] ??= 'application/json'
+      body = JSON.stringify(options.json)
+    } else if (options.body !== undefined) {
+      body = typeof options.body === 'string' ? options.body : Buffer.from(options.body)
+    }
+    const response = await fetch(new URL(path, this.baseUrl), {
       method,
-      headers: {
-        ...(this.cookie ? { cookie: this.cookie } : {}),
-        ...(body !== undefined && !binary ? { 'content-type': 'application/json' } : {}),
-        ...headers,
-      },
-      body: body === undefined ? undefined : binary ? (body as BodyInit) : JSON.stringify(body),
+      headers,
+      body,
+      redirect: 'manual',
     })
-    const session = response.headers.getSetCookie().find((cookie) => cookie.startsWith('session='))
-    if (session) {
-      const value = session.split(';')[0]!
-      this.cookie = value === 'session=' ? null : value
+    for (const setCookie of response.headers.getSetCookie()) {
+      const match = /^session=([^;]*)/.exec(setCookie)
+      if (!match) continue
+      const cleared = !match[1] || /expires=thu, 01 jan 1970/i.test(setCookie)
+      this.cookie = cleared ? null : `session=${match[1]}`
     }
-    const raw = new Uint8Array(await response.arrayBuffer())
-    const text = new TextDecoder().decode(raw)
-    let parsed: unknown = text
-    try {
-      parsed = text ? JSON.parse(text) : null
-    } catch {
-      // not JSON (attachments, metrics)
+    const data = Buffer.from(await response.arrayBuffer())
+    return {
+      status: response.status,
+      headers: response.headers,
+      body: data,
+      json: () => JSON.parse(data.toString()),
+      text: () => data.toString(),
     }
-    return { status: response.status, body: parsed as T, headers: response.headers, raw }
   }
 
-  get = <T = any>(path: string) => this.request<T>('GET', path)
-  post = <T = any>(path: string, body?: unknown) => this.request<T>('POST', path, body)
+  get(path: string, options?: RequestOptions) {
+    return this.request('GET', path, options)
+  }
+  post(path: string, json?: unknown, options: RequestOptions = {}) {
+    return this.request('POST', path, { ...options, json })
+  }
+  put(path: string, options?: RequestOptions) {
+    return this.request('PUT', path, options)
+  }
+  patch(path: string, json?: unknown) {
+    return this.request('PATCH', path, { json })
+  }
+  delete(path: string, json?: unknown) {
+    return this.request('DELETE', path, { json })
+  }
+
+  /** Same address, but its own session (or none). */
+  fork(cookie: string | null = null): Client {
+    const client = new Client(this.ip, this.baseUrl)
+    client.cookie = cookie
+    return client
+  }
 }
 
-/** A registered user with a workspace and a registered device. */
-export class Account extends Client {
-  email = `contract-${randomUUID()}@example.com`
-  workspaceId = ''
-  deviceId = randomUUID()
+/** Builds a query string from defined values. */
+export function query(params: Record<string, string | number | undefined>): string {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined)
+  return new URLSearchParams(entries.map(([k, v]): [string, string] => [k, String(v)])).toString()
+}
 
-  static async create(): Promise<Account> {
-    const account = new Account()
-    const registered = await account.post('/auth/register', {
-      email: account.email,
-      password: PASSWORD,
-    })
-    if (registered.status !== 201) throw new Error(`register: ${JSON.stringify(registered.body)}`)
-    account.workspaceId = (await account.get('/workspaces')).body.workspaces[0].id
-    const device = await account.post('/devices', { id: account.deviceId, name: 'Contract' })
-    if (device.status !== 201) throw new Error(`device: ${JSON.stringify(device.body)}`)
-    return account
+/** Throws with the body if the status differs (clearer than a failing `.json()` later). */
+export function expectStatus(response: Response, status: number): Response {
+  if (response.status !== status) {
+    throw new Error(`expected ${status}, got ${response.status}: ${response.text()}`)
   }
+  return response
+}
 
-  op(
-    entity: Operation['entity'],
-    kind: Operation['kind'],
-    entityId: string,
-    payload: object,
-    baseRevision: number | null = null,
-    deviceId = this.deviceId,
-  ): Operation {
-    return {
-      opId: randomUUID(),
-      deviceId,
-      workspaceId: this.workspaceId,
-      entity,
-      entityId,
-      kind,
-      baseRevision,
-      payload: payload as Record<string, unknown>,
-      createdAt: new Date().toISOString(),
-    }
+export interface Account {
+  client: Client
+  email: string
+  user: { id: string; email: string }
+  /** The default workspace created with the account. */
+  workspaceId: string
+  /** Device registered with the account's session (empty if `device: false`). */
+  deviceId: string
+}
+
+/** Registers a fresh account (unique email) with its own client address. */
+export async function signUp(options: { name?: string; device?: boolean } = {}): Promise<Account> {
+  const client = new Client()
+  const email = uniqueEmail(options.name)
+  const registered = expectStatus(
+    await client.post('/api/auth/register', { email, password: PASSWORD }),
+    201,
+  )
+  const workspaces = expectStatus(await client.get('/api/workspaces'), 200)
+  const workspaceId = workspaces.json().workspaces[0].id as string
+  let deviceId = ''
+  if (options.device ?? true) {
+    deviceId = await registerDevice(client)
   }
+  return { client, email, user: registered.json().user, workspaceId, deviceId }
+}
 
-  /** Pushes operations and returns the per-operation results. */
-  async push(...operations: Operation[]): Promise<any[]> {
-    const reply = await this.post('/sync/push', { operations })
-    if (reply.status !== 200) throw new Error(`push: ${reply.status} ${JSON.stringify(reply.body)}`)
-    return reply.body.results
-  }
+/** Registers a new device with the client's session; returns its id. */
+export async function registerDevice(client: Client, name = 'Test'): Promise<string> {
+  const id = randomUUID()
+  expectStatus(await client.post('/api/devices', { id, name }), 201)
+  return id
+}
 
-  /** Creates a page (and optional blocks) and returns their ids. */
-  async page(title = 'Seite', blocks: string[] = []) {
-    const id = randomUUID()
-    const blockIds = blocks.map(() => randomUUID())
-    await this.push(
-      this.op('document', 'create', id, docPayload(title)),
-      ...blocks.map((content, i) =>
-        this.op('block', 'create', blockIds[i]!, blockPayload(id, content, `a${i}`)),
-      ),
-    )
-    return { id, blockIds }
+/** Signs in again: a new session (new client, same address). */
+export async function login(account: Pick<Account, 'client' | 'email'>): Promise<Client> {
+  const client = account.client.fork()
+  expectStatus(
+    await client.post('/api/auth/login', { email: account.email, password: PASSWORD }),
+    200,
+  )
+  return client
+}
+
+export interface OpTarget {
+  workspaceId: string
+  deviceId: string
+}
+
+export function op(
+  target: OpTarget,
+  entity: Operation['entity'],
+  kind: Operation['kind'],
+  entityId: string,
+  payload: object = {},
+  baseRevision: number | null = null,
+  overrides: Partial<Operation> = {},
+): Operation {
+  return {
+    opId: randomUUID(),
+    deviceId: target.deviceId,
+    workspaceId: target.workspaceId,
+    entity,
+    entityId,
+    kind,
+    baseRevision,
+    payload: payload as Record<string, unknown>,
+    createdAt: new Date().toISOString(),
+    ...overrides,
   }
 }
 
@@ -119,16 +196,24 @@ export const docPayload = (title = 'Seite', parentId: string | null = null, sort
   title,
   sortKey,
   favorite: false,
-  createdAt: new Date().toISOString(),
+  createdAt: '2026-01-01T00:00:00.000Z',
 })
 
-export const blockPayload = (documentId: string, content = 'Text', sortKey = 'a0') => ({
-  documentId,
-  type: 'paragraph',
-  content,
-  attrs: {},
-  sortKey,
-})
+export const blockPayload = (
+  documentId: string,
+  content = 'x',
+  type = 'paragraph',
+  sortKey = 'a0',
+  attrs: object = {},
+) => ({ documentId, type, content, attrs, sortKey })
 
-export const errorCode = (reply: Reply) =>
-  (reply.body as { error?: { code?: string } })?.error?.code
+export type PushResult = SyncPushResult & Json
+
+/** `POST /api/sync/push`; returns the per-operation results. */
+export async function push(
+  account: { client: Client },
+  ...operations: Operation[]
+): Promise<PushResult[]> {
+  const response = expectStatus(await account.client.post('/api/sync/push', { operations }), 200)
+  return response.json().results
+}

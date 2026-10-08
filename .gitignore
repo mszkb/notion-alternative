@@ -8,6 +8,8 @@ coverage/
 data/
 *.sqlite
 *.sqlite-*
+# Databases written by the Node server, test fixtures of the PHP server (ADR 0018).
+!apps/server-php/tests/fixtures/*.sqlite
 .DS_Store
 test-results/
 playwright-report/

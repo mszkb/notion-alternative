@@ -95,16 +95,17 @@ Node 22 und pnpm (`corepack enable`).
 | `pnpm typecheck` | `tsc` bzw. `vue-tsc` in allen Paketen |
 | `pnpm test` | Vitest in allen Paketen |
 | `node scripts/loadtest/server-load.mjs`, `pnpm --filter @notion-alt/web loadtest:browser` | Lasttests Server/Client (`PAGES=10000` = Zielgröße), siehe `docs/testing/load-tests.md` |
-| `pnpm --filter @notion-alt/contract-tests test` | Black-Box-Tests des HTTP-API (#118); `SERVER_URL` bzw. `SERVER_CMD` für einen anderen Server, siehe `packages/contract-tests/README.md` |
+| `pnpm --filter @notion-alt/contract-tests test` | HTTP-Contract-Tests gegen den Node-Server (startet ihn selbst); anderer Server per `SERVER_CMD` oder `SERVER_URL`, nicht Teil von `pnpm test`, siehe `docs/testing/contract-tests.md` |
 | `pnpm --filter @notion-alt/web test:e2e` | Playwright (startet Server + Vite selbst); lokal ohne Browser-Download: `PW_CHROMIUM_PATH=/pfad/zu/chromium` |
 | `pnpm build` | Server-Bundle und SPA bauen |
 | `docker compose up -d --build` | Produktiv-Stack auf `:8080` |
+| `composer test` / `analyse` / `cs` (in `apps/server-php`) | PHP-Server: PHPUnit, PHPStan, PHP-CS-Fixer; Start mit `php -S 127.0.0.1:8000 -t public public/index.php` (siehe `apps/server-php/README.md`) |
 
-Struktur: `apps/server` (Fastify), `apps/web` (Vue SPA), `packages/shared` (zod-Schemas/Typen, Markdown-Inline-Parser, Sortierschlüssel für beide), `packages/contract-tests` (API-Tests nur über HTTP).
+Struktur: `apps/server` (Fastify), `apps/server-php` (Slim 4, entsteht parallel, ADR 0018), `apps/web` (Vue SPA), `packages/shared` (zod-Schemas/Typen, Markdown-Inline-Parser, Sortierschlüssel für beide), `packages/contract-tests` (HTTP-Black-Box-Tests der API gegen jeden Server).
 
 Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/` (Block-Editor, DOM↔Markdown), `src/layouts/`, `src/views/`, `src/components/`, `e2e/` (Playwright).
 
-- Neue DB-Migration: Datei in `apps/server/src/db/migrations/` anlegen **und** in `src/db/migrate.ts` registrieren; Migrationen nie nachträglich ändern.
+- Neue DB-Migration: Datei in `apps/server/src/db/migrations/` anlegen **und** in `src/db/migrate.ts` registrieren; Migrationen nie nachträglich ändern. Solange `apps/server-php` existiert, dieselbe Migration dort mit identischer DDL anlegen und die Fixtures mit `apps/server/scripts/dump-php-fixtures.ts` neu erzeugen.
 - Lokale Inhalte nur über `LocalStore` schreiben (`apps/web/src/local/store.ts`): Er schreibt Entität und Operation in einer Transaktion. Dexie-Transaktions-Scopes müssen `async`-Funktionen sein, sonst committet Dexie bei nativen `await`s zu früh.
 - Exportformat (`jsonExportSchema`) ändern: `EXPORT_SCHEMA_VERSION` erhöhen, Migration in `packages/shared/src/import.ts` ergänzen, JSON Schema und Fixture neu erzeugen (siehe `apps/server/test/fixtures/exports/README.md`); bestehende Fixtures nie ändern.
 - Lokales Schema ändern: neue `this.version(n + 1)` in `apps/web/src/local/db.ts` mit Upgrade; bestehende Versionen nie ändern (T-MIG-02).

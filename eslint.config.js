@@ -10,6 +10,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/coverage/**',
       '**/node_modules/**',
+      '**/vendor/**',
       '**/test-results/**',
       '**/playwright-report/**',
     ],
@@ -28,7 +29,13 @@ export default tseslint.config(
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['apps/server/**/*.{ts,js}', 'apps/*/scripts/**/*.{js,mjs}', 'scripts/**/*.mjs', '*.js'],
+    files: [
+      'apps/server/**/*.{ts,js}',
+      'packages/contract-tests/**/*.ts',
+      'apps/*/scripts/**/*.{js,mjs}',
+      'scripts/**/*.mjs',
+      '*.js',
+    ],
     languageOptions: { globals: globals.node },
   },
   {
