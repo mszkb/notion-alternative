@@ -187,6 +187,12 @@
   },
   {
     "type": "index",
+    "name": "sqlite_autoindex_metrics_1",
+    "tbl_name": "metrics",
+    "sql": null
+  },
+  {
+    "type": "index",
     "name": "sqlite_autoindex_push_hints_1",
     "tbl_name": "push_hints",
     "sql": null
@@ -322,6 +328,12 @@
     "name": "kysely_migration_lock",
     "tbl_name": "kysely_migration_lock",
     "sql": "CREATE TABLE \"kysely_migration_lock\" (\"id\" varchar(255) not null primary key, \"is_locked\" integer default 0 not null)"
+  },
+  {
+    "type": "table",
+    "name": "metrics",
+    "tbl_name": "metrics",
+    "sql": "CREATE TABLE \"metrics\" (\"name\" text not null, \"labels\" text not null, \"value\" real not null, constraint \"metrics_pk\" primary key (\"name\", \"labels\"))"
   },
   {
     "type": "table",

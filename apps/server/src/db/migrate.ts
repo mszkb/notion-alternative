@@ -14,6 +14,7 @@ import * as m0011 from './migrations/0011_snapshot_paging'
 import * as m0012 from './migrations/0012_document_icon_cover'
 import * as m0013 from './migrations/0013_auth_attempts'
 import * as m0014 from './migrations/0014_push_hints'
+import * as m0015 from './migrations/0015_metrics'
 
 // Migrations are registered statically so they survive bundling.
 export const migrations: Record<string, Migration> = {
@@ -31,6 +32,7 @@ export const migrations: Record<string, Migration> = {
   '0012_document_icon_cover': m0012,
   '0013_auth_attempts': m0013,
   '0014_push_hints': m0014,
+  '0015_metrics': m0015,
 }
 
 export async function migrateToLatest(db: Db): Promise<void> {
