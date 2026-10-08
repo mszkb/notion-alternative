@@ -42,4 +42,4 @@ Ohne SSH: den Datenordner per FTP sichern, während niemand die App benutzt, ode
 
 ## Umzug von der Docker-Version
 
-Der PHP-Server nutzt dieselbe Datenbank und dieselbe Ablage der Anhänge. Ein Backup der Docker-Version (`docker compose exec -T backend node dist/index.js backup`, siehe [Backup](../operations/backup.md)) lässt sich mit `php api/app/bin/console restore <Backup-Ordner>` einspielen. Passwörter werden nicht übernommen ([ADR 0018](../adr/0018-php-backend.md)): Jedes Konto bekommt mit `php api/app/bin/console reset-password <E-Mail>` ein neues.
+Webspace und Docker nutzen dieselbe Datenbank und dieselbe Ablage der Anhänge. Ein Backup der Docker-Version (`docker compose exec -T backend php bin/console backup`, bei der älteren Node-Version `… node dist/index.js backup`, siehe [Backup](../operations/backup.md)) lässt sich mit `php api/app/bin/console restore <Backup-Ordner>` einspielen. Passwörter aus der Node-Version werden nicht übernommen ([ADR 0018](../adr/0018-php-backend.md)): Jedes Konto bekommt mit `php api/app/bin/console reset-password <E-Mail>` ein neues.
