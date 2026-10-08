@@ -4,4 +4,6 @@ parameters:
         - src
         - tests
         - public
+        - bin/cron.php
+        - bin/console
     tmpDir: .phpstan.cache

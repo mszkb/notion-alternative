@@ -1,6 +1,6 @@
 # PHP-Server (Slim 4)
 
-Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`; Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121)): `POST /api/sync/push`; Sync-Pull, Änderungslog und Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122)): `GET /api/sync/pull`, `GET /api/sync/log`, `GET /api/sync/snapshot` (auch seitenweise); Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123)): `GET /api/search`; Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124)): `GET /api/attachments/usage`, `PUT/GET /api/attachments/:id/content`; Verlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126)): `GET /api/documents/:id/history`, `GET /api/documents/:id/history/:seq`, `POST /api/import`; Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125)): `GET /api/push/public-key`, `POST/DELETE /api/push/subscriptions` und Hinweise nach dem Sync-Push. Metriken (#127): `GET /api/metrics`. Es fehlen noch Cron und CLI (#127).
+Neuimplementierung des Backends in PHP für Shared Hosting ([ADR 0018](../../docs/adr/0018-php-backend.md), Epic [#116](https://github.com/mszkb/notion-alternative/issues/116)). Der Server entsteht parallel zu `apps/server` (Node) und übernimmt dessen HTTP-API, SQLite-Datei und Migrationen. Stand: Grundgerüst ([#119](https://github.com/mszkb/notion-alternative/issues/119)) mit `GET /api/health` und `GET /api/ready`; Auth, Sessions, Workspaces und Geräte ([#120](https://github.com/mszkb/notion-alternative/issues/120)): `/api/auth/*`, `/api/workspaces`, `/api/devices`; Sync-Push ([#121](https://github.com/mszkb/notion-alternative/issues/121)): `POST /api/sync/push`; Sync-Pull, Änderungslog und Snapshot ([#122](https://github.com/mszkb/notion-alternative/issues/122)): `GET /api/sync/pull`, `GET /api/sync/log`, `GET /api/sync/snapshot` (auch seitenweise); Suche ([#123](https://github.com/mszkb/notion-alternative/issues/123)): `GET /api/search`; Dateianhänge ([#124](https://github.com/mszkb/notion-alternative/issues/124)): `GET /api/attachments/usage`, `PUT/GET /api/attachments/:id/content`; Verlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126)): `GET /api/documents/:id/history`, `GET /api/documents/:id/history/:seq`, `POST /api/import`; Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125)): `GET /api/push/public-key`, `POST/DELETE /api/push/subscriptions` und Hinweise nach dem Sync-Push. Metriken, Cron und CLI ([#127](https://github.com/mszkb/notion-alternative/issues/127)): `GET /api/metrics`, `bin/cron.php`, `bin/console`. Damit sind alle Endpunkte des Node-Servers portiert; offen sind das endgültige Docker-Image und das Paket für Webhosting (#128).
 
 ## Voraussetzungen
 
@@ -123,6 +123,28 @@ Port von `apps/server/src/push/` (ADR 0005): Abos mit denselben Prüfungen und F
 - **Versand nach der Antwort** (`Http/AfterResponse`): unter PHP-FPM nach `fastcgi_finish_request()`, sonst mit `Content-Length` und geleerter Ausgabe, damit der Client nicht wartet. Fällige Hinweise gehen sofort raus; einen gebündelten Hinweis wartet der Prozess nur unter PHP-FPM ab (höchstens 2 s). Sonst schickt ihn der nächste Sync-Push oder -Pull eines Geräts oder der Cron (#127).
 - Jeder Hinweis wird vor dem Versand per `update … where due_at = ?` beansprucht, parallele Worker senden ihn also nie doppelt. `404`/`410` des Push-Dienstes löschen das Abo, ebenso fünf Fehlversuche in Folge.
 - Versand mit ext-curl (nur HTTPS, keine Redirects, 10 s Timeout). Für die Contract-Tests muss `curl` dem Zertifikat des Fake-Push-Dienstes vertrauen: `php -d curl.cainfo=$PUSH_RECEIVER_CA -S …`.
+
+## Cron und Kommandozeile
+
+Was der Node-Server mit Timern erledigt, macht `bin/cron.php`. Beim Hoster alle 5 Minuten eintragen:
+
+```sh
+*/5 * * * * php /pfad/zu/api/bin/cron.php
+```
+
+Ein Lauf löscht abgelaufene Sitzungen und Rate-Limit-Zähler, baut veraltete Sucheinträge neu (#99), verschickt fällige Push-Hinweise und entfernt Dateien gelöschter Anhänge nach `ATTACHMENT_RETENTION_DAYS`. Er schreibt eine JSON-Zeile ins Log; überlappende Läufe überspringt eine `flock`-Sperre (`cron.lock` neben der Datenbank). Fehlt der Cron, holen Anfragen das Nötige nach (Suchindex vor jeder Suche, Push-Hinweise nach Sync-Anfragen); nur das Aufräumen bleibt dann liegen.
+
+`bin/console` (gleiche Konfiguration wie der Webserver; Ausgabe eine JSON-Zeile, Fehler auf stderr):
+
+| Befehl | Zweck |
+| --- | --- |
+| `migrate` | ausstehende Migrationen anwenden (sonst macht das die erste Anfrage) |
+| `backup [Zielordner]` | Datenbank (`VACUUM INTO`, konsistent im laufenden Betrieb) und Anhänge des Volumes nach `backup-<Zeit>/` mit `manifest.json`; Standardziel `<Datenverzeichnis>/backups` |
+| `restore <Backup-Ordner> [--force]` | Backup prüfen und zurückspielen, danach migrieren und die Sequenznummern anheben (alle Geräte synchronisieren neu). Vorher die App vom Netz nehmen; `--force` ersetzt eine vorhandene Datenbank |
+| `migrate-attachments-to-s3` | Anhänge aus dem Volume nach S3 kopieren und prüfen (#63), wiederholbar |
+| `reset-password <E-Mail>` | neues Passwort setzen und alle Sitzungen beenden. Das Passwort kommt von stdin (`echo '…' \| bin/console reset-password a@b.de`); im Terminal ohne Eingabe wird eines erzeugt und ausgegeben. Für Konten aus der Node-Zeit, deren scrypt-Hashes nicht übernommen werden (ADR 0018) |
+
+Backups haben dasselbe Format wie beim Node-Server (`manifest.json`, `app.sqlite`, `attachments/<workspace>/<id>`); ein Backup des einen lässt sich mit dem anderen zurückspielen, solange dieser alle Migrationen kennt.
 
 ## Metriken
 
