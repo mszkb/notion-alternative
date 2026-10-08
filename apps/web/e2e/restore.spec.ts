@@ -1,9 +1,9 @@
 import type { Browser, Page } from '@playwright/test'
 import {
   blockInput,
-  createVia,
   expect,
   newPage,
+  newSubpage,
   PASSWORD,
   signIn,
   test,
@@ -29,7 +29,7 @@ test('a deleted page comes back from the trash with its subpage, also elsewhere'
 }) => {
   const email = await signIn(page)
   await newPage(page, 'Elternseite')
-  await createVia(page, '+ Unterseite', 'Unterseite')
+  await newSubpage(page, 'Unterseite')
   await page.keyboard.type('Inhalt der Unterseite')
   await waitForSaved(page)
   await page

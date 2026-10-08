@@ -1,13 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { jsonExportSchema, readZip, verifyExportArchive } from '@notion-alt/shared'
 import type { Download, Page } from '@playwright/test'
-import { createVia, expect, newPage, takeServerDown, test, waitForSaved } from './fixtures'
+import { expect, newPage, newSubpage, takeServerDown, test, waitForSaved } from './fixtures'
 
 test('exports the workspace as Markdown, offline too', async ({ signedIn: page }) => {
   await newPage(page, 'Ziel')
   await page.keyboard.type('Unterseite des Ziels folgt.')
   await waitForSaved(page)
-  await createVia(page, '+ Unterseite', 'Kind')
+  await newSubpage(page, 'Kind')
   await page.keyboard.type('Ich bin das Kind.')
   await waitForSaved(page)
 
@@ -154,7 +154,7 @@ test('T-EXP-02: imports a complete export as a new workspace', async ({ signedIn
   await newPage(page, 'Archiv')
   await page.keyboard.type('Wichtiger Inhalt')
   await waitForSaved(page)
-  await createVia(page, '+ Unterseite', 'Bilder')
+  await newSubpage(page, 'Bilder')
   await waitForSaved(page)
   await page
     .getByTestId('attachment-input')

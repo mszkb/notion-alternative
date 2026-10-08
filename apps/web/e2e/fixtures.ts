@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { test as base, expect, type Page } from '@playwright/test'
+import { test as base, expect, type Locator, type Page } from '@playwright/test'
 
 export const PASSWORD = 'correct horse battery'
 
@@ -25,8 +25,23 @@ export async function takeServerDown(page: Page): Promise<void> {
 
 /** Clicks a button that creates a page and waits until the new, empty page is shown. */
 export async function createVia(page: Page, button: string, title: string): Promise<void> {
+  await createWith(page, page.getByRole('button', { name: button, exact: true }).first(), title)
+}
+
+/** Creates a sub-page of the open page through its ⋯ menu. */
+export async function newSubpage(page: Page, title: string): Promise<void> {
+  await page.getByRole('button', { name: 'Seitenmenü' }).click()
+  // The tree's per-page buttons share the label; take the one in the open menu.
+  await createWith(
+    page,
+    page.locator('.page-menu-list').getByRole('button', { name: 'Unterseite anlegen' }),
+    title,
+  )
+}
+
+async function createWith(page: Page, button: Locator, title: string): Promise<void> {
   const before = page.url()
-  await page.getByRole('button', { name: button, exact: true }).first().click()
+  await button.click()
   await page.waitForURL((url) => url.href !== before && url.pathname.includes('/p/'))
   await expect(page.getByLabel('Titel')).toHaveValue('')
   await page.getByLabel('Titel').fill(title)
