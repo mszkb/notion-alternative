@@ -128,9 +128,9 @@ Folgt aus der Zielgruppe ([`vision.md`](docs/product/vision.md)); Epic [#130](ht
 
 ## Ohne Phase – PHP-Backend für Webhosting
 
-Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), Entscheidung [ADR 0018](docs/adr/0018-php-backend.md) (Proposed).
+Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), Entscheidung [ADR 0018](docs/adr/0018-php-backend.md).
 
-- [ ] ADR 0018 angenommen ([#117](https://github.com/mszkb/notion-alternative/issues/117); Entwurf liegt vor)
+- [x] ADR 0018 angenommen ([#117](https://github.com/mszkb/notion-alternative/issues/117); Argon2id, keine Übernahme der scrypt-Hashes)
 - [x] Contract-Tests gegen beliebige Server-URL ([#118](https://github.com/mszkb/notion-alternative/issues/118))
 - [ ] PHP-Server: Grundgerüst, Auth, Sync, Suche, Anhänge, Push, Verlauf, Import, CLI ([#119](https://github.com/mszkb/notion-alternative/issues/119)–[#127](https://github.com/mszkb/notion-alternative/issues/127))
 - [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128))

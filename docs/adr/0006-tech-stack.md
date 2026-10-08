@@ -1,10 +1,10 @@
 # 0006 – Tech-Stack (Frontend/Backend)
 
-- **Status:** Accepted
+- **Status:** Accepted, Server-Teil superseded by 0018
 - **Datum:** 2026-10-02
 
 
-> **Hinweis:** Der Teil „Backend (Fastify, Node)“ wird mit [ADR 0018](0018-php-backend.md) (PHP-Backend, `Proposed`) ersetzt, sobald es angenommen ist.
+> **Teilweise ersetzt:** Der Teil „Backend (Fastify, Node)“ ist durch [ADR 0018](0018-php-backend.md) (PHP-Backend, angenommen 2026-10-08) ersetzt. Bis zur Umstellung ([#129](https://github.com/mszkb/notion-alternative/issues/129)) läuft weiter der Node-Server.
 
 ## Kontext
 

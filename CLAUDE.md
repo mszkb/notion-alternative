@@ -12,7 +12,8 @@ Phase 0 abgeschlossen, Phase 1 (Foundation) umgesetzt: Monorepo, Server mit Auth
 
 Entschieden (`Accepted`):
 
-- **Stack** ([ADR 0006](docs/adr/0006-tech-stack.md)): TypeScript; Vue 3 SPA (Vite, ohne Nuxt); Fastify; SQLite (Server, inkl. FTS5); Dateien im Volume, S3 später; Docker Compose mit 2 Containern (`frontend`, `backend`).
+- **Stack** ([ADR 0006](docs/adr/0006-tech-stack.md)): TypeScript; Vue 3 SPA (Vite, ohne Nuxt); Fastify; SQLite (Server, inkl. FTS5); Dateien im Volume, S3 später; Docker Compose mit 2 Containern (`frontend`, `backend`). Server-Teil ersetzt durch ADR 0018.
+- **PHP-Backend** ([ADR 0018](docs/adr/0018-php-backend.md)): PHP 8.2+ mit Slim 4 in `apps/server-php`, gleiches HTTP-API und dieselbe SQLite-Datei; Webhosting als Hauptweg, Docker bleibt; Passwörter mit Argon2id (`password_hash`), keine Übernahme der scrypt-Hashes; Node-Server läuft bis zur Umstellung (#129), Contract-Tests sind die Spezifikation.
 - **Lokale DB** ([ADR 0001](docs/adr/0001-local-storage.md)): IndexedDB über Dexie.
 - **Konflikte** ([ADR 0003](docs/adr/0003-conflict-resolution.md)): Block-Merge + sichtbare Konfliktanzeige.
 - **Sync** ([ADR 0002](docs/adr/0002-sync-protocol.md)): REST-Batch (`/api/sync/push`, `/pull`, `/snapshot`), Operationen auf Blockebene.
@@ -108,7 +109,7 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Exportformat (`jsonExportSchema`) ändern: `EXPORT_SCHEMA_VERSION` erhöhen, Migration in `packages/shared/src/import.ts` ergänzen, JSON Schema und Fixture neu erzeugen (siehe `apps/server/test/fixtures/exports/README.md`); bestehende Fixtures nie ändern.
 - Lokales Schema ändern: neue `this.version(n + 1)` in `apps/web/src/local/db.ts` mit Upgrade; bestehende Versionen nie ändern (T-MIG-02).
 - Neue Abhängigkeiten im Server-Image müssen auf `linux/arm64` ohne Compiler installierbar sein (Prebuild im Paket); der arm64-Build im Gitea-Nightly (`msz/gitea-workflows`, 22:00) prüft das.
-- Editor: Neue strukturelle Schritte in `PageEditor.vue` rufen vorher `checkpoint()` auf, sonst fehlen sie im blockübergreifenden Undo (ADR 0008). Kinder eines Toggles sind die folgenden Blöcke mit größerem `attrs.indent` (ADR 0019, Proposed).
+- Editor: Neue strukturelle Schritte in `PageEditor.vue` rufen vorher `checkpoint()` auf, sonst fehlen sie im blockübergreifenden Undo (ADR 0008). Kinder eines Toggles sind die folgenden Blöcke mit größerem `attrs.indent` ([ADR 0019](docs/adr/0019-block-types.md)).
 - Oberfläche: Farben, Abstände, Schriftgrößen, Radien und Schatten nur über die Tokens in `apps/web/src/styles.css` (`docs/product/ux-guide.md`).
 - Service Worker: `apps/web/src/sw/service-worker.ts`, gebaut von `apps/web/service-worker.plugin.ts` (Precache-Liste, Version) – nur im Production-Build. PWA-E2E (`e2e/pwa-*.spec.ts`) laufen im Playwright-Projekt `pwa` gegen `vite preview`. Komponenten mit entprellten Eingaben melden ihren Flush über `registerPendingEdits` an (Update-Neuladen).
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.

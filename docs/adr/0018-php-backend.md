@@ -1,7 +1,7 @@
 # 0018 – PHP-Backend mit Slim 4 für Shared Hosting
 
-- **Status:** Proposed
-- **Datum:** 2026-10-07
+- **Status:** Accepted
+- **Datum:** 2026-10-07, angenommen 2026-10-08
 
 ## Kontext
 
@@ -27,7 +27,7 @@ Mit dem Owner abgestimmt ([#116](https://github.com/mszkb/notion-alternative/iss
    - **+** Keine Abhängigkeiten.
    - **−** Routing, Request-Parsing, Fehlerbehandlung und Middleware selbst bauen; mehr eigener Code mit Sicherheitsrisiko.
 
-## Entscheidung (Vorschlag)
+## Entscheidung
 
 **Option 2: PHP 8.2+ mit Slim 4**, in `apps/server-php`, parallel zum Node-Server, bis die Contract-Tests ([#118](https://github.com/mszkb/notion-alternative/issues/118)) gegen beide grün sind. Danach wird PHP Standard und der Node-Server entfernt ([#129](https://github.com/mszkb/notion-alternative/issues/129)).
 
@@ -40,7 +40,7 @@ Mit dem Owner abgestimmt ([#116](https://github.com/mszkb/notion-alternative/iss
 | PHP ≥ 8.2 | Enums, readonly-Eigenschaften |
 | `pdo_sqlite` mit FTS5 | Datenbank und Volltextsuche; FTS5 wird beim Start geprüft, sonst klare Fehlermeldung |
 | `openssl` | Web Push (ES256, AES-128-GCM, ECDH), S3-Signatur |
-| `sodium` | Zufall, zeitkonstante Vergleiche, Passwort-Hashes (siehe unten) |
+| `sodium` | Zufall, zeitkonstante Vergleiche, Argon2id für `password_hash` |
 | `mbstring`, `json` | Texte, API |
 | optional `apcu` | Cache für Rate-Limits und Entprellung; ohne APCu übernimmt die Datenbank |
 
@@ -53,13 +53,10 @@ Mit dem Owner abgestimmt ([#116](https://github.com/mszkb/notion-alternative/iss
 - Metriken: Zähler in einer Tabelle, `/metrics` liest sie.
 - Timer werden zu `cron.php`: Aufräumen, verzögerter Suchindex, Push-Versand. Den Cron trägt man beim Hoster ein, z. B. alle 5 Minuten. Fehlt er, holt jede Anfrage begrenzte Arbeit nach (Suchindex vor jeder Suche, wie heute in #99).
 
-**Passwörter:** Bestehende Hashes haben das Format `scrypt$N$r$p$salt$hash` (N = 2^15, r = 8, p = 1). PHP kann scrypt nicht mit frei wählbaren Parametern rechnen. Vorgehen:
+**Passwörter:** Hashes mit `password_hash` und Argon2id (`PASSWORD_ARGON2ID`, Parameter in der Konfiguration; fehlt Argon2 in der PHP-Version des Hosters, bcrypt). `password_needs_rehash` hebt ältere Parameter beim nächsten Login an.
 
-1. Neue Hashes mit `password_hash` (Argon2id, wenn verfügbar, sonst bcrypt).
-2. Bestehende scrypt-Hashes einmal beim nächsten Login prüfen und dann umschreiben. Zum Prüfen gibt es zwei Wege; welcher es wird, entscheidet [#120](https://github.com/mszkb/notion-alternative/issues/120) mit Testvektoren aus dem Node-Server:
-   - Bevorzugt libsodium (`sodium_crypto_pwhash_scryptsalsa208sha256`), wenn sich unsere Parameter damit exakt abbilden lassen.
-   - Sonst eine kleine, getestete scrypt-Implementierung in PHP, die nur noch für diesen einen Prüfschritt läuft.
-3. Der Node-Server versteht `password_hash`-Formate nicht. Ein Rückweg nach der Umstellung geht deshalb nur per Backup von vorher ([Backup](../operations/backup.md)).
+- **Keine Übernahme der scrypt-Hashes des Node-Servers** (Entscheidung des Owners, 2026-10-08): Es gibt keine produktiven Konten, nur Testkonten. Bestehende Konten melden sich nach der Umstellung nicht mehr an und werden neu registriert. Inhalte bleiben, da Workspaces und Daten in derselben Datenbank liegen; ein CLI-Befehl zum Neusetzen eines Passworts kommt mit [#127](https://github.com/mszkb/notion-alternative/issues/127).
+- Der Node-Server versteht Argon2-Hashes nicht. Ein Rückweg nach der Umstellung geht nur per Backup von vorher ([Backup](../operations/backup.md)).
 
 **Datenbank:**
 
@@ -74,8 +71,8 @@ Mit dem Owner abgestimmt ([#116](https://github.com/mszkb/notion-alternative/iss
 
 ## Konsequenzen
 
-- ADR 0006, 0007 und 0010 werden bei Annahme in den Server-Teilen ersetzt; die Frontend-Teile gelten weiter. Bis dahin verweisen sie auf dieses ADR.
+- ADR 0006, 0007 und 0010 sind in den Server-Teilen ersetzt; die Frontend-Teile gelten weiter. Bis zur Umstellung (#129) bleibt der Node-Server die laufende Implementierung.
 - Die Contract-Tests (#118) werden zur Spezifikation des Servers; Unit-Tests des Node-Servers entfallen mit ihm.
 - Zwei Sprachen bis zur Umstellung. Änderungen am API müssen in beiden Servern landen. Neue Server-Features bis dahin möglichst zurückstellen.
 - `@notion-alt/shared` bleibt für Client und Contract-Tests; der Server nutzt es nicht mehr.
-- Offene Fragen, zu klären in den Folge-Issues: der scrypt-Weg (#120), die Quelle der Validierungsschemas (#119), der Mindestumfang von `cron.php` ohne APCu (#127).
+- Offene Fragen, zu klären in den Folge-Issues: die Quelle der Validierungsschemas (#119), der Mindestumfang von `cron.php` ohne APCu (#127).

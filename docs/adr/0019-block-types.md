@@ -1,7 +1,7 @@
 # 0019 – Blocktypen To-do, Toggle, Hinweis, Trenner
 
-- **Status:** Proposed
-- **Datum:** 2026-10-07
+- **Status:** Accepted
+- **Datum:** 2026-10-07, angenommen 2026-10-08
 
 ## Kontext
 
@@ -19,7 +19,7 @@ Für den Zustand „eingeklappt“:
 1. Synchronisiert (`attrs.collapsed`). **−** Jedes Auf- und Zuklappen wäre eine Operation und könnte Konflikte erzeugen.
 2. **Pro Gerät** (lokal gespeichert). **+** Kein Sync-Verkehr, keine Konflikte; so verhält sich auch Notion.
 
-## Entscheidung (Vorschlag)
+## Entscheidung
 
 - Neue Werte von `blockTypeSchema`: `todo`, `toggle`, `callout`, `divider`. Neue Attribute: `checked` (bool, `todo`) und `icon` (Emoji, bis 16 Zeichen, `callout`). `indent` gilt jetzt auch für To-dos und für Kinder eines Toggles.
 - **Toggle-Kinder über die Einrückung (Option 2).** Enter am Toggle legt das erste Kind an; Tab rückt einen Block unter einen Toggle ein, Umschalt+Tab und Backspace am Anfang rücken ihn wieder heraus.
