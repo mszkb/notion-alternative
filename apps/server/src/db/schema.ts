@@ -54,6 +54,10 @@ export interface DocumentsTable extends SyncColumns {
   sort_key: string
   /** SQLite has no boolean: 0/1. */
   favorite: number
+  /** #136: emoji, or null. */
+  icon: string | null
+  /** #136: `gradient:<name>` or `attachment:<uuid>`, or null. */
+  cover: string | null
   created_at: string
   updated_at: string
 }

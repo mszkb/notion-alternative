@@ -41,14 +41,14 @@ async function restore(id: string) {
 <style scoped>
 .trash-list {
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-md);
   padding: 0;
   list-style: none;
 }
 
 .trash-list li {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-lg);
   align-items: center;
   justify-content: space-between;
 }

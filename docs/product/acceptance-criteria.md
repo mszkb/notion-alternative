@@ -4,7 +4,7 @@ Der MVP gilt als erreicht, wenn alle Kriterien nachweisbar (idealerweise automat
 
 | # | Kriterium | Phase |
 | --- | --- | --- |
-| AC-01 | Ein Nutzer kann Dokumente ohne Netzwerkverbindung öffnen und bearbeiten. | 2, 4 |
+| AC-01 | Ein Nutzer kann auf dem Gerät geladene Dokumente ohne Netzwerkverbindung öffnen und bearbeiten. Mit „Alles offline verfügbar machen“ sind das alle Dokumente ([ADR 0017](../adr/0017-content-on-demand.md)). | 2, 4 |
 | AC-02 | Offline vorgenommene Änderungen werden nach Wiederherstellung der Verbindung zuverlässig synchronisiert. | 3 |
 | AC-03 | Änderungen auf zwei Geräten werden nicht still verloren. | 3, 7 |
 | AC-04 | Ein Nutzer kann den vollständigen Workspace in offenen Formaten exportieren. | 6 |

@@ -21,7 +21,7 @@ Produktziel, Prinzipien und Scope: [`docs/product/vision.md`](docs/product/visio
 
 ## Phase 0 – Discovery
 
-- [ ] Zielgruppe schärfen ([`docs/product/vision.md`](docs/product/vision.md))
+- [x] Zielgruppe schärfen ([`docs/product/vision.md`](docs/product/vision.md): Umsteiger von Notion, [#17](https://github.com/mszkb/notion-alternative/issues/17))
 - [x] Datenmodell festlegen ([`docs/architecture/sync.md`](docs/architecture/sync.md))
 - [x] Exportformat festlegen – [ADR 0004](docs/adr/0004-export-format.md)
 - [x] Lizenz bestätigen (MIT, siehe `LICENSE`)
@@ -82,7 +82,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Installationsflow (inkl. iOS-Hinweise, [Anleitung](docs/user/installation.md); iOS-Test manuell)
 - [x] Cache-Strategie ([`caching.md`](docs/architecture/caching.md))
 - [x] Web Push (VAPID, Subscription nach Nutzeraktion; ohne Bibliothek, Payload ohne Inhalte)
-- [ ] HTTPS für Smartphones/weitere Geräte entscheiden (Optionen in [ADR 0010](docs/adr/0010-reference-deployment-and-https.md))
+- [x] HTTPS für Smartphones/weitere Geräte entscheiden ([ADR 0011](docs/adr/0011-https-for-mobile-devices.md): Tailscale im Home-Lab, sonst Webhosting/Reverse Proxy)
 
 ## Phase 5 – Files and history
 
@@ -106,13 +106,35 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Offline-Tests
 - [x] Security Review
 - [x] Backup/Restore automatisiert getestet
-- [ ] Backup-/Restore-Dokumentation ([`backup.md`](docs/operations/backup.md) vorhanden; offen: einmal auf frischem Host durchspielen)
+- [x] Backup-/Restore-Dokumentation ([`backup.md`](docs/operations/backup.md); auf frischem Host (Raspberry Pi, arm64) durchgespielt)
 - [x] Lasttests ([`load-tests.md`](docs/testing/load-tests.md); offen: Messung auf dem Raspberry Pi)
 - [x] Re-Sync großer Workspaces seitenweise mit Fortschritt ([#97](https://github.com/mszkb/notion-alternative/issues/97))
 - [x] Lokaler Suchindex in IndexedDB gespeichert ([#98](https://github.com/mszkb/notion-alternative/issues/98))
 - [x] App bei 10 000 Seiten im Ziel: Kaltstart, Öffnen, Tippen ([#102](https://github.com/mszkb/notion-alternative/issues/102))
 - [x] Entferntes Gerät synchronisiert nach erneuter Anmeldung als neues Gerät weiter ([#46](https://github.com/mszkb/notion-alternative/issues/46))
-- [ ] Seiteninhalte bei Bedarf laden, „Alles offline verfügbar machen“ in den Einstellungen ([ADR 0017](docs/adr/0017-content-on-demand.md), Proposed, [#112](https://github.com/mszkb/notion-alternative/issues/112))
+- [x] Seiteninhalte bei Bedarf laden, „Alles offline verfügbar machen“ in den Einstellungen ([ADR 0017](docs/adr/0017-content-on-demand.md), [#112](https://github.com/mszkb/notion-alternative/issues/112))
+
+## Ohne Phase – Vertraute Oberfläche für Umsteiger von Notion
+
+Folgt aus der Zielgruppe ([`vision.md`](docs/product/vision.md)); Epic [#130](https://github.com/mszkb/notion-alternative/issues/130), Leitlinie [`ux-guide.md`](docs/product/ux-guide.md).
+
+- [x] Design-Leitlinie und Design-Tokens, hell/dunkel umschaltbar ([#131](https://github.com/mszkb/notion-alternative/issues/131))
+- [x] Einklappbare Seitenleiste, Breadcrumbs, Seitenkopf ([#132](https://github.com/mszkb/notion-alternative/issues/132))
+- [x] Slash-Menü, Markdown-Kürzel, Blockgriff ([#133](https://github.com/mszkb/notion-alternative/issues/133))
+- [x] Schnellsuche und Tastenkürzel ([#134](https://github.com/mszkb/notion-alternative/issues/134))
+- [x] Blocktypen To-do, Toggle, Callout, Trenner ([#135](https://github.com/mszkb/notion-alternative/issues/135))
+- [x] Seiten-Icons und Titelbilder ([#136](https://github.com/mszkb/notion-alternative/issues/136))
+- [x] Import aus Notion ([#137](https://github.com/mszkb/notion-alternative/issues/137))
+
+## Ohne Phase – PHP-Backend für Webhosting
+
+Epic [#116](https://github.com/mszkb/notion-alternative/issues/116), Entscheidung [ADR 0018](docs/adr/0018-php-backend.md).
+
+- [x] ADR 0018 angenommen ([#117](https://github.com/mszkb/notion-alternative/issues/117); Argon2id, keine Übernahme der scrypt-Hashes)
+- [x] Contract-Tests gegen beliebige Server-URL ([#118](https://github.com/mszkb/notion-alternative/issues/118))
+- [ ] PHP-Server: Grundgerüst, Auth, Sync, Suche, Anhänge, Push, Verlauf, Import, CLI ([#119](https://github.com/mszkb/notion-alternative/issues/119)–[#127](https://github.com/mszkb/notion-alternative/issues/127))
+- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128))
+- [ ] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129))
 
 ## Ohne Phase – Opt-in-Telemetrie
 

@@ -8,11 +8,12 @@ Self-hosted, **local-first / offline-first** Wissens- und Dokumentenplattform (N
 
 ## Status
 
-Phase 0 abgeschlossen, Phase 1 (Foundation) umgesetzt: Monorepo, Server mit Auth (inkl. Login-Rate-Limiting, Passwort ändern) und Workspaces, Metriken, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Phase 3 (Sync) begonnen: Geräteverwaltung, serverseitiges Änderungslog (`apps/server/src/sync/`) Push der Offline-Queue, Delta-Pull, Tombstones, Re-Sync, Sync-Trigger (`apps/web/src/sync/`), Block-Merge mit Konfliktobjekten und Konfliktansicht, serverseitige Suche (FTS5). Phase 4 (PWA) bis auf die HTTPS-Entscheidung (ADR 0011, `Proposed`) umgesetzt: Manifest, eigener Service Worker, Installationsflow, Web Push ohne Bibliothek. Phase 5 begonnen: Dateianhänge (ADR 0012). Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+Phase 0 abgeschlossen, Phase 1 (Foundation) umgesetzt: Monorepo, Server mit Auth (inkl. Login-Rate-Limiting, Passwort ändern) und Workspaces, Metriken, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Phase 3 (Sync) begonnen: Geräteverwaltung, serverseitiges Änderungslog (`apps/server/src/sync/`) Push der Offline-Queue, Delta-Pull, Tombstones, Re-Sync, Sync-Trigger (`apps/web/src/sync/`), Block-Merge mit Konfliktobjekten und Konfliktansicht, serverseitige Suche (FTS5). Phase 4 (PWA) umgesetzt (HTTPS: ADR 0011): Manifest, eigener Service Worker, Installationsflow, Web Push ohne Bibliothek. Phase 5 begonnen: Dateianhänge (ADR 0012). Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
 
 Entschieden (`Accepted`):
 
-- **Stack** ([ADR 0006](docs/adr/0006-tech-stack.md)): TypeScript; Vue 3 SPA (Vite, ohne Nuxt); Fastify; SQLite (Server, inkl. FTS5); Dateien im Volume, S3 später; Docker Compose mit 2 Containern (`frontend`, `backend`).
+- **Stack** ([ADR 0006](docs/adr/0006-tech-stack.md)): TypeScript; Vue 3 SPA (Vite, ohne Nuxt); Fastify; SQLite (Server, inkl. FTS5); Dateien im Volume, S3 später; Docker Compose mit 2 Containern (`frontend`, `backend`). Server-Teil ersetzt durch ADR 0018.
+- **PHP-Backend** ([ADR 0018](docs/adr/0018-php-backend.md)): PHP 8.2+ mit Slim 4 in `apps/server-php`, gleiches HTTP-API und dieselbe SQLite-Datei; Webhosting als Hauptweg, Docker bleibt; Passwörter mit Argon2id (`password_hash`), keine Übernahme der scrypt-Hashes; Node-Server läuft bis zur Umstellung (#129), Contract-Tests sind die Spezifikation.
 - **Lokale DB** ([ADR 0001](docs/adr/0001-local-storage.md)): IndexedDB über Dexie.
 - **Konflikte** ([ADR 0003](docs/adr/0003-conflict-resolution.md)): Block-Merge + sichtbare Konfliktanzeige.
 - **Sync** ([ADR 0002](docs/adr/0002-sync-protocol.md)): REST-Batch (`/api/sync/push`, `/pull`, `/snapshot`), Operationen auf Blockebene.
@@ -21,21 +22,23 @@ Entschieden (`Accepted`):
 - **Bibliotheken** ([ADR 0007](docs/adr/0007-foundation-libraries.md)): pnpm, Kysely + better-sqlite3, zod, esbuild, Vitest, ESLint + Prettier, nginx.
 - **Editor** ([ADR 0008](docs/adr/0008-block-editor.md)): eigener Block-Editor (ein `contenteditable` pro Block); `Block.content` ist Markdown-Inline, Seitenlinks `[Titel](page:<uuid>)`, kursiv wird als `_x_` geschrieben.
 - **Lokale Datenschicht** ([ADR 0009](docs/adr/0009-local-data-layer.md)): eine Dexie-DB pro Benutzer, Operationen in derselben Transaktion, Entität `document_tag`, Feldnamen camelCase, MiniSearch für die lokale Suche, Offline-Start mit zwischengespeichertem Benutzer.
-- **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. HTTPS für Smartphones wird in Phase 4 entschieden, kein dritter Container.
+- **Inhalte bei Bedarf** ([ADR 0017](docs/adr/0017-content-on-demand.md)): neue Geräte laden Seitenbaum und Metadaten, Seiteninhalte beim Öffnen; `unloadedDocuments` (Dexie v5) markiert fehlende Inhalte, „Alles offline verfügbar machen“ stellt auf `offlineMode = all`.
+- **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. Kein dritter Container.
+- **HTTPS für Smartphones** ([ADR 0011](docs/adr/0011-https-for-mobile-devices.md)): Home-Lab/Raspberry Pi per `tailscale serve`, sonst Webhosting bzw. vorhandener Reverse Proxy; keine Code-Änderung, `COOKIE_SECURE=true`.
 
-Noch offen in Phase 0: Zielgruppe schärfen.
+Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaffine (`docs/product/vision.md`).
 
 ## Wo steht was
 
 | Datei / Ordner | Inhalt |
 | --- | --- |
 | `ROADMAP.md` | Phasen 0–9, Milestones, Fortschritt (Checklisten) |
-| `docs/product/` | Vision, Zielgruppen, Prinzipien, MVP-Scope, Nicht-Ziele, Akzeptanzkriterien |
+| `docs/product/` | Vision, Zielgruppen, Prinzipien, MVP-Scope, Nicht-Ziele, Akzeptanzkriterien, UX-Leitlinie (`ux-guide.md`) |
 | `docs/architecture/` | Architekturüberblick, Datenmodell & Sync, Push-Strategie |
 | `docs/adr/` | Architecture Decision Records (Vorlage: `0000-template.md`) |
 | `docs/process/` | Definition of Done, Aufgabenzerlegung für den Roadmap-Agenten |
 | `docs/testing/` | Testmatrix (offline/online, Mehrgeräte, Konflikte, Backups, Migrationen) |
-| `docs/user/` | Anleitungen für Nutzer (z. B. App installieren) |
+| `docs/user/` | Anleitungen für Nutzer (App installieren, Seiten bearbeiten, Export und Import) |
 | `docs/privacy/` | Datenschutz, z. B. Datenkatalog der Opt-in-Telemetrie |
 
 Bei Fragen zu Scope oder Architektur zuerst dort nachlesen, nicht raten.
@@ -92,11 +95,12 @@ Node 22 und pnpm (`corepack enable`).
 | `pnpm typecheck` | `tsc` bzw. `vue-tsc` in allen Paketen |
 | `pnpm test` | Vitest in allen Paketen |
 | `node scripts/loadtest/server-load.mjs`, `pnpm --filter @notion-alt/web loadtest:browser` | Lasttests Server/Client (`PAGES=10000` = Zielgröße), siehe `docs/testing/load-tests.md` |
+| `pnpm --filter @notion-alt/contract-tests test` | Black-Box-Tests des HTTP-API (#118); `SERVER_URL` bzw. `SERVER_CMD` für einen anderen Server, siehe `packages/contract-tests/README.md` |
 | `pnpm --filter @notion-alt/web test:e2e` | Playwright (startet Server + Vite selbst); lokal ohne Browser-Download: `PW_CHROMIUM_PATH=/pfad/zu/chromium` |
 | `pnpm build` | Server-Bundle und SPA bauen |
 | `docker compose up -d --build` | Produktiv-Stack auf `:8080` |
 
-Struktur: `apps/server` (Fastify), `apps/web` (Vue SPA), `packages/shared` (zod-Schemas/Typen, Markdown-Inline-Parser, Sortierschlüssel für beide).
+Struktur: `apps/server` (Fastify), `apps/web` (Vue SPA), `packages/shared` (zod-Schemas/Typen, Markdown-Inline-Parser, Sortierschlüssel für beide), `packages/contract-tests` (API-Tests nur über HTTP).
 
 Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/` (Block-Editor, DOM↔Markdown), `src/layouts/`, `src/views/`, `src/components/`, `e2e/` (Playwright).
 
@@ -105,7 +109,8 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Exportformat (`jsonExportSchema`) ändern: `EXPORT_SCHEMA_VERSION` erhöhen, Migration in `packages/shared/src/import.ts` ergänzen, JSON Schema und Fixture neu erzeugen (siehe `apps/server/test/fixtures/exports/README.md`); bestehende Fixtures nie ändern.
 - Lokales Schema ändern: neue `this.version(n + 1)` in `apps/web/src/local/db.ts` mit Upgrade; bestehende Versionen nie ändern (T-MIG-02).
 - Neue Abhängigkeiten im Server-Image müssen auf `linux/arm64` ohne Compiler installierbar sein (Prebuild im Paket); der arm64-Build im Gitea-Nightly (`msz/gitea-workflows`, 22:00) prüft das.
-- Editor: Neue strukturelle Schritte in `PageEditor.vue` rufen vorher `checkpoint()` auf, sonst fehlen sie im blockübergreifenden Undo (ADR 0008).
+- Editor: Neue strukturelle Schritte in `PageEditor.vue` rufen vorher `checkpoint()` auf, sonst fehlen sie im blockübergreifenden Undo (ADR 0008). Kinder eines Toggles sind die folgenden Blöcke mit größerem `attrs.indent` ([ADR 0019](docs/adr/0019-block-types.md)).
+- Oberfläche: Farben, Abstände, Schriftgrößen, Radien und Schatten nur über die Tokens in `apps/web/src/styles.css` (`docs/product/ux-guide.md`).
 - Service Worker: `apps/web/src/sw/service-worker.ts`, gebaut von `apps/web/service-worker.plugin.ts` (Precache-Liste, Version) – nur im Production-Build. PWA-E2E (`e2e/pwa-*.spec.ts`) laufen im Playwright-Projekt `pwa` gegen `vite preview`. Komponenten mit entprellten Eingaben melden ihren Flush über `registerPendingEdits` an (Update-Neuladen).
 - Views werden eager importiert (kein Lazy-Loading), damit Navigation nach Netzverlust funktioniert.
 - Eingaben im Server immer mit `parseInput(schema, …)` und Schemas aus `@notion-alt/shared` validieren.

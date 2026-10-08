@@ -18,13 +18,13 @@ import { applyUpdate, updateAvailable } from './pwa'
   bottom: 1rem;
   z-index: 50;
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-md);
   align-items: center;
   margin: 0;
-  padding: 0.6rem 0.8rem;
+  padding: var(--space-sm) var(--space-md);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 15%);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-toast);
 }
 </style>

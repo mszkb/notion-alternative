@@ -391,6 +391,47 @@ async function main() {
     }
   })
 
+  // 4a. New device in "on demand" mode (ADR 0017): snapshot without blocks, then every page in
+  // batches of 100 ("Alles offline verfügbar machen").
+  results.phases.onDemand = await phase('on-demand', async () => {
+    const started = performance.now()
+    let after = null
+    let bytes = 0
+    const ids = []
+    do {
+      const query = new URLSearchParams({
+        workspaceId,
+        limit: String(SNAPSHOT_PAGE),
+        content: 'false',
+      })
+      if (after) query.set('after', after)
+      const page = await request('snapshot_lean_page', 'GET', `/api/sync/snapshot?${query}`)
+      bytes += page.bytes
+      ids.push(...page.json.documents.map((d) => d.id))
+      after = page.json.next
+    } while (after)
+    const treeMs = Math.round(performance.now() - started)
+    const treeMegabytes = Math.round((bytes / 1e6) * 10) / 10
+    let blocks = 0
+    for (let i = 0; i < ids.length; i += 100) {
+      const page = await request('documents_batch', 'POST', '/api/sync/documents', {
+        workspaceId,
+        ids: ids.slice(i, i + 100),
+      })
+      bytes += page.bytes
+      blocks += page.json.pages.reduce((sum, p) => sum + p.blocks.length, 0)
+    }
+    return {
+      treeMs,
+      treeMegabytes,
+      documents: ids.length,
+      allPagesMs: Math.round(performance.now() - started),
+      megabytes: Math.round(bytes / 1e6),
+      blocks,
+      batchMs: stats(timings.get('documents_batch') ?? [0]),
+    }
+  })
+
   // 4b. Optional: the old single-response snapshot (clients before #97), for comparison.
   if (process.env.LEGACY_SNAPSHOT === '1') {
     results.phases.snapshotLegacy = await phase('snapshot-legacy', async () => {

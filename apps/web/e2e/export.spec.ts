@@ -38,6 +38,7 @@ test('exports JSON with and without history', async ({ signedIn: page }) => {
   await newPage(page, 'Gelöscht bald')
   await waitForSaved(page)
   page.once('dialog', (dialog) => void dialog.accept())
+  await page.getByRole('button', { name: 'Seitenmenü' }).click()
   await page.getByRole('button', { name: 'Löschen' }).click()
   await newPage(page, 'Bleibt')
   await page.keyboard.type('Inhalt')

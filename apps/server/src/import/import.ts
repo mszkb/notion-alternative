@@ -135,6 +135,8 @@ export async function importWorkspace(
             title: d.title,
             sort_key: d.sortKey,
             favorite: d.favorite ? 1 : 0,
+            icon: d.icon ?? null,
+            cover: d.cover ?? null,
             created_at: d.createdAt,
             updated_at: d.updatedAt,
             revision: revision(d.revision),

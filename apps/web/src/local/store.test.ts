@@ -427,3 +427,53 @@ describe('operation payloads', () => {
     }
   })
 })
+
+describe('page icon and cover (#136)', () => {
+  it('queues valid updates, clears with null and adds a cover image without a block', async () => {
+    const doc = await store.createDocument({ workspaceId: WS, title: 'Reise' })
+    await store.setPageLook(doc.id, { icon: '✈️', cover: 'gradient:ocean' })
+    await store.setPageLook(doc.id, { icon: '✈️' }) // unchanged: no operation
+    await store.setPageLook(doc.id, { icon: null })
+    expect((await store.getDocument(doc.id))!.icon).toBeNull()
+
+    const data = new TextEncoder().encode('png').buffer
+    const sha256 = '0'.repeat(64)
+    const cover = await store.setCoverImage(doc.id, {
+      name: 'titel.png',
+      type: 'image/png',
+      data,
+      sha256,
+    })
+    expect((await store.getDocument(doc.id))!.cover).toBe(`attachment:${cover.id}`)
+    expect((await store.listBlocks(doc.id)).some((b) => b.attrs.attachmentId === cover.id)).toBe(
+      false,
+    )
+
+    // Replacing and removing the cover image deletes the image nothing shows any more.
+    const second = await store.setCoverImage(doc.id, {
+      name: 'neu.png',
+      type: 'image/png',
+      data,
+      sha256,
+    })
+    expect((await db.attachments.get(cover.id))!.deletedAt).not.toBeNull()
+    await store.setPageLook(doc.id, { cover: null })
+    expect((await db.attachments.get(second.id))!.deletedAt).not.toBeNull()
+    expect(
+      (await ops()).filter((op) => op.entity === 'attachment' && op.kind === 'delete'),
+    ).toHaveLength(2)
+
+    const updates = (await ops()).filter((op) => op.entity === 'document' && op.kind === 'update')
+    expect(updates.map((op) => op.payload)).toEqual([
+      { icon: '✈️', cover: 'gradient:ocean' },
+      { icon: null },
+      { cover: `attachment:${cover.id}` },
+      { cover: `attachment:${second.id}` },
+      { cover: null },
+    ])
+    for (const op of await ops()) {
+      expect(operationSchema.safeParse(op).success).toBe(true)
+      expect(validateOperationPayload(op.entity, op.kind, op.payload)).toBeNull()
+    }
+  })
+})

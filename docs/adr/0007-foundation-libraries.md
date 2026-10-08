@@ -1,7 +1,10 @@
 # 0007 – Bibliotheken und Konventionen für Phase 1
 
-- **Status:** Accepted
+- **Status:** Accepted, Server-Teil superseded by 0018
 - **Datum:** 2026-10-02
+
+
+> **Teilweise ersetzt:** Der Teil „Server-Bibliotheken (Fastify-Umfeld, Kysely, better-sqlite3)“ ist durch [ADR 0018](0018-php-backend.md) (PHP-Backend, angenommen 2026-10-08) ersetzt. Bis zur Umstellung ([#129](https://github.com/mszkb/notion-alternative/issues/129)) läuft weiter der Node-Server.
 
 ## Kontext
 

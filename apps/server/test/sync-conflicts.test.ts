@@ -152,6 +152,30 @@ describe('block merge and conflicts (ADR 0003)', () => {
     expect(created.payload).toMatchObject({ reason: 'changed', local: { deviceId: phone } })
   })
 
+  it('ADR 0019: ticking the same to-do on two devices differently is a visible conflict', async () => {
+    const { blocks } = await page()
+    await apply(op(laptop, 'block', 'update', blocks[0]!, { type: 'todo', attrs: {} }, 1))
+    await apply(op(laptop, 'block', 'update', blocks[0]!, { attrs: { checked: true } }, 2))
+    const result = await apply(
+      op(phone, 'block', 'update', blocks[0]!, { attrs: { checked: false, indent: 1 } }, 2),
+    )
+    expect(result).toMatchObject({ status: 'conflict', reason: 'changed' })
+    expect(JSON.parse((await blockRow(blocks[0]!)).attrs)).toEqual({ checked: true })
+
+    // Ticking while the other device edits the text merges.
+    await apply(op(laptop, 'block', 'update', blocks[1]!, { type: 'todo', attrs: {} }, 1))
+    await apply(op(laptop, 'block', 'update', blocks[1]!, { content: 'Neu' }, 2))
+    expect(
+      await apply(op(phone, 'block', 'update', blocks[1]!, { attrs: { checked: true } }, 2)),
+    ).toMatchObject({ status: 'merged' })
+    const merged = await blockRow(blocks[1]!)
+    expect([merged.type, merged.content, JSON.parse(merged.attrs)]).toEqual([
+      'todo',
+      'Neu',
+      { checked: true },
+    ])
+  })
+
   it('deleting a block another device edited is a conflict too', async () => {
     const { blocks } = await page()
     await apply(op(laptop, 'block', 'update', blocks[0]!, { content: 'bearbeitet' }, 1))

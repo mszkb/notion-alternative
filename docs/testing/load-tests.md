@@ -44,6 +44,8 @@ Gemessen am 2026-10-04 nach #95 (Push-Batch in einer Transaktion) und #97 (seite
 | 10 Geräte gleichzeitig, je 20 × (Push von 50 Block-Updates + Delta-Pull) | 10 000 × `applied`, **keine Fehler, kein `SQLITE_BUSY`**; Push p50 72 ms, p95 153 ms, max 416 ms (vor #95: p95 415 ms, max 1,4 s); Pull p50 60 ms, p95 131 ms |
 | Vollständiger Pull (neues Gerät, 520 000 Changes, 1 000 pro Seite) | 3,2 s; 264 MB übertragen; Seite p50 5 ms, max 9 ms |
 | Snapshot (Re-Sync), seitenweise à 2 000 Entitäten (#97) | 2,8 s für 256 Seiten; Seite p50 10 ms, max 34 ms; 168 MB insgesamt; **RSS-Spitze 194 MB** (vor #97: eine Antwort mit 1,07 GB RSS) |
+| Neues Gerät „bei Bedarf“ (ADR 0017, gemessen 2026-10-07): Snapshot ohne Blöcke | **77 ms, 3,3 MB** für 10 000 Seiten (voller Snapshot im selben Lauf: 5,1 s, 168 MB) |
+| „Alles offline verfügbar machen“: alle Seiten in Paketen à 100 (`POST /api/sync/documents`) | 24,1 s für 10 000 Seiten / 500 000 Blöcke, 171 MB; Paket p50 236 ms, max 301 ms; RSS-Spitze 198 MB |
 | Änderungslog für den JSON-Export | 3,1 s für 520 000 Changes |
 | Serversuche (FTS5, 50 Anfragen) | p50 51 ms, p95 58 ms, max 68 ms |
 | Lange Seiten: 20 Seiten à 500 Blöcke | 1 199 Ops/s, Push à 500 p50 409 ms (vor #99: 325 Ops/s, p50 1,5 s) |
@@ -138,6 +140,7 @@ Behoben in [#102](https://github.com/mszkb/notion-alternative/issues/102):
   - Kaltstart 1,6 s, Seite mit 2 000 Blöcken öffnen 0,55 s, Tippen 5 ms pro Taste: alles im Ziel.
   - Weiterer Spielraum beim Kaltstart nur mit einem Seitenbaum, der nicht alle Knoten auf einmal anlegt (virtualisiert oder nachladend). Das würde die Seitenleiste sichtbar ändern und ist nicht umgesetzt.
   - Erstsync 5,2 min, bestimmt von IndexedDB (Blöcke, Link-Index, Suchmarken in einer Transaktion pro Seite).
+- **Erstsync „bei Bedarf“ (ADR 0017, 2026-10-07):** Ein neues Gerät schreibt bei 10 000 Seiten nur Seitenbaum und Metadaten in IndexedDB: **12,8 s** statt über 5 Minuten (Client-Szenario, Chromium im Testcontainer; Seitenliste danach 263 ms). Die Inhalte kommen beim Öffnen einer Seite. Der Container war in diesem Lauf langsamer als am 2026-10-04 (Seed 1 849 statt 3 149 Ops/s); die Verhältnisse gelten, die absoluten Werte schwanken.
 - **Re-Sync großer Workspaces im Browser:**
   - Bei 500 000 Blöcken dauert das Schreiben in IndexedDB weiterhin rund 5 Minuten, jetzt aber in Abschnitten und mit Fortschrittsanzeige.
   - Die Daten gehen über das Netz einmal als Snapshot (168 MB) und danach als Pull ab dem Cursor.

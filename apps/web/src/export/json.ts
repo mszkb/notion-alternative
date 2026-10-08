@@ -7,6 +7,8 @@ import {
   type SyncLogResponse,
 } from '@notion-alt/shared'
 import type { LocalStore } from '../local/store'
+import type { DocumentFetch } from '../sync/resync'
+import { loadContentForExport } from './content'
 import { exportFileName } from './markdown'
 
 export interface JsonExportResult {
@@ -41,10 +43,20 @@ export async function buildJsonExport(
   options: {
     /** Omit to export without history. */
     syncLog?: (query: SyncLogQuery) => Promise<SyncLogResponse>
+    /** Loads pages whose content is not on this device (ADR 0017). Omitted when offline. */
+    fetchDocument?: DocumentFetch
     now?: Date
   } = {},
 ): Promise<JsonExportResult> {
   const now = options.now ?? new Date()
+  const missingDocuments = await loadContentForExport(store, workspace.id, options.fetchDocument)
+  // The JSON export is the lossless restore format and has no place to mark missing content:
+  // refuse instead of writing empty pages (principle 3). The ZIP names them in its manifest.
+  if (missingDocuments.length > 0) {
+    throw new Error(
+      `${missingDocuments.length} Seiten sind nicht auf diesem Gerät und ohne Serververbindung nicht ladbar. Online exportieren oder den vollständigen Export (ZIP) wählen.`,
+    )
+  }
   const input = await store.exportData(workspace.id)
   const history = options.syncLog ? await fetchHistory(workspace.id, options.syncLog) : null
   const data = createJsonExport(input, {

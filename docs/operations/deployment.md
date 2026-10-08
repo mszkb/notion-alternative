@@ -56,7 +56,7 @@ Stolpersteine:
 
 - **Port belegt:** Läuft schon etwas auf 8080, `PORT` in `.env` ändern (ebenso im Tunnel und bei `PermitOpen`). Prüfen mit `ss -ltn`.
 - **„Speicher nicht dauerhaft“ trotz `localhost`:** Der Browser gewährt `persist()` heuristisch, z. B. nach Installation als App (Phase 4). Kein Fehler des Deployments.
-- **Andere Geräte (Smartphone):** Über den Tunnel nicht praktikabel; HTTPS dafür wird in Phase 4 entschieden (ADR 0010).
+- **Andere Geräte (Smartphone):** Über den Tunnel nicht praktikabel; siehe [Zugriff von Smartphones (HTTPS)](#zugriff-von-smartphones-https).
 
 ### Raspberry Pi / arm64
 
@@ -103,10 +103,10 @@ Die Client-IP stammt aus dem letzten Eintrag von `X-Forwarded-For`, den nginx (`
 
 ## Zugriff von Smartphones (HTTPS)
 
-Für Installation, Offline-Neustart und Web Push auf Smartphones braucht die App HTTPS mit einem vertrauenswürdigen Zertifikat. Vorschlag ([ADR 0011](../adr/0011-https-for-mobile-devices.md), noch `Proposed`):
+Für Installation, Offline-Neustart und Web Push auf Smartphones braucht die App HTTPS mit einem vertrauenswürdigen Zertifikat ([ADR 0011](../adr/0011-https-for-mobile-devices.md)):
 
-- **Tailscale (empfohlen, nicht öffentlich):** Tailscale auf Host und Geräten, dann auf dem Host `tailscale serve --bg --https=443 http://127.0.0.1:8080`. Die App ist im Tailnet unter `https://<host>.<tailnet>.ts.net` erreichbar; `BIND_ADDRESS=127.0.0.1` bleibt.
-- **Eigener Reverse Proxy mit Let's Encrypt** (öffentlich, eigene Domain): Proxy auf `127.0.0.1:8080` zeigen lassen.
+- **Home-Lab, Raspberry Pi: Tailscale (nicht öffentlich).** Tailscale auf Host und Geräten, dann auf dem Host `tailscale serve --bg --https=443 http://127.0.0.1:8080`. Die App ist im Tailnet unter `https://<host>.<tailnet>.ts.net` erreichbar; `BIND_ADDRESS=127.0.0.1` bleibt.
+- **Webhosting, VPS, vorhandener Reverse Proxy (öffentlich, eigene Domain).** HTTPS übernimmt der bereits eingerichtete Webserver (Let's Encrypt über Hoster, Caddy, Traefik, nginx). Ihn auf `127.0.0.1:8080` zeigen lassen; für die echte Client-IP siehe [unten](#echte-client-ip-hinter-einem-tls-proxy).
 
 In beiden Fällen `COOKIE_SECURE=true` setzen. Für Web Push muss der Server ausgehend die Push-Dienste erreichen (`PUSH_ALLOWED_HOSTS`).
 

@@ -85,6 +85,8 @@ interface Device {
 
 async function device(name: string, cookie: string, rand: () => number, dropRate: number) {
   const store = await LocalStore.open(new LocalDb(`property-${name}-${newId()}`))
+  // Pre-ADR-0017 behaviour: every page's content is synced.
+  await store.db.meta.put({ key: 'offlineMode', value: 'all' })
   await call(cookie, 'POST', '/devices', { id: store.deviceId, name })
   const d: Device = {
     name,

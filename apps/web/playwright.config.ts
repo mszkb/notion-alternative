@@ -38,7 +38,9 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'pnpm --filter @notion-alt/server exec tsx src/index.ts',
+      // Another implementation of the API (e.g. the PHP server, #118) via SERVER_CMD; it runs in
+      // apps/web and gets PORT, DATABASE_PATH and the settings below as environment.
+      command: process.env.SERVER_CMD ?? 'pnpm --filter @notion-alt/server exec tsx src/index.ts',
       url: `http://localhost:${API_PORT}/api/ready`,
       // Every test (and retry) registers its own account, so attempts never share server data.
       env: {

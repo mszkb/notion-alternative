@@ -20,7 +20,10 @@ let dbs: LocalDb[] = []
 async function device(): Promise<LocalStore> {
   const db = new LocalDb(`resync-${newId()}`)
   dbs.push(db)
-  return LocalStore.open(db)
+  const store = await LocalStore.open(db)
+  // Pre-ADR-0017 behaviour: every page's content is synced.
+  await store.db.meta.put({ key: 'offlineMode', value: 'all' })
+  return store
 }
 afterEach(async () => {
   for (const db of dbs) {

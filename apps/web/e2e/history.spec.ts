@@ -33,6 +33,7 @@ test('the history lists versions and shows what changed since', async ({ page, b
 
   await refocus(page)
   await expect(blockInput(page, 0)).toHaveText('Original von B', { timeout: 10_000 })
+  await page.getByRole('button', { name: 'Seitenmenü' }).click()
   await page.getByRole('link', { name: 'Verlauf', exact: true }).click()
 
   const versions = page.getByRole('list', { name: 'Versionen' }).getByRole('listitem')

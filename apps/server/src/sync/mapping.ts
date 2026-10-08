@@ -31,6 +31,9 @@ export function toDocument(row: DocumentsTable): Document {
     title: row.title,
     sortKey: row.sort_key,
     favorite: row.favorite === 1,
+    // Only when set (#136): pages without them look like before export schema version 3.
+    ...(row.icon ? { icon: row.icon } : {}),
+    ...(row.cover ? { cover: row.cover as Document['cover'] } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revision: row.revision,

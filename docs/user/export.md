@@ -49,3 +49,21 @@ Hinweise:
 - Ordner mit Markdown-Dateien lassen sich (noch) nicht importieren; dafür ist der JSON-Teil da.
 
 Format und Hintergründe: [ADR 0004](../adr/0004-export-format.md).
+
+## Umzug aus Notion
+
+In Notion unter **Einstellungen → Export** das Format **„Markdown & CSV“** wählen, Unterseiten und Dateien einschließen und die ZIP-Datei herunterladen. In dieser App: **Export & Import → Umzug aus Notion**, Datei wählen. Vor dem Import zeigt die App, was übernommen und was vereinfacht wird; importiert wird als neuer Workspace (online).
+
+| In Notion | Hier |
+| --- | --- |
+| Seiten und Unterseiten | Seiten im Seitenbaum, Titel ohne Notions ID-Anhang |
+| Überschriften, Listen, Zitate, Code, To-dos, Toggles, Hinweise (Callouts), Trennlinien | gleiche Blocktypen; Überschriften ab Ebene 4 werden Ebene 3 |
+| Fett, kursiv, Inline-Code, Weblinks | übernommen |
+| Links auf andere Seiten | Seitenlinks, Backlinks funktionieren |
+| Bilder und Dateien | Anhänge der Seite |
+| Datenbanken (CSV) | eine Seite mit je einer Unterseite pro Eintrag (deren Eigenschaften stehen als Text oben); die vollständige Tabelle liegt als CSV-Anhang bei |
+| Tabellen in einer Seite | Code-Block (die Spalten bleiben lesbar) |
+| Farben, Unterstreichen, Durchstreichen, sonstiges HTML | als einfacher Text |
+
+Warum Datenbanken als Unterseiten: Datenbanken mit Ansichten gehören nicht zum Umfang dieser App ([Vision](../product/vision.md#bewusst-nicht-im-mvp)). Als Unterseiten bleibt jeder Eintrag mit seinem Inhalt bearbeitbar, verlinkbar und durchsuchbar; die CSV-Datei bewahrt die Tabelle vollständig.
+

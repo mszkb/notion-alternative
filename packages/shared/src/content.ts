@@ -15,6 +15,21 @@ export const MAX_LIST_INDENT = 5
 
 export const documentTitleSchema = z.string().max(DOCUMENT_TITLE_MAX_LENGTH)
 
+/** Page icon (#136): an emoji, stored as text. */
+export const documentIconSchema = z.string().min(1).max(16)
+
+/** Built-in cover gradients (#136); the colours live in the web app's stylesheet. */
+export const COVER_GRADIENTS = ['sunrise', 'ocean', 'forest', 'dusk', 'sand', 'slate'] as const
+
+/**
+ * Page cover (#136): `gradient:<name>` or `attachment:<uuid>` (an image attached to the page,
+ * ADR 0012).
+ */
+export const documentCoverSchema = z.union([
+  z.templateLiteral(['gradient:', z.enum(COVER_GRADIENTS)]),
+  z.templateLiteral(['attachment:', z.uuid()]),
+])
+
 export const documentSchema = z.object({
   id: z.uuid(),
   workspaceId: z.uuid(),
@@ -23,6 +38,9 @@ export const documentSchema = z.object({
   title: documentTitleSchema,
   sortKey: z.string().min(1),
   favorite: z.boolean(),
+  /** #136; absent on pages from before export schema version 3. */
+  icon: documentIconSchema.nullable().optional(),
+  cover: documentCoverSchema.nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   ...syncFields,
@@ -38,6 +56,12 @@ export const blockTypeSchema = z.enum([
   // Attachment blocks (ADR 0012): `attrs.attachmentId`, `content` is the caption.
   'image',
   'file',
+  // ADR 0019: `todo` (`attrs.checked`), `toggle` (the following blocks with a larger `indent`
+  // are its children), `callout` (`attrs.icon`), `divider` (no content).
+  'todo',
+  'toggle',
+  'callout',
+  'divider',
 ])
 export type BlockType = z.infer<typeof blockTypeSchema>
 
@@ -47,8 +71,12 @@ export const blockAttrsSchema = z
     level: z.number().int().min(1).max(3).optional(),
     /** List style (`list_item`). */
     list: z.enum(['bullet', 'ordered']).optional(),
-    /** Nesting depth (`list_item`). */
+    /** Nesting depth (`list_item`, `todo`, children of a `toggle`). */
     indent: z.number().int().min(0).max(MAX_LIST_INDENT).optional(),
+    /** Done (`todo`). */
+    checked: z.boolean().optional(),
+    /** Emoji shown before the text (`callout`). */
+    icon: z.string().min(1).max(16).optional(),
     /** Language hint (`code`). */
     language: z.string().max(40).optional(),
     /** Attachment shown by an `image` or `file` block. */

@@ -135,6 +135,7 @@ function frontMatter(document: Document, tags: string[]): string {
     `title: ${JSON.stringify(document.title)}`,
     `tags: ${JSON.stringify(tags)}`,
     `favorite: ${document.favorite}`,
+    ...(document.icon ? [`icon: ${JSON.stringify(document.icon)}`] : []),
     `created_at: ${JSON.stringify(document.createdAt)}`,
     `updated_at: ${JSON.stringify(document.updatedAt)}`,
     '---',

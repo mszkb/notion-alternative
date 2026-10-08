@@ -25,6 +25,7 @@ import {
   type OperationEntity,
   type OperationKind,
   sortKeyBetween,
+  type SyncDocumentResponse,
   type SyncPushResult,
   type SyncSnapshotResponse,
   type Tag,
@@ -37,7 +38,14 @@ import {
   type Workspace,
 } from '@notion-alt/shared'
 import type { Table } from 'dexie'
-import type { AttachmentContent, LinkEntry, LocalDb, QueuedOperation, SearchIndexCache } from './db'
+import type {
+  AttachmentContent,
+  LinkEntry,
+  LocalDb,
+  OfflineMode,
+  QueuedOperation,
+  SearchIndexCache,
+} from './db'
 
 export class LocalStoreError extends Error {
   override name = 'LocalStoreError'
@@ -82,6 +90,8 @@ export interface SnapshotProgress {
 
 interface WriteContext {
   touched: Map<string, Set<string>>
+  /** Pull only: pages created elsewhere arrive without content (ADR 0017). */
+  onDemand?: boolean
 }
 
 const CONTENT_TABLES = [
@@ -95,6 +105,7 @@ const CONTENT_TABLES = [
   'attachments',
   'attachmentContents',
   'searchDirty',
+  'unloadedDocuments',
 ]
 
 /** Backlink index entry of a block, or null when it links to no page. */
@@ -424,6 +435,63 @@ export class LocalStore {
       })
       this.mark(ctx, document.workspaceId, id)
     })
+  }
+
+  /** Sets or removes the page icon (emoji) and cover (#136); `null` removes, `undefined` keeps. */
+  async setPageLook(
+    id: string,
+    look: { icon?: string | null; cover?: Document['cover'] | null },
+  ): Promise<void> {
+    await this.write(async (ctx) => {
+      await this.applyLook(ctx, await this.requireDocument(id), look)
+    })
+  }
+
+  /** Changes icon and cover inside a write; a cover image no longer shown is deleted. */
+  private async applyLook(
+    ctx: WriteContext,
+    document: Document,
+    look: { icon?: string | null; cover?: Document['cover'] | null },
+  ): Promise<void> {
+    const fields: { icon?: string | null; cover?: Document['cover'] | null } = {}
+    if (look.icon !== undefined && look.icon !== (document.icon ?? null)) fields.icon = look.icon
+    if (look.cover !== undefined && look.cover !== (document.cover ?? null)) {
+      fields.cover = look.cover
+    }
+    if (Object.keys(fields).length === 0) return
+    await this.db.documents.update(document.id, fields)
+    await this.enqueue(
+      document.workspaceId,
+      'document',
+      document.id,
+      'update',
+      document.revision,
+      fields,
+    )
+    this.mark(ctx, document.workspaceId, document.id)
+    // The previous cover image is an attachment without a block: unless a block shows it too,
+    // nothing would ever show or delete it again (#136).
+    const previous = document.cover?.startsWith('attachment:')
+      ? document.cover.slice('attachment:'.length)
+      : null
+    if (fields.cover !== undefined && previous) {
+      const shown = (await this.db.blocks.where('documentId').equals(document.id).toArray()).some(
+        (block) => !block.deletedAt && block.attrs.attachmentId === previous,
+      )
+      const attachment = await this.db.attachments.get(previous)
+      if (!shown && attachment && !attachment.deletedAt) {
+        await this.db.attachments.update(previous, { deletedAt: this.now() })
+        await this.db.attachmentContents.delete(previous)
+        await this.enqueue(
+          attachment.workspaceId,
+          'attachment',
+          previous,
+          'delete',
+          attachment.revision,
+          {},
+        )
+      }
+    }
   }
 
   /** Moves a page in the tree; refuses to move a page below itself. */
@@ -898,6 +966,7 @@ export class LocalStore {
   async applyRemoteChanges(workspaceId: string, changes: Change[], cursor: number): Promise<void> {
     const ctx: WriteContext = { touched: new Map() }
     await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
+      ctx.onDemand = (await this.offlineMode()) === 'onDemand'
       for (const change of changes) await this.applyRemoteChange(ctx, workspaceId, change)
       await this.persistTouched(ctx)
       await this.db.meta.put({ key: LocalStore.cursorKey(workspaceId), value: cursor })
@@ -1078,6 +1147,7 @@ export class LocalStore {
         {},
       ),
       favorite: false,
+      ...(source.icon ? { icon: source.icon } : {}),
       createdAt: this.now(),
       updatedAt: this.now(),
       revision: null,
@@ -1089,6 +1159,7 @@ export class LocalStore {
       title: copy.title,
       sortKey: copy.sortKey,
       favorite: copy.favorite,
+      ...(copy.icon ? { icon: copy.icon } : {}),
       createdAt: copy.createdAt,
     })
     const blocks = (await this.db.blocks.where('documentId').equals(source.id).toArray())
@@ -1131,6 +1202,7 @@ export class LocalStore {
     workspaceId: string,
     page: SyncSnapshotResponse,
     progress: SnapshotProgress,
+    content = true,
   ): Promise<void> {
     const ctx: WriteContext = { touched: new Map() }
     const all = [
@@ -1153,6 +1225,16 @@ export class LocalStore {
       })
       for (const id of resent) pending.add(id)
       const keep = <T extends { id: string }>(items: T[]) => items.filter((i) => !pending.has(i.id))
+      if (!content) {
+        // Without blocks (ADR 0017): pages new to this device are not loaded; pages it already
+        // knows stay as they are and are refreshed one by one after the re-sync.
+        const known = await this.db.documents.bulkGet(page.documents.map((d) => d.id))
+        await this.db.unloadedDocuments.bulkPut(
+          page.documents
+            .filter((_, i) => known[i] === undefined)
+            .map((d) => ({ documentId: d.id, workspaceId })),
+        )
+      }
       await this.db.documents.bulkPut(keep(page.documents))
       await this.db.blocks.bulkPut(keep(page.blocks))
       await this.db.tags.bulkPut(keep(page.tags))
@@ -1204,6 +1286,7 @@ export class LocalStore {
     workspaceId: string,
     cursor: number,
     progress: SnapshotProgress,
+    content = true,
   ): Promise<void> {
     const ctx: WriteContext = { touched: new Map() }
     const { seen } = progress
@@ -1222,11 +1305,15 @@ export class LocalStore {
         )
       const byWorkspace = (table: Table) =>
         table.where('workspaceId').equals(workspaceId).primaryKeys() as Promise<string[]>
+      const documents = await unseen<Document>(this.db.documents, documentIds)
+      // Without blocks in the snapshot (ADR 0017) only those of pages it lacked are unseen; the
+      // blocks of the other pages are refreshed page by page afterwards.
+      const blockOwners = content ? documentIds : documents.map((d) => d.id)
       const local = {
-        documents: await unseen(this.db.documents, documentIds),
-        blocks: await unseen(
+        documents,
+        blocks: await unseen<Block>(
           this.db.blocks,
-          (await this.db.blocks.where('documentId').anyOf(documentIds).primaryKeys()) as string[],
+          (await this.db.blocks.where('documentId').anyOf(blockOwners).primaryKeys()) as string[],
         ),
         tags: await unseen(this.db.tags, await byWorkspace(this.db.tags)),
         documentTags: await unseen(this.db.documentTags, await byWorkspace(this.db.documentTags)),
@@ -1248,6 +1335,7 @@ export class LocalStore {
       const drop = <T extends { id: string }>(items: T[]) =>
         items.filter((i) => !pending.has(i.id)).map((i) => i.id)
       await this.db.documents.bulkDelete(drop(local.documents))
+      await this.db.unloadedDocuments.bulkDelete(drop(local.documents))
       await this.db.blocks.bulkDelete(drop(local.blocks))
       await this.db.links.bulkDelete(drop(local.blocks))
       await this.db.tags.bulkDelete(drop(local.tags))
@@ -1317,6 +1405,8 @@ export class LocalStore {
         title: d.title,
         sortKey: d.sortKey,
         favorite: d.favorite,
+        ...(d.icon ? { icon: d.icon } : {}),
+        ...(d.cover ? { cover: d.cover } : {}),
         createdAt: d.createdAt,
       })
     }
@@ -1402,6 +1492,8 @@ export class LocalStore {
         const fields: Record<string, unknown> = {}
         if (d.title !== server.title) fields.title = d.title
         if (d.favorite !== server.favorite) fields.favorite = d.favorite
+        if ((d.icon ?? null) !== (server.icon ?? null)) fields.icon = d.icon ?? null
+        if ((d.cover ?? null) !== (server.cover ?? null)) fields.cover = d.cover ?? null
         if (Object.keys(fields).length) ops.push(['update', fields])
         if (d.parentId !== server.parentId || d.sortKey !== server.sortKey) {
           ops.push(['move', { parentId: d.parentId, sortKey: d.sortKey }])
@@ -1493,11 +1585,17 @@ export class LocalStore {
             title: p.title,
             sortKey: p.sortKey,
             favorite: p.favorite,
+            ...(p.icon ? { icon: p.icon } : {}),
+            ...(p.cover ? { cover: p.cover } : {}),
             createdAt: p.createdAt,
             updatedAt: change.appliedAt,
             revision,
             deletedAt: null,
           })
+          // Created on another device: its content loads when the page is opened (ADR 0017).
+          if (ctx.onDemand && !local) {
+            await this.db.unloadedDocuments.put({ documentId: change.entityId, workspaceId })
+          }
         } else if (local) {
           const fields =
             change.kind === 'delete'
@@ -1511,9 +1609,14 @@ export class LocalStore {
         return
       }
       case 'block': {
+        // Already contained in a state loaded later (ADR 0017: a page loaded on demand reflects
+        // changes beyond the cursor); revisions only grow, so this never skips anything new.
+        if (local && (local.revision ?? 0) >= revision) return
         let block: Block | undefined
         if (change.kind === 'create') {
           const p = change.payload as BlockCreatePayload
+          // Content of a page this device has not loaded is fetched when it is opened.
+          if (await this.db.unloadedDocuments.get(p.documentId)) return
           block = {
             id: change.entityId,
             documentId: p.documentId,
@@ -1598,6 +1701,134 @@ export class LocalStore {
     }
   }
 
+  // ---------------------------------------------------------------- content on demand
+
+  /** How much content this device keeps (ADR 0017). A new database starts "on demand". */
+  async offlineMode(): Promise<OfflineMode> {
+    const entry = await this.db.meta.get('offlineMode')
+    return entry?.value === 'all' ? 'all' : 'onDemand'
+  }
+
+  /**
+   * Back to "on demand": pages created elsewhere load when opened. What is loaded stays. For
+   * "all" use `completeOfflineMode` once everything is loaded.
+   */
+  async setOfflineModeOnDemand(): Promise<void> {
+    await this.db.meta.put({ key: 'offlineMode', value: 'onDemand' })
+  }
+
+  /**
+   * Switches to "all" if no page is missing its content any more; otherwise returns false and the
+   * caller loads the rest (pages may have arrived meanwhile).
+   */
+  async completeOfflineMode(): Promise<boolean> {
+    return this.db.transaction('rw', ['meta', 'unloadedDocuments'], async () => {
+      if ((await this.db.unloadedDocuments.count()) > 0) return false
+      await this.db.meta.put({ key: 'offlineMode', value: 'all' })
+      return true
+    })
+  }
+
+  /** Whether the page's content is on this device (ADR 0017). */
+  async isDocumentLoaded(documentId: string): Promise<boolean> {
+    return (await this.db.unloadedDocuments.get(documentId)) === undefined
+  }
+
+  /** Pages whose content is not on this device, of one workspace or all. */
+  async unloadedDocuments(workspaceId?: string): Promise<{ id: string; workspaceId: string }[]> {
+    const rows = workspaceId
+      ? await this.db.unloadedDocuments.where('workspaceId').equals(workspaceId).toArray()
+      : await this.db.unloadedDocuments.toArray()
+    return rows.map((row) => ({ id: row.documentId, workspaceId: row.workspaceId }))
+  }
+
+  /** Pages (not in the trash) on this device, and how many of them have their content here. */
+  async documentCounts(): Promise<{ loaded: number; total: number }> {
+    const unloaded = new Set((await this.unloadedDocuments()).map((d) => d.id))
+    const active = (await this.db.documents.toArray()).filter((d) => !d.deletedAt)
+    return {
+      loaded: active.filter((d) => !unloaded.has(d.id)).length,
+      total: active.length,
+    }
+  }
+
+  /** Pages of a workspace whose content is on this device, tombstones included. */
+  async loadedDocumentIds(workspaceId: string): Promise<string[]> {
+    const unloaded = new Set((await this.unloadedDocuments(workspaceId)).map((d) => d.id))
+    const ids = (await this.db.documents
+      .where('workspaceId')
+      .equals(workspaceId)
+      .primaryKeys()) as string[]
+    return ids.filter((id) => !unloaded.has(id))
+  }
+
+  /**
+   * Writes the content of one page as loaded from the server (ADR 0017) in one transaction, like
+   * a snapshot of that page: blocks with queued operations keep their local state, newer synced
+   * local states and blocks the server lost (restored backup, #75) are sent again. Afterwards
+   * the page counts as loaded and the pull keeps it current. Must not run concurrently with a
+   * pull (the caller holds the sync lock), so the local state is never newer than the server's
+   * except after a restore.
+   */
+  async applyDocumentContent(workspaceId: string, content: SyncDocumentResponse): Promise<void> {
+    const ctx: WriteContext = { touched: new Map() }
+    const documentId = content.document.id
+    await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
+      const blockIds = content.blocks.map((b) => b.id)
+      const localIds = (await this.db.blocks
+        .where('documentId')
+        .equals(documentId)
+        .primaryKeys()) as string[]
+      const pending = new Set(
+        (
+          await this.db.operations
+            .where('entityId')
+            .anyOf([...blockIds, ...localIds])
+            .toArray()
+        ).map((op) => op.entityId),
+      )
+      const resent = await this.resendNewer(workspaceId, pending, {
+        documents: [],
+        blocks: content.blocks,
+        tags: [],
+        documentTags: [],
+      })
+      for (const id of resent) pending.add(id)
+      const blocks = content.blocks.filter((b) => !pending.has(b.id))
+      await this.db.blocks.bulkPut(blocks)
+      const links: LinkEntry[] = []
+      const unlinked: string[] = []
+      for (const block of blocks) {
+        const entry = block.deletedAt ? null : linkEntry(block, workspaceId)
+        if (entry) links.push(entry)
+        else unlinked.push(block.id)
+      }
+      await this.db.links.bulkDelete(unlinked)
+      await this.db.links.bulkPut(links)
+
+      // The server never forgets a block (tombstones stay); one it lacks was lost with a restore.
+      const served = new Set(blockIds)
+      const missing = (await this.db.blocks.bulkGet(localIds.filter((id) => !served.has(id))))
+        .filter((b): b is Block => b !== undefined)
+        .filter((b) => !pending.has(b.id))
+      const lost = await this.recreateLost(workspaceId, pending, {
+        documents: [],
+        blocks: missing,
+        tags: [],
+        documentTags: [],
+        attachments: [],
+      })
+      const dropped = missing.filter((b) => !lost.has(b.id)).map((b) => b.id)
+      await this.db.blocks.bulkDelete(dropped)
+      await this.db.links.bulkDelete(dropped)
+
+      await this.db.unloadedDocuments.delete(documentId)
+      this.mark(ctx, workspaceId, documentId)
+      await this.persistTouched(ctx)
+    })
+    this.notify(ctx)
+  }
+
   // ---------------------------------------------------------------- attachments
 
   /**
@@ -1613,28 +1844,7 @@ export class LocalStore {
   ): Promise<{ attachment: Attachment; block: Block }> {
     return this.write(async (ctx) => {
       const document = await this.requireDocument(documentId)
-      const attachment = attachmentSchema.parse({
-        id: newId(),
-        workspaceId: document.workspaceId,
-        documentId,
-        name: file.name.trim().slice(0, 255) || 'Datei',
-        mimeType: /^[\w.+-]+\/[\w.+-]+$/.test(file.type) ? file.type : 'application/octet-stream',
-        size: file.data.byteLength,
-        sha256: file.sha256,
-        createdAt: this.now(),
-        revision: null,
-        deletedAt: null,
-      } satisfies Attachment)
-      await this.db.attachments.add(attachment)
-      await this.db.attachmentContents.put({ id: attachment.id, data: file.data, uploaded: false })
-      await this.enqueue(document.workspaceId, 'attachment', attachment.id, 'create', null, {
-        documentId,
-        name: attachment.name,
-        mimeType: attachment.mimeType,
-        size: attachment.size,
-        sha256: attachment.sha256,
-        createdAt: attachment.createdAt,
-      })
+      const attachment = await this.createAttachment(document, file)
       const image = INLINE_IMAGE_TYPES.includes(attachment.mimeType)
       const block = await this.insertBlock(
         ctx,
@@ -1648,6 +1858,51 @@ export class LocalStore {
       )
       return { attachment, block }
     })
+  }
+
+  /** Uploads an image as the page's cover (#136): an attachment of the page without a block. */
+  async setCoverImage(
+    documentId: string,
+    file: { name: string; type: string; data: ArrayBuffer; sha256: string },
+  ): Promise<Attachment> {
+    // One transaction: never an uploaded attachment without the cover pointing to it.
+    return this.write(async (ctx) => {
+      const document = await this.requireDocument(documentId)
+      const attachment = await this.createAttachment(document, file)
+      await this.applyLook(ctx, document, { cover: `attachment:${attachment.id}` })
+      return attachment
+    })
+  }
+
+  /** Stores a new attachment with its content and queues it (inside a write). */
+  private async createAttachment(
+    document: Document,
+    file: { name: string; type: string; data: ArrayBuffer; sha256: string },
+  ): Promise<Attachment> {
+    const documentId = document.id
+    const attachment = attachmentSchema.parse({
+      id: newId(),
+      workspaceId: document.workspaceId,
+      documentId,
+      name: file.name.trim().slice(0, 255) || 'Datei',
+      mimeType: /^[\w.+-]+\/[\w.+-]+$/.test(file.type) ? file.type : 'application/octet-stream',
+      size: file.data.byteLength,
+      sha256: file.sha256,
+      createdAt: this.now(),
+      revision: null,
+      deletedAt: null,
+    } satisfies Attachment)
+    await this.db.attachments.add(attachment)
+    await this.db.attachmentContents.put({ id: attachment.id, data: file.data, uploaded: false })
+    await this.enqueue(document.workspaceId, 'attachment', attachment.id, 'create', null, {
+      documentId,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      sha256: attachment.sha256,
+      createdAt: attachment.createdAt,
+    })
+    return attachment
   }
 
   /** Deletes an attachment (tombstone, replicated); its block shows it as removed. */

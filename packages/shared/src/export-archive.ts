@@ -32,6 +32,11 @@ export const exportManifestSchema = z.object({
   attachments: z.array(z.object({ id: z.uuid(), path: z.string().min(1) })),
   /** Attachments whose content was not available when exporting. */
   missing_attachments: z.array(z.object({ id: z.uuid(), name: z.string(), documentId: z.uuid() })),
+  /**
+   * Pages whose content was not on the exporting device (ADR 0017): exported with title and
+   * metadata but without blocks. Absent in archives from before ADR 0017.
+   */
+  missing_documents: z.array(z.object({ id: z.uuid(), title: z.string() })).optional(),
 })
 export type ExportManifest = z.infer<typeof exportManifestSchema>
 
@@ -57,6 +62,8 @@ export async function buildExportArchive(
     workspace: { id: string; name: string }
     exportedAt: Date
     history: ExportHistory | null
+    /** Pages exported without content because it was not on the device (ADR 0017). */
+    missingDocuments?: { id: string; title: string }[]
   },
   contents: Map<string, Uint8Array>,
 ): Promise<ExportArchive> {
@@ -108,6 +115,7 @@ export async function buildExportArchive(
     ),
     attachments,
     missing_attachments: missing,
+    missing_documents: meta.missingDocuments ?? [],
   }
   const entries: ZipEntry[] = [
     {

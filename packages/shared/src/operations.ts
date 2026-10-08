@@ -11,6 +11,8 @@ import {
   BLOCK_CONTENT_MAX_LENGTH,
   type Document,
   type DocumentTag,
+  documentCoverSchema,
+  documentIconSchema,
   documentTitleSchema,
   type OperationEntity,
   type OperationKind,
@@ -34,11 +36,19 @@ const documentCreate = z
     title: documentTitleSchema,
     sortKey: sortKeySchema,
     favorite: z.boolean(),
+    icon: documentIconSchema.nullable().optional(),
+    cover: documentCoverSchema.nullable().optional(),
     createdAt: z.string().max(40),
   })
   .strict()
 const documentUpdate = z
-  .object({ title: documentTitleSchema, favorite: z.boolean() })
+  .object({
+    title: documentTitleSchema,
+    favorite: z.boolean(),
+    // null removes the icon or cover (#136).
+    icon: documentIconSchema.nullable(),
+    cover: documentCoverSchema.nullable(),
+  })
   .partial()
   .strict()
   .refine((value) => Object.keys(value).length > 0, 'empty update')
@@ -226,6 +236,11 @@ export const syncSnapshotQuerySchema = z.object({
     .string()
     .regex(/^\d+\.\d\.[0-9A-Fa-f-]{0,64}$/)
     .optional(),
+  // `false`: everything except blocks; page contents load on demand (ADR 0017).
+  content: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
 })
 
 export interface SyncSnapshotResponse {
@@ -245,6 +260,37 @@ export interface SyncSnapshotResponse {
   next?: string | null
   /** Paged, first page only: number of entities in the whole snapshot (progress). */
   total?: number
+}
+
+/** `GET /api/sync/documents/:id`: one page with its blocks, loaded on demand (ADR 0017). */
+export const syncDocumentQuerySchema = z.object({ workspaceId: z.uuid() })
+export const syncDocumentParamsSchema = z.object({ id: z.uuid() })
+
+export interface SyncDocumentResponse {
+  document: Document
+  /** All blocks of the page, tombstones included. */
+  blocks: Block[]
+  /**
+   * Change-log position this state reflects. Changes up to it are contained; a later pull may
+   * replay some of them, which the block revisions turn into no-ops.
+   */
+  seq: number
+}
+
+/** Most pages per `POST /api/sync/documents`. */
+export const SYNC_DOCUMENTS_MAX = 100
+
+/** `POST /api/sync/documents`: several pages with their blocks at once (ADR 0017). */
+export const syncDocumentsInputSchema = z.object({
+  workspaceId: z.uuid(),
+  ids: z.array(z.uuid()).min(1).max(SYNC_DOCUMENTS_MAX),
+})
+
+export interface SyncDocumentsResponse {
+  /** The requested pages the server has; unknown ids are left out. */
+  pages: { document: Document; blocks: Block[] }[]
+  /** Change-log position all pages reflect (as for a single page). */
+  seq: number
 }
 
 /** One version of a page: an editing session of one device (ADR 0013). */

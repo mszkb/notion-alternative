@@ -18,6 +18,11 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | T-OFF-10 | Mehrere Tabs offline | Änderungen aller Tabs bleiben, werden genau einmal gesendet | AC-02 | ☑ ¹⁴ |
 | T-OFF-11 | Smartphone: Flugmodus, Hintergrund, Neustart | Siehe Prüfliste | AC-01, AC-08 | manuell ¹⁵ |
 | T-OFF-12 | Anhänge auf einem zweiten Gerät „alle offline verfügbar machen“, danach ohne Server öffnen | Fortschritt sichtbar; nur Inhalte mit passender Prüfsumme werden gespeichert; Abbruch, Netzverlust und voller Speicher halten an, Geladenes bleibt; Bild und Datei offline verfügbar | AC-01, AC-08 | ☑ ¹⁹ |
+| T-OFF-13 | Neues Gerät (Modus „bei Bedarf“), Seite nie geöffnet, dann offline öffnen | Seitenbaum und Titel da; Hinweis „Inhalt ist nicht auf diesem Gerät“, nichts bearbeitbar, keine leere Seite | AC-01, AC-08 | ☑ ²⁰ |
+| T-OFF-14 | Seite öffnen, während Änderungen anderer Geräte noch nicht gepullt sind | Geladener Stand enthält sie; der spätere Pull setzt nichts zurück, weitere Änderungen kommen an | AC-02, AC-03 | ☑ ²⁰ |
+| T-OFF-15 | „Alles offline verfügbar machen“ abbrechen bzw. Verbindung verlieren, dann erneut starten | Fortschritt sichtbar; Geladenes bleibt, Modus bleibt „bei Bedarf“; zweiter Lauf lädt nur den Rest und stellt auf „alles“ | AC-01 | ☑ ²⁰ |
+| T-OFF-16 | Export mit Seiten, deren Inhalt nicht auf dem Gerät ist | Online vorher geladen; offline in `manifest.json` unter `missing_documents` und in der Oberfläche genannt, nicht still weggelassen | AC-04 | ☑ ²⁰ |
+| T-OFF-17 | Bestehendes Gerät aktualisiert die App (Dexie-Version 5) | Bleibt bei „alles“, Cursor und Queue bleiben | AC-01 | ☑ ²⁰ |
 
 ¹ Playwright (`apps/web/e2e/offline.spec.ts`): Server nicht erreichbar (alle `/api`-Requests schlagen fehl) sowie Netzverlust in der geladenen App; T-OFF-02 zusätzlich auf Datenebene (`apps/web/src/local/store.test.ts`). Neuladen bei echtem Netz-Offline (`context.setOffline`) gegen den Production-Build mit Service Worker in `apps/web/e2e/pwa-offline.spec.ts` (Playwright-Projekt `pwa`); dort auch T-OFF-03 mit echtem Netz: wieder online, die Offline-Änderung erreicht ohne Zutun den Server.
 
@@ -60,6 +65,7 @@ Bezüge auf [Akzeptanzkriterien](../product/acceptance-criteria.md) (AC-xx). Spa
 | --- | --- | --- | --- | --- |
 | T-EXP-01 | Vollständiger Export (MD, JSON, ZIP) | Alle Dokumente, Tags, Links, Anhänge enthalten | AC-04 | ☑ ¹² |
 | T-EXP-02 | Export → Import in frische Installation | Round-Trip ohne Verlust | AC-05 | ☑ ¹³ |
+| T-EXP-03 | Import des Notion-Exports „Markdown & CSV“ | Seitenbaum, Bilder, Dateien, Links, To-dos, Toggles, Hinweise übernommen; Vereinfachtes im Bericht; fremde Datei mit Meldung abgelehnt | – | ☑ ²¹ |
 
 ## PWA / Push
 
@@ -122,3 +128,7 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ¹⁸ Server: `apps/server/test/devices.test.ts` (neue ID nach erneuter Anmeldung, Session von vor der Entfernung endet mit `401`). Client: `apps/web/src/local/store.test.ts` (Warteschlange zieht auf die neue ID um, Ablehnungen wegen der Entfernung werden zurückgesetzt, anderer Tab übernimmt die ID), `apps/web/src/device.test.ts`, `apps/web/src/sync/engine.test.ts` (Tab mit veralteter ID sendet erneut). E2E: `apps/web/e2e/devices.spec.ts`.
 
 ¹⁹ `apps/web/src/local/offline-attachments.test.ts` (nur fehlende Inhalte, Fortschritt, Prüfsumme, noch nicht hochgeladen, Netzverlust, Abbruch, Speicher voll), E2E `apps/web/e2e/attachments.spec.ts` (zweites Gerät lädt alle Anhänge über die Kontoseite und zeigt sie danach ohne Server).
+
+²⁰ ADR 0017 (Inhalte bei Bedarf): `apps/web/src/sync/on-demand.test.ts` (Erstsync ohne Blöcke, Laden beim Öffnen mit späterem Pull, Seiten anderer Geräte, offline und Server nicht erreichbar, Re-Sync lädt geladene Seiten einzeln neu, verlorener Block nach Restore wird erneut gesendet, Abbruch und Fortsetzen, Netzverlust, Export online und offline, Upgrade von Dexie-Version 4), `apps/server/test/sync-snapshot.test.ts` (`content=false` ganz und seitenweise, Einzelabruf einer Seite mit `seq`, fremde Workspaces).
+
+²¹ #137: `packages/shared/src/notion-import.test.ts` (anonymisiertes Beispiel im Aufbau des Exports: Titel ohne ID, Unterseiten aus Ordnern, Datenbank als Seite mit Zeilen und CSV, alle Blocktypen, Links, Bild, vereinfachte Teile, verschachtelte ZIPs, fremde Datei), `packages/shared/src/zip-compressed.test.ts` (Deflate, Größenlimit), `apps/server/test/import.test.ts` (Server nimmt das Ergebnis an, Anhang-Upload), `apps/web/e2e/notion-import.spec.ts`.
