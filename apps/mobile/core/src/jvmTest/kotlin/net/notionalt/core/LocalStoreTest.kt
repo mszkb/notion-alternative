@@ -243,6 +243,20 @@ class LocalStoreTest {
     }
 
     @Test
+    fun iconsAndBacklinks() {
+        val store = memoryStore()
+        val target = store.createDocument(WS, title = "Ziel")
+        val source = store.createDocument(WS, title = "Quelle")
+        store.updateBlock(store.blocks(source.id).single().id, content = "siehe [Ziel](page:${target.id})")
+        assertEquals(listOf(source.id), store.backlinks(target.id).map { it.id })
+        store.setIcon(target.id, "🍝")
+        assertEquals("🍝", store.document(target.id)!!.icon)
+        store.setIcon(target.id, null)
+        val ops = store.queuedOperations(0, 100).map { it.second }.filter { it.entityId == target.id && it.kind == "update" }
+        assertEquals(listOf("\"🍝\"", "null"), ops.map { it.payload["icon"].toString() })
+    }
+
+    @Test
     fun searchFindsTitlesAndText() {
         val store = memoryStore()
         val a = store.createDocument(WS, title = "Einkauf")

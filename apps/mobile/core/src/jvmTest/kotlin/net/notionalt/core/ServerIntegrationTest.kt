@@ -96,10 +96,12 @@ class ServerIntegrationTest {
 
         // Tags travel via pull and snapshot.
         a.store.addTag(page.id, "Telefon")
+        a.store.setIcon(page.id, "📱")
         a.sync.sync()
         assertEquals(0, a.store.pendingCount(), a.store.issues().toString())
         b.sync.sync()
         assertEquals(listOf("Telefon"), b.store.tagsForDocument(page.id).map { it.name })
+        assertEquals("📱", b.store.document(page.id)!!.icon)
 
         // A third device makes everything available offline at once.
         val c = device().signIn()

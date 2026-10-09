@@ -185,6 +185,7 @@ fun PageScreen(
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
+    var choosingIcon by remember { mutableStateOf(false) }
     // Undo of this page's edits since it was opened (ADR 0008: structural steps take a checkpoint).
     val undoStack = remember(documentId) { mutableStateListOf<List<BlockState>>() }
     var pendingUndo by remember { mutableStateOf(false) }
@@ -238,6 +239,10 @@ fun PageScreen(
                                 DropdownMenuItem(text = { Text("Unterseite anlegen") }, onClick = {
                                     menu = false
                                     openPage(store.createDocument(workspaceId, parentId = documentId).id)
+                                })
+                                DropdownMenuItem(text = { Text("Icon ändern") }, onClick = {
+                                    menu = false
+                                    choosingIcon = true
                                 })
                                 DropdownMenuItem(text = { Text("Verschieben nach …") }, onClick = {
                                     menu = false
@@ -300,6 +305,42 @@ fun PageScreen(
                 )
             }
         }
+    }
+
+    if (choosingIcon && document != null) {
+        var icon by remember { mutableStateOf(document.icon ?: "") }
+        val choices = listOf("📄", "📝", "📌", "⭐", "✅", "💡", "📚", "🏠", "💼", "🛒", "🍝", "✈️", "🎯", "🔧", "❤️", "📅")
+        AlertDialog(
+            onDismissRequest = { choosingIcon = false },
+            title = { Text("Icon") },
+            text = {
+                Column {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = icon,
+                        onValueChange = { icon = it.take(16) },
+                        singleLine = true,
+                        label = { Text("Emoji") },
+                    )
+                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp)) {
+                        for (c in choices) {
+                            TextButton(onClick = { icon = c }) { Text(c, style = MaterialTheme.typography.titleLarge) }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching { store.setIcon(documentId, icon) }
+                    choosingIcon = false
+                }) { Text("Übernehmen") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    runCatching { store.setIcon(documentId, null) }
+                    choosingIcon = false
+                }) { Text("Entfernen") }
+            },
+        )
     }
 
     if (moving && document != null) {
@@ -430,6 +471,22 @@ private fun PageEditor(
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Text(" Block hinzufügen")
+            }
+        }
+        item(key = "backlinks") {
+            val version by store.version.collectAsState()
+            val links = remember(version) { store.backlinks(documentId) }
+            if (links.isNotEmpty()) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text("Verlinkt von", style = MaterialTheme.typography.labelLarge, color = tokens.muted)
+                    for (link in links) {
+                        Text(
+                            displayTitle(link),
+                            color = tokens.accent,
+                            modifier = Modifier.fillMaxWidth().clickable { openPage(link.id) }.padding(vertical = 8.dp),
+                        )
+                    }
+                }
             }
         }
     }

@@ -191,6 +191,21 @@ class LocalStore(
         enqueue(document.workspaceId, "document", id, "update", document.revision, buildJsonObject { put("favorite", favorite) })
     }
 
+    /** Sets (emoji) or removes (null) the page icon (#136). */
+    fun setIcon(id: String, icon: String?) = write {
+        val document = requireDocument(id)
+        val value = icon?.trim()?.ifEmpty { null }
+        require(value == null || value.length <= 16) { "Icon too long" }
+        if (document.icon == value) return@write
+        q.putDocument(document.copy(icon = value, updatedAt = now()).toRow())
+        enqueue(document.workspaceId, "document", id, "update", document.revision, buildJsonObject { put("icon", value) })
+    }
+
+    /** Pages on this device that link to `documentId`. */
+    fun backlinks(documentId: String): List<Document> =
+        q.backlinks("%(page:$documentId)%", documentId).executeAsList().mapNotNull { document(it) }
+            .sortedBy { it.title.lowercase() }
+
     /** The page and all its subpages (ids), e.g. to exclude them as move targets. */
     fun subtree(id: String): Set<String> {
         val document = document(id) ?: return emptySet()
