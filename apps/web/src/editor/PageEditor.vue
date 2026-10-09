@@ -36,7 +36,7 @@ const props = defineProps<{ documentId: string }>()
 
 const SAVE_DELAY_MS = 400
 
-const { store, workspaceId, documentsById } = useWorkspace()
+const { store, workspaceId, documentsById, readOnly } = useWorkspace()
 const router = useRouter()
 
 const stored = useLiveQuery<Block[] | null>(
@@ -61,6 +61,8 @@ async function structural<T>(
   apply: (list: Block[]) => Block[],
   persist: () => Promise<T>,
 ): Promise<T | undefined> {
+  // Read-only workspace (ADR 0014): the store would refuse it anyway; keep the view unchanged.
+  if (readOnly.value) return undefined
   structuralWrites += 1
   blocks.value = apply([...(blocks.value ?? [])])
   try {
@@ -167,6 +169,7 @@ function restore(direction: 'undo' | 'redo'): Promise<void> {
 }
 
 async function restoreStep(direction: 'undo' | 'redo') {
+  if (readOnly.value) return
   if (!blocks.value) return
   const current = snapshot()
   const target = direction === 'undo' ? history.undo(current) : history.redo(current)
@@ -258,6 +261,7 @@ function selectionMarkdown(): string {
 }
 
 async function deleteSelected() {
+  if (readOnly.value) return
   const ids = selectedSet.value
   const list = blocks.value ?? []
   if (ids.size === 0) return
@@ -554,6 +558,7 @@ function scheduleSave(id: string) {
 async function flush(id: string) {
   cancelTimer(id)
   typing = false
+  if (readOnly.value) return
   const block = blockById.value.get(id)
   const el = elements.get(id)
   if (!block || !el) {
@@ -674,6 +679,7 @@ const hiddenBlocks = computed(() => {
 })
 
 async function toggleChecked(block: Block) {
+  if (readOnly.value) return
   checkpoint()
   const attrs = { ...block.attrs }
   if (attrs.checked) delete attrs.checked
@@ -682,6 +688,7 @@ async function toggleChecked(block: Block) {
 }
 
 async function changeIcon(block: Block) {
+  if (readOnly.value) return
   const icon = window.prompt('Symbol (Emoji)', block.attrs.icon ?? '💡')?.trim()
   if (!icon || icon === block.attrs.icon) return
   checkpoint()
@@ -1434,6 +1441,7 @@ function onFilesChosen(event: Event) {
 
 /** Adds files as image/file blocks after `afterId` (or at the end); works offline. */
 async function addFiles(files: File[], afterId: string | null) {
+  if (readOnly.value) return
   // Early check with the server's limit (#64); the server enforces it again.
   const limit = maxFileBytes.value
   const tooBig = files.filter((file) => file.size > limit)
@@ -1723,6 +1731,7 @@ function blockLabel(block: Block): string {
       @drop.capture="onBlockDrop(block, $event)"
     >
       <button
+        v-if="!readOnly"
         type="button"
         class="block-handle"
         aria-label="Blockmenü"
@@ -1742,6 +1751,7 @@ function blockLabel(block: Block): string {
         type="checkbox"
         class="todo-check"
         :checked="!!block.attrs.checked"
+        :disabled="readOnly"
         aria-label="Erledigt"
         @change="toggleChecked(block)"
       />
@@ -1759,6 +1769,7 @@ function blockLabel(block: Block): string {
         v-else-if="block.type === 'callout'"
         type="button"
         class="icon callout-icon"
+        :disabled="readOnly"
         aria-label="Symbol ändern"
         @click="changeIcon(block)"
       >
@@ -1770,6 +1781,7 @@ function blockLabel(block: Block): string {
         v-else-if="block.type === 'code'"
         :ref="(el) => setElement(block, el)"
         class="block-input code-input"
+        :readonly="readOnly"
         spellcheck="false"
         rows="1"
         :aria-label="blockLabel(block)"
@@ -1782,7 +1794,7 @@ function blockLabel(block: Block): string {
         v-else
         :ref="(el) => setElement(block, el)"
         class="block-input"
-        contenteditable="true"
+        :contenteditable="readOnly ? 'false' : 'true'"
         role="textbox"
         aria-multiline="true"
         :aria-label="blockLabel(block)"
@@ -1863,7 +1875,7 @@ function blockLabel(block: Block): string {
       </ul>
     </div>
 
-    <div class="add-row">
+    <div v-if="!readOnly" class="add-row">
       <button type="button" class="add-block" @click="appendParagraph">+ Block hinzufügen</button>
       <button type="button" class="add-block" @click="chooseFiles(null)">+ Bild/Datei</button>
     </div>

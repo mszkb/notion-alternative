@@ -21,7 +21,23 @@ SERVER_URL=http://127.0.0.1:3000 pnpm --filter @notion-alt/contract-tests test
 
 - `pnpm test` im Wurzelverzeichnis führt die Contract-Tests **nicht** aus (`--filter '!@notion-alt/contract-tests'`); die GitHub-CI startet sie im Job `checks` als eigenen Schritt. `pnpm typecheck` prüft das Paket mit.
 - `CONTRACT_SERVER_LOG=1` gibt die Ausgabe des gestarteten Servers mit aus; bricht der Start ab, steht sie ohnehin in der Fehlermeldung.
-- Playwright (`apps/web/playwright.config.ts`) startet ebenfalls den PHP-Server (`php -S`, Port `3100`); mit gesetztem `SERVER_CMD` diesen Befehl (`PORT`/`{port}`, Arbeitsverzeichnis: Repo-Wurzel).
+- Playwright (`apps/web/playwright.config.ts`) startet ebenfalls den PHP-Server (`php -S`, Port `3100`); mit gesetztem `SERVER_CMD` diesen Befehl (`PORT`/`{port}`, Arbeitsverzeichnis: Repo-Wurzel). Mit `BASE_URL` startet es nichts und testet eine laufende Installation.
+
+### Gegen das Webhosting-Paket unter Apache
+
+`scripts/webspace-test.sh` baut das Release-ZIP ([Webhosting](../user/webhosting.md), #128), entpackt es wie auf einem Webspace und startet es in `php:8.3-apache`: `.htaccess`, `mod_php`, Datenordner außerhalb des Webroots. Von außen prüft es danach:
+
+- Einrichtungs-Check (`api/check.php`, alles grün außer `COOKIE_SECURE` ohne HTTPS),
+- dass Code und Konfiguration nicht ausgeliefert werden,
+- alle Contract-Tests (`SERVER_URL`),
+- den Cron-Einstiegspunkt,
+- die PWA-E2E-Tests (Playwright mit `BASE_URL`; `E2E_ARGS=''` für alle).
+
+Die Werte aus der Tabelle unten stehen in `scripts/webspace-test/config.contract.php`, die der E2E-Tests in `config.e2e.php`. Braucht Docker; wie die anderen langsamen Tests gehört es in die Gitea-Nightly, nicht in die GitHub-CI. Gegen einen entfernten Docker-Host: `DOCKER_NETWORK=bridge BASE=http://<Host>:8081`, dann ohne die Push-Tests (Apache erreicht den Fake-Push-Dienst nicht). So fiel auf, dass Apache `/icons/` selbst belegt, weshalb die App-Icons unter `/app-icons/` liegen.
+
+Einmal von Hand (9. 10. 2026) auch mit PHP-FPM hinter Apache (`proxy_fcgi`, Ubuntu 24.04): alle E2E-Tests grün, Contract-Tests bis auf eine Abweichung. Apache ersetzt dort `Content-Length` durch `Transfer-Encoding: chunked`, deshalb scheitert die Prüfung von `Content-Length` beim Herunterladen eines Anhangs. Für die App spielt das keine Rolle, sie liest den Header nicht.
+
+Gegen den Docker-Stack (`SERVER_URL=http://127.0.0.1:8080`, Werte aus der Tabelle unten als Umgebung des Backends) laufen die Contract-Tests ebenfalls, außer den Rate-Limit-Tests pro Adresse (nginx trägt die Client-Adresse selbst ein, siehe „Client-Adresse“ unten) und den Push-Tests (der Fake-Push-Dienst auf dem Host ist aus dem Container nicht erreichbar).
 
 ### Ablauf
 
@@ -69,6 +85,7 @@ Nur über die API. Jeder Test registriert ein frisches Konto mit eindeutiger E-M
 | `auth.test.ts` | `GET /api/auth/status`, `POST /api/auth/register` (`email_taken`, `invalid_input` mit `issues`, `registration_closed`), `POST /api/auth/login` (`invalid_credentials`, gleiche Antwort für unbekannte Konten), `POST /api/auth/logout`, `GET /api/auth/me`, Cookie-Attribute, Rate-Limits pro E-Mail/IP/Registrierung (`429 too_many_attempts`, `Retry-After`) |
 | `password-change.test.ts` | `POST /api/auth/password` (`invalid_current_password`, Richtlinie, andere Sitzungen enden, zählt zum Login-Limit) |
 | `workspaces.test.ts` | `GET/POST /api/workspaces`, `GET /api/workspaces/:id` |
+| `sharing.test.ts` | `GET/POST /api/workspaces/:id/members`, `PATCH/DELETE /api/workspaces/:id/members/:userId` (`user_not_found`, `already_member`, `creator_fixed`, `forbidden`), Rolle in `GET /api/workspaces`; Matrix aller lesenden Endpunkte × Rolle × Konto außerhalb, Push `forbidden` für `reader`/`commenter`, Upload `403`, gesenkte Rolle (ADR 0014) |
 | `devices.test.ts` | `POST/GET /api/devices`, `PATCH/DELETE /api/devices/:id` (`device_conflict`, `current_device`, `device_revoked`, #46), Logout mit `removeDevice` |
 | `sync-push.test.ts`, `sync-apply.test.ts` | `POST /api/sync/push`: `applied`, `duplicate`, `rejected` (`workspace_not_found`, `not_found`, `device_not_active`, `op_id_reused`, `invalid_payload`, `already_exists`, `deleted`), Savepoint pro Operation (#95), Revisionen/`seq`, Tags, Wiederherstellen (#66), Batch-Grenzen, gleichzeitige Pushes mehrerer Geräte ohne Fehler |
 | `sync-conflicts.test.ts` | `merged`, `conflict` (`changed`), Konfliktobjekt in Snapshot und Log, Auflösung |

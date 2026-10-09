@@ -1,4 +1,5 @@
 import type {
+  AddMemberInput,
   AttachmentUsage,
   ChangePasswordInput,
   CreateWorkspaceInput,
@@ -23,6 +24,8 @@ import type {
   SyncSnapshotResponse,
   User,
   Workspace,
+  WorkspaceMember,
+  WorkspaceRole,
 } from '@notion-alt/shared'
 import { SNAPSHOT_PAGE_SIZE } from '@notion-alt/shared'
 
@@ -137,6 +140,18 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<{ workspace: Workspace }>('POST', '/workspaces', input),
+    listMembers: (workspaceId: string) =>
+      request<{ members: WorkspaceMember[] }>('GET', `/workspaces/${workspaceId}/members`),
+    addMember: (workspaceId: string, input: AddMemberInput) =>
+      request<{ member: WorkspaceMember }>('POST', `/workspaces/${workspaceId}/members`, input),
+    setMemberRole: (workspaceId: string, userId: string, role: WorkspaceRole) =>
+      request<{ member: WorkspaceMember }>(
+        'PATCH',
+        `/workspaces/${workspaceId}/members/${userId}`,
+        { role },
+      ),
+    removeMember: (workspaceId: string, userId: string) =>
+      request<void>('DELETE', `/workspaces/${workspaceId}/members/${userId}`),
   }
 }
 

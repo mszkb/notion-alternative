@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { api, uploadAttachment } from '../api'
+import { api, ApiError, uploadAttachment } from '../api'
 import { deviceStatus, registerDevice } from '../device'
 import type { LocalStore } from '../local/store'
 import { connection } from '../session'
@@ -30,6 +30,9 @@ export const syncState = ref<SyncState>({
 })
 
 const MAX_BACKOFF_MS = 5 * 60_000
+
+/** Counts workspaces the sync found revoked; the workspace list reloads on change (ADR 0014). */
+export const workspaceAccessChanged = ref(0)
 
 let current: Promise<void> | null = null
 let again: SyncOptions | null = null
@@ -100,9 +103,18 @@ export function requestSync(
         } else {
           if (transport.upload) await uploadPendingAttachments(store, transport.upload)
           for (const workspace of await store.cachedWorkspaces()) {
-            await syncWorkspace(store, workspace.id, transport, options.full, (progress) => {
-              syncState.value = { ...syncState.value, resync: progress }
-            })
+            if (workspace.revoked) continue
+            try {
+              await syncWorkspace(store, workspace.id, transport, options.full, (progress) => {
+                syncState.value = { ...syncState.value, resync: progress }
+              })
+            } catch (error) {
+              // 404: this account lost access (removed from the workspace, ADR 0014). The pages
+              // stay here read-only; the other workspaces sync on.
+              if (!(error instanceof ApiError && error.status === 404)) throw error
+              await store.markWorkspaceRevoked(workspace.id)
+              workspaceAccessChanged.value++
+            }
             syncState.value = { ...syncState.value, resync: null }
           }
         }

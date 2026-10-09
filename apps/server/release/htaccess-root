@@ -1,14 +1,18 @@
 # Apache/LiteSpeed for the web app (SPA) and its API in api/ (ADR 0018). Same headers and cache
-# rules as the nginx of the Docker stack (apps/web/nginx.conf, security-headers.conf).
+# rules as the nginx of the Docker stack (apps/web/nginx.conf, security-headers*.conf).
 
 Options -Indexes -MultiViews
 DirectoryIndex index.html
 
 <IfModule mod_headers.c>
-    Header always set X-Content-Type-Options "nosniff"
+    # Attachment content brings its own X-Content-Type-Options and sandbox CSP (ADR 0012). Matched
+    # on the original request line: the API's rewrite turns the URI into index.php.
+    <If "%{THE_REQUEST} !~ m#^[A-Z]+ /api/attachments/[^/?]+/content[? ]#">
+        Header always set X-Content-Type-Options "nosniff"
+        Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    </If>
     Header always set Referrer-Policy "same-origin"
     Header always set X-Frame-Options "DENY"
-    Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
     Header always set Cross-Origin-Opener-Policy "same-origin"
     Header always set Cross-Origin-Resource-Policy "same-origin"
@@ -17,7 +21,9 @@ DirectoryIndex index.html
     <If "%{REQUEST_URI} =~ m#^/assets/#">
         Header set Cache-Control "public, max-age=31536000, immutable"
     </If>
-    <ElseIf "%{REQUEST_URI} =~ m#^/icons/#">
+    # App icons live in app-icons/, not icons/: Apache's default configuration (and that of many
+    # hosts) aliases /icons/ to its own directory listing icons, so ours would answer 404.
+    <ElseIf "%{REQUEST_URI} =~ m#^/app-icons/#">
         Header set Cache-Control "public, max-age=86400"
     </ElseIf>
     <ElseIf "%{REQUEST_URI} !~ m#^/api/#">

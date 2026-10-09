@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { pageLabel, useWorkspace } from '../composables/workspace'
 
-const { store, workspaceId, documents } = useWorkspace()
+const { store, workspaceId, documents, readOnly } = useWorkspace()
 const router = useRouter()
 
 const recent = computed(() =>
@@ -25,7 +25,7 @@ async function createPage() {
     <p class="muted">
       Alle Seiten liegen lokal auf diesem Gerät und bleiben auch ohne Server bearbeitbar.
     </p>
-    <button type="button" @click="createPage">Neue Seite</button>
+    <button v-if="!readOnly" type="button" @click="createPage">Neue Seite</button>
 
     <section v-if="recent.length" class="page-section" aria-labelledby="home-recent">
       <h2 id="home-recent">Zuletzt bearbeitet</h2>
