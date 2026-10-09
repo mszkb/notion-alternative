@@ -74,6 +74,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -226,7 +233,6 @@ fun PageScreen(
             pendingUndo = false
         }
     }
-    val titles = remember(version) { store.documents(workspaceId).associate { it.id to it.title } }
 
     Scaffold(
         topBar = {
@@ -281,7 +287,7 @@ fun PageScreen(
             )
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
+        Column(Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize().imePadding()) {
             SyncStatusBar(context)
             if (conflicts.isNotEmpty()) {
                 Surface(color = tokens.warn.copy(alpha = 0.15f), modifier = Modifier.fillMaxWidth().clickable(onClick = openConflicts)) {
@@ -324,7 +330,8 @@ fun PageScreen(
                         collapsed = if (id in collapsed) collapsed - id else collapsed + id
                         store.setPreference("collapsed:$documentId", collapsed.joinToString(","))
                     },
-                    pageTitle = { titles[it] },
+                    // Looked up per link while rendering, not the whole workspace on every save.
+                    pageTitle = { store.document(it)?.title },
                     openPage = openPage,
                     openUrl = { runCatching { uriHandler.openUri(it) } },
                     tokens = tokens,
@@ -450,6 +457,16 @@ private fun PageEditor(
     val store = context.store
     val visible = remember(blocks, collapsed) { visibleBlocks(blocks, collapsed) }
     val listState = rememberLazyListState()
+    // Keep the block being edited on screen (Enter at the bottom edge creates a block below the
+    // keyboard; an item that is not composed cannot take the focus and the keyboard would close).
+    LaunchedEffect(editingId) {
+        val index = visible.indexOfFirst { it.id == editingId }
+        if (index < 0) return@LaunchedEffect
+        val item = index + 3 // cover, title, tags come first
+        val shown = listState.layoutInfo.visibleItemsInfo
+        val fullyVisible = shown.any { it.index == item && it.offset + it.size <= listState.layoutInfo.viewportEndOffset }
+        if (!fullyVisible) listState.animateScrollToItem(item)
+    }
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 200.dp)) {
         item(key = "cover") { PageCover(context, store.document(documentId)?.cover) }
         item(key = "title") { TitleField(context, documentId, title, store.document(documentId)?.revision) }
@@ -683,7 +700,7 @@ private fun BlockView(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun BlockEditor(
     context: UserContext,
@@ -880,7 +897,14 @@ private fun BlockEditor(
         }
     }
 
-    Column(Modifier.fillMaxWidth().padding(start = (12 + block.indent * 20).dp, end = 12.dp, top = 4.dp, bottom = 4.dp)) {
+    // The toolbar and slash menu below the text field stay visible above the keyboard.
+    val bringIntoView = remember { BringIntoViewRequester() }
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(imeBottom, slashKinds.size) {
+        delay(50)
+        runCatching { bringIntoView.bringIntoView() }
+    }
+    Column(Modifier.bringIntoViewRequester(bringIntoView).fillMaxWidth().padding(start = (12 + block.indent * 20).dp, end = 12.dp, top = 4.dp, bottom = 4.dp)) {
         Surface(
             shape = RoundedCornerShape(6.dp),
             color = if (block.type == "code") tokens.codeBg else tokens.surface,

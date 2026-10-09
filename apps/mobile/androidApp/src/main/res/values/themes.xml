@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window before Compose draws: light, like the app's light tokens. -->
+    <style name="Theme.NotionAlt" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F6F6F4</item>
+    </style>
+</resources>
