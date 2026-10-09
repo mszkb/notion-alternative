@@ -60,5 +60,21 @@ class AppSmokeTest {
         compose.waitUntilAtLeastOneExists(hasContentDescription("Neue Seite"), 5_000)
         val context = AppGraph.controller(compose.activity).current!!
         compose.waitUntil(30_000) { context.store.pendingCount() == 0L }
+
+        // Local search finds the new text and opens the page.
+        compose.onNodeWithContentDescription("Suchen").performClick()
+        compose.waitUntilAtLeastOneExists(isFocused(), 5_000)
+        compose.onNode(isFocused()).performTextInput("Smoketest")
+        compose.waitUntilAtLeastOneExists(hasText("Ohne Titel"), 5_000)
+        compose.onNodeWithText("Ohne Titel").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Hallo vom Smoketest"), 5_000)
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+
+        // "Alles offline verfügbar machen" from the menu.
+        compose.waitUntilAtLeastOneExists(hasContentDescription("Menü"), 5_000)
+        compose.onNodeWithContentDescription("Menü").performClick()
+        compose.onNodeWithText("Alles offline verfügbar machen").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Fertig:", substring = true), 30_000)
     }
 }

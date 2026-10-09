@@ -18,17 +18,20 @@ Was geht:
 
 - Workspace wählen (Titel oben antippen), Seitenbaum auf- und zuklappen, Favoriten oben.
 - Seite öffnen: Titel, Icon und Blöcke (Absatz, Überschriften, Listen, To-do, Toggle, Zitat, Code, Trenner, Hinweis); fett, kursiv, Code und Links; Seitenlinks öffnen die verlinkte Seite.
-- Bearbeiten: neue Seite (+), Unterseite (+ in der Zeile oder Menü), Titel ändern, Block antippen zum Bearbeiten, Enter teilt den Block, Blocktyp und Einrückung über die Leiste unter dem Block, Block löschen, To-do abhaken, Seite löschen (Papierkorb), Favorit setzen.
+- Bilder: Bild-Blöcke werden vom Server geladen und für offline gespeichert (Hochladen geht noch nicht).
+- Bearbeiten: neue Seite (+), Unterseite (+ in der Zeile oder Menü), Titel ändern, Block antippen zum Bearbeiten, Enter teilt den Block (Enter in einem leeren Listenpunkt beendet die Liste, Enter am Toggle legt ein Kind an), Blocktyp, Einrückung und Verschieben über die Leiste unter dem Block, Markdown-Kürzel am Zeilenanfang (`# `, `## `, `- `, `1. `, `[] `, `> `, ` ``` `, `---`), Block löschen, To-do abhaken, Rückgängig (Pfeil oben, für die Änderungen seit dem Öffnen der Seite), Seite löschen (Papierkorb), Favorit setzen.
+- Suche (Lupe): Titel und Text der Seiten, deren Inhalt auf dem Gerät ist; funktioniert offline.
+- „Alles offline verfügbar machen“ (Menü ⋮) lädt alle Seiteninhalte, danach ist alles im Flugmodus lesbar.
 - Offline: Alles Geladene ist ohne Netz lesbar und bearbeitbar (auch im Flugmodus nach Neustart). Änderungen landen in der Queue und werden später gesendet.
 - Sync: beim Start, beim Wechsel in den Vordergrund, 2 s nach lokalen Änderungen, alle 5 Minuten bei offener App, per Pull-to-refresh bzw. Sync-Knopf und im Hintergrund etwa alle 15 Minuten (WorkManager). Statuszeile: offline, synchronisiert, n ausstehend, Fehler.
-- Konflikte: Hinweis auf der Seite und Liste (Warnsymbol oben). Beide Versionen bleiben erhalten; auflösen vorerst in der Web-App. Vom Server abgelehnte Änderungen bleiben in der Queue und sind über die Statuszeile einsehbar.
+- Konflikte: Hinweis auf der Seite und Liste (Warnsymbol oben). Beide Versionen bleiben erhalten; „Server-Version behalten“ oder „… übernehmen“ für geänderte Blöcke und Seitentitel, andere Fälle (z. B. gelöschte Seiten) in der Web-App. Vom Server abgelehnte Änderungen bleiben in der Queue und sind über die Statuszeile einsehbar.
 - Abmelden warnt bei ausstehenden Änderungen; die lokalen Daten bleiben auf dem Gerät.
 
 Bekannte Einschränkungen (Stand heute):
 
 - Keine Push-Benachrichtigungen (kein FCM), nur Sync-Trigger wie oben.
-- Kein Slash-Menü, keine Markdown-Kürzel, kein Undo, kein Verschieben von Blöcken oder Seiten, keine Tags, keine Anhänge (Bild-/Datei-Blöcke erscheinen als Platzhalter), keine Suche, kein Export.
-- Konflikte nur anzeigen, nicht auflösen; Papierkorb nur in der Web-App.
+- Kein Slash-Menü (stattdessen Leiste unter dem Block), kein Verschieben von Seiten, keine Tags, keine Datei-Anhänge (nur Bilder anzeigen, kein Hochladen), Suche ohne Volltextindex, kein Export.
+- Papierkorb (Wiederherstellen) nur in der Web-App.
 - Das Session-Cookie liegt in der App-Datenbank (Keystore folgt mit #171), keine Token-Auth (#152).
 - Datum der letzten Synchronisierung in UTC.
 - Große Workspaces: Listen werden auf dem Hauptthread gelesen; bei sehr vielen Seiten kann die App träge werden.
