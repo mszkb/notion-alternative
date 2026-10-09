@@ -101,6 +101,7 @@ fun HomeScreen(
     var workspaceMenu by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
+    var showInfo by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     val offlineProgress by controller.offlineProgress.collectAsState()
 
@@ -157,6 +158,10 @@ fun HomeScreen(
                             DropdownMenuItem(text = { Text("Neu synchronisieren") }, onClick = {
                                 menu = false
                                 controller.requestSync(full = true)
+                            })
+                            DropdownMenuItem(text = { Text("Info") }, onClick = {
+                                menu = false
+                                showInfo = true
                             })
                             DropdownMenuItem(text = { Text("Abmelden (${context.user.email})") }, onClick = {
                                 menu = false
@@ -238,6 +243,33 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    if (showInfo) {
+        AlertDialog(
+            onDismissRequest = { showInfo = false },
+            title = { Text("Info") },
+            text = {
+                Column {
+                    val lines = listOf(
+                        "App" to controller.platform.appVersion,
+                        "Server" to (controller.session.serverUrl ?: "–"),
+                        "Konto" to context.user.email,
+                        "Gerät" to controller.platform.deviceName,
+                        "Geräte-ID" to store.deviceId,
+                        "Ausstehend" to store.pendingCount().toString(),
+                        "Letzte Synchronisierung" to (status.lastSyncAt ?: "–"),
+                        "Letzter Fehler" to (status.lastError ?: "–"),
+                        "Offline-Modus" to if (store.offlineModeAll()) "alles" else "bei Bedarf",
+                    )
+                    for ((label, value) in lines) {
+                        Text(label, style = MaterialTheme.typography.labelMedium, color = tokens.muted)
+                        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 6.dp))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showInfo = false }) { Text("Schließen") } },
+        )
     }
 
     if (confirmLogout) {

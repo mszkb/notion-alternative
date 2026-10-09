@@ -17,6 +17,12 @@ import java.util.concurrent.TimeUnit
 class AndroidPlatform(private val context: Context) : Platform {
     override val deviceName: String = "Android-App auf ${Build.MANUFACTURER} ${Build.MODEL}".take(100)
 
+    override val appVersion: String = runCatching {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        @Suppress("DEPRECATION")
+        "${info.versionName} (${info.versionCode})"
+    }.getOrDefault("?")
+
     override val drivers = DriverFactory { name, schema -> AndroidSqliteDriver(schema, context, name) }
 
     override fun httpClient(): HttpClient = platformHttpClient()

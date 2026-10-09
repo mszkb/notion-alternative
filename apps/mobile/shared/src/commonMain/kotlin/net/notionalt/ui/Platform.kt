@@ -6,6 +6,8 @@ import net.notionalt.core.DriverFactory
 /** Platform services, implemented in androidMain (and later iosMain). */
 interface Platform {
     val deviceName: String
+    /** Version shown in the info dialog, e.g. "0.1.0-dev (1)". */
+    val appVersion: String
     val drivers: DriverFactory
     fun httpClient(): HttpClient
     val backgroundSync: BackgroundSync
