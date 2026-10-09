@@ -39,6 +39,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -97,7 +100,11 @@ fun HomeScreen(
     val workspaces = remember(version) { store.workspaces() }
     var selected by remember { mutableStateOf(store.preference("workspace")) }
     val workspace = workspaces.firstOrNull { it.id == selected } ?: workspaces.firstOrNull()
-    val documents = remember(version, workspace?.id) { workspace?.let { store.documents(it.id) }.orEmpty() }
+    // Read synchronously once, then off the main thread after every change (large workspaces).
+    val firstDocuments = remember(workspace?.id) { workspace?.let { store.documents(it.id) }.orEmpty() }
+    val documents by produceState(firstDocuments, version, workspace?.id) {
+        value = withContext(Dispatchers.Default) { workspace?.let { store.documents(it.id) }.orEmpty() }
+    }
     val conflicts = remember(version, workspace?.id) { workspace?.let { store.openConflicts(it.id) }.orEmpty() }
     var expanded by remember { mutableStateOf(setOf<String>()) }
     val rows = remember(documents, expanded) { visibleTree(documents, expanded) }
