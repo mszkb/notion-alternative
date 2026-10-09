@@ -11,7 +11,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import net.notionalt.core.DriverFactory
 import java.util.concurrent.TimeUnit
 
@@ -20,7 +19,7 @@ class AndroidPlatform(private val context: Context) : Platform {
 
     override val drivers = DriverFactory { name, schema -> AndroidSqliteDriver(schema, context, name) }
 
-    override fun httpClient(): HttpClient = HttpClient(OkHttp)
+    override fun httpClient(): HttpClient = platformHttpClient()
 
     override val backgroundSync: BackgroundSync = object : BackgroundSync {
         override fun schedule() {

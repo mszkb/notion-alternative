@@ -26,16 +26,17 @@ import net.notionalt.core.UserContext
 
 /** Sync state in one line: offline, synced, n pending, error (#156). */
 @Composable
-fun SyncStatusBar(context: UserContext) {
+fun SyncStatusBar(context: UserContext, relogin: (() -> Unit)? = null) {
     val status by context.sync.status.collectAsState()
     val version by context.store.version.collectAsState()
     val pending = remember(version, status) { context.store.pendingCount() }
     val issues = remember(version, status) { context.store.issues() }
     val tokens = LocalTokens.current
     var showIssues by remember { mutableStateOf(false) }
+    var askRelogin by remember { mutableStateOf(false) }
 
     val (text, color) = when {
-        status.sessionExpired -> "Sitzung abgelaufen – Änderungen bleiben auf dem Gerät. Bitte ab- und wieder anmelden." to tokens.warn
+        status.sessionExpired -> "Sitzung abgelaufen – Änderungen bleiben auf dem Gerät. Antippen zum Anmelden." to tokens.warn
         issues.isNotEmpty() -> "${issues.size} Änderung(en) vom Server abgelehnt – antippen für Details" to tokens.error
         !status.online -> (if (pending > 0) "Offline – $pending Änderung(en) ausstehend" else "Offline – lokale Daten") to tokens.warn
         status.lastError != null -> "Fehler: ${status.lastError}" + (if (pending > 0) " · $pending ausstehend" else "") to tokens.error
@@ -48,7 +49,9 @@ fun SyncStatusBar(context: UserContext) {
         modifier = Modifier
             .fillMaxWidth()
             .background(tokens.sidebar)
-            .clickable(enabled = issues.isNotEmpty()) { showIssues = true }
+            .clickable(enabled = issues.isNotEmpty() || (status.sessionExpired && relogin != null)) {
+                if (status.sessionExpired && relogin != null) askRelogin = true else showIssues = true
+            }
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -57,6 +60,24 @@ fun SyncStatusBar(context: UserContext) {
             Text("  ", style = MaterialTheme.typography.labelMedium)
         }
         Text(text, style = MaterialTheme.typography.labelMedium, color = color)
+    }
+    if (askRelogin && relogin != null) {
+        AlertDialog(
+            onDismissRequest = { askRelogin = false },
+            title = { Text("Neu anmelden") },
+            text = {
+                Text(
+                    "Der Server kennt diese Sitzung nicht mehr. Nach der Anmeldung mit demselben Konto werden ${if (pending > 0) "die $pending ausstehenden Änderungen" else "Änderungen"} gesendet; auf dem Gerät geht nichts verloren.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    askRelogin = false
+                    relogin()
+                }) { Text("Zur Anmeldung") }
+            },
+            dismissButton = { TextButton(onClick = { askRelogin = false }) { Text("Später") } },
+        )
     }
     if (showIssues) {
         AlertDialog(

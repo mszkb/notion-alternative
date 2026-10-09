@@ -170,7 +170,7 @@ fun HomeScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            SyncStatusBar(context)
+            SyncStatusBar(context, relogin = { scope.launch { controller.session.logout() } })
             offlineProgress?.let { text ->
                 Row(
                     Modifier.fillMaxWidth().clickable { controller.dismissOfflineProgress() }.padding(horizontal = 16.dp, vertical = 6.dp),
