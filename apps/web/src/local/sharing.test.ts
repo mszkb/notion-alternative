@@ -1,5 +1,7 @@
 import 'fake-indexeddb/auto'
 import {
+  type ImportInput,
+  jsonExportSchema,
   newId,
   type Operation,
   type SyncPushResult,
@@ -8,6 +10,7 @@ import {
 } from '@notion-alt/shared'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ApiError } from '../api'
+import { copyToOwnWorkspace } from '../export/rescue'
 import { deviceStatus } from '../device'
 import { connection } from '../session'
 import { requestSync, stopSync, type SyncTransport, workspaceAccessChanged } from '../sync/engine'
@@ -184,5 +187,57 @@ describe('revoked access', () => {
     pulled.length = 0
     await requestSync(store, {}, transport)
     expect(pulled).not.toContain(SHARED)
+  })
+})
+
+describe('rescuing refused changes (T-SHARE-02)', () => {
+  async function refuseAll() {
+    const ops = await store.pendingOperations(SHARED)
+    await store.acknowledge(
+      ops.map((op) => ({
+        opId: op.opId,
+        status: 'rejected' as const,
+        code: 'forbidden',
+        message: 'role',
+      })),
+    )
+  }
+
+  it('copies the workspace with the refused changes into a new one, with new ids', async () => {
+    const page = await store.createDocument({ workspaceId: SHARED, title: 'Offline geschrieben' })
+    await store.createBlock(page.id, { content: 'Nicht übertragbar' })
+    await refuseAll()
+    let sent: ImportInput | undefined
+    const created = await copyToOwnWorkspace(
+      store,
+      { id: SHARED, name: 'Team' },
+      {
+        name: 'Team (meine Kopie)',
+        send: async (input) => {
+          sent = input
+          return { workspace: workspace(OWN, 'owner') }
+        },
+      },
+    )
+    expect(created.id).toBe(OWN)
+    const data = jsonExportSchema.parse(sent!.data)
+    expect(sent!.name).toBe('Team (meine Kopie)')
+    expect(data.documents.map((d) => d.title)).toEqual(['Offline geschrieben'])
+    expect(data.documents[0]!.id).not.toBe(page.id)
+    expect(data.blocks.map((b) => b.content)).toContain('Nicht übertragbar')
+    // Nothing local changed by copying.
+    expect((await store.pendingOperations(SHARED)).length).toBeGreaterThan(0)
+  })
+
+  it('drops refused changes and their local state only on request', async () => {
+    const page = await store.createDocument({ workspaceId: SHARED, title: 'Abgelehnt' })
+    await store.createDocument({ workspaceId: OWN, title: 'Eigenes' })
+    await refuseAll()
+
+    expect(await store.discardRejected(SHARED)).toBeGreaterThan(0)
+    expect(await store.pendingOperations(SHARED)).toEqual([])
+    expect(await store.getDocument(page.id)).toBeUndefined()
+    // Other workspaces keep their queue.
+    expect((await store.pendingOperations(OWN)).length).toBeGreaterThan(0)
   })
 })

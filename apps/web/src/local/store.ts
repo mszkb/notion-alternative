@@ -897,6 +897,31 @@ export class LocalStore {
     return (await this.db.operations.toArray()).filter((op) => op.issue)
   }
 
+  /**
+   * Drops the changes the server refused in a workspace, after the user copied them elsewhere
+   * (ADR 0014): their queued operations and the local state they produced, so that a re-sync
+   * brings back the server's state. Returns how many operations were dropped.
+   */
+  async discardRejected(workspaceId: string): Promise<number> {
+    let dropped = 0
+    await this.db.transaction('rw', CONTENT_TABLES, async () => {
+      const queued = await this.db.operations.where('workspaceId').equals(workspaceId).toArray()
+      const refused = new Set(
+        queued.filter((op) => op.issue?.status === 'rejected').map((op) => op.entityId),
+      )
+      for (const op of queued) {
+        if (!refused.has(op.entityId)) continue
+        await this.db.operations.delete(op.seq!)
+        dropped++
+      }
+      const tables = this.entityTables
+      for (const op of queued) {
+        if (refused.has(op.entityId)) await tables[op.entity].delete(op.entityId)
+      }
+    })
+    return dropped
+  }
+
   /** Oldest queued operations after `afterSeq`, in creation order (sync push). */
   async queuedOperations(afterSeq: number, limit: number): Promise<QueuedOperation[]> {
     return this.db.operations.where('seq').above(afterSeq).limit(limit).toArray()

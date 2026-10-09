@@ -100,8 +100,8 @@ Nach [ADR 0014](../adr/0014-sharing-and-permissions.md): Freigaben pro Workspace
 | ID | Szenario | Erwartung | AC | Auto |
 | --- | --- | --- | --- | --- |
 | T-SHARE-01 | Jeder Endpunkt × jede Rolle × Konto außerhalb | Lesen ab `reader`, Inhalte ändern ab `editor`, Mitglieder verwalten nur `owner`; Konten außerhalb bekommen `404`, nie fremde Daten | – | ☑ ²² |
-| T-SHARE-02 | Rolle wird gesenkt, während ein Gerät offline Änderungen hat | Schon angewandte Operationen kommen als `duplicate` zurück, neue als `rejected` `forbidden`; lokal sichtbar und als Kopie rettbar, nichts verschwindet | – | ☐ |
-| T-SHARE-03 | Mitglied wird entfernt oder verlässt den Workspace | Server liefert nichts mehr (`404`), keine Push-Hinweise; das Gerät behält den Workspace schreibgeschützt („Zugriff entzogen“) | – | ☐ |
+| T-SHARE-02 | Rolle wird gesenkt, während ein Gerät offline Änderungen hat | Schon angewandte Operationen kommen als `duplicate` zurück, neue als `rejected` `forbidden`; lokal sichtbar und als Kopie rettbar, nichts verschwindet | – | ☑ ²³ |
+| T-SHARE-03 | Mitglied wird entfernt oder verlässt den Workspace | Server liefert nichts mehr (`404`), keine Push-Hinweise; das Gerät behält den Workspace schreibgeschützt („Zugriff entzogen“) | – | ☑ ²³ |
 | T-SHARE-04 | Ein Mitglied ändert eine Seite | Änderung kommt per Pull bei den anderen an; Push-Hinweis ohne Inhalt an deren Geräte | AC-07 | ☑ ²² |
 | T-SHARE-05 | Ersteller des Workspace | bleibt `owner`, lässt sich weder entfernen noch herabstufen; Anhänge zählen zu seinem Kontingent | – | ☑ ²² |
 
@@ -148,3 +148,5 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ²¹ #137: `packages/shared/src/notion-import.test.ts` (anonymisiertes Beispiel im Aufbau des Exports: Titel ohne ID, Unterseiten aus Ordnern, Datenbank als Seite mit Zeilen und CSV, alle Blocktypen, Links, Bild, vereinfachte Teile, verschachtelte ZIPs, fremde Datei), `packages/shared/src/zip-compressed.test.ts` (Deflate, Größenlimit), `packages/contract-tests/test/import.test.ts` (Server nimmt das Ergebnis an, Anhang-Upload), `apps/web/e2e/notion-import.spec.ts`.
 
 ²² `packages/contract-tests/test/sharing.test.ts` (Mitglieder-API, Matrix aller Endpunkte, gesenkte Rolle, Entfernen), `test/push.test.ts` (Hinweise an Geräte aller Mitglieder, nicht mehr nach dem Entfernen).
+
+²³ Server: `packages/contract-tests/test/sharing.test.ts`. Client: `apps/web/src/local/sharing.test.ts` (Lesemodus im Store, letzte Rolle offline, Zugriff entzogen beim Abgleich und bei `404`, Warteschlange entzogener Workspaces bleibt lokal, Kopie mit neuen IDs, Verwerfen nur auf Wunsch). E2E: `apps/web/e2e/sharing.spec.ts` (Lesen → Bearbeiten → Entfernen mit zwei Konten).

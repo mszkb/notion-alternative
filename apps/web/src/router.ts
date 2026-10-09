@@ -8,7 +8,9 @@ import ExportView from './views/ExportView.vue'
 import HistoryView from './views/HistoryView.vue'
 import HomeView from './views/HomeView.vue'
 import LoginView from './views/LoginView.vue'
+import MembersView from './views/MembersView.vue'
 import PageView from './views/PageView.vue'
+import RejectedView from './views/RejectedView.vue'
 import TagView from './views/TagView.vue'
 import TrashView from './views/TrashView.vue'
 import WorkspaceHome from './views/WorkspaceHome.vue'
@@ -33,6 +35,8 @@ export const router = createRouter({
         { path: 'conflicts', name: 'conflicts', component: ConflictsView },
         { path: 'trash', name: 'trash', component: TrashView },
         { path: 'export', name: 'export', component: ExportView },
+        { path: 'members', name: 'members', component: MembersView },
+        { path: 'rejected', name: 'rejected', component: RejectedView },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

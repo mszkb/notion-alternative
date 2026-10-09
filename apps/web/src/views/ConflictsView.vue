@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import { useLiveQuery } from '../composables/live-query'
 import { useWorkspace } from '../composables/workspace'
 
-const { store, workspaceId } = useWorkspace()
+const { store, workspaceId, readOnly } = useWorkspace()
 const router = useRouter()
 
 const conflicts = useLiveQuery(() => store.openConflicts(workspaceId.value), [], workspaceId)
@@ -166,6 +166,7 @@ async function resolve(conflict: Conflict, resolution: 'local' | 'remote' | 'man
           <button type="submit">Zusammengeführt speichern</button>
         </div>
       </form>
+      <p v-else-if="readOnly" class="muted">Auflösen können Mitglieder, die bearbeiten dürfen.</p>
       <div v-else class="actions">
         <button type="button" @click="resolve(conflict, 'local')">
           {{

@@ -157,9 +157,9 @@ Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/no
 
 ## Phase 8 – Collaboration
 
-- [ ] Sharing
-- [ ] Kommentare
-- [ ] Berechtigungen
+- [x] Sharing: Workspace mit Mitgliedern, Einladen per E-Mail-Adresse, Verlassen und Entfernen, Zugriff entzogen auf dem Gerät ([ADR 0014](docs/adr/0014-sharing-and-permissions.md), [#78](https://github.com/mszkb/notion-alternative/issues/78), [Anleitung](docs/user/sharing.md); offen: Lese-Links für Externe)
+- [ ] Kommentare ([#79](https://github.com/mszkb/notion-alternative/issues/79))
+- [x] Berechtigungen: Rollen Lesen/Kommentieren/Bearbeiten/Besitzer serverseitig durchgesetzt, Lesemodus im Client, abgelehnte Offline-Änderungen als Kopie rettbar ([#80](https://github.com/mszkb/notion-alternative/issues/80))
 - [ ] Echtzeitfunktionen (ggf. CRDT / operation-based Sync)
 
 ## Phase 9 – Paid services

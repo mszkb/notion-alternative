@@ -8,7 +8,7 @@ Self-hosted, **local-first / offline-first** Wissens- und Dokumentenplattform (N
 
 ## Status
 
-Phase 0 abgeschlossen, Phase 1 (Foundation) umgesetzt: Monorepo, Server mit Auth (inkl. Login-Rate-Limiting, Passwort ändern) und Workspaces, Metriken, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Phase 3 (Sync) begonnen: Geräteverwaltung, serverseitiges Änderungslog (`apps/server/src/Sync/`) Push der Offline-Queue, Delta-Pull, Tombstones, Re-Sync, Sync-Trigger (`apps/web/src/sync/`), Block-Merge mit Konfliktobjekten und Konfliktansicht, serverseitige Suche (FTS5). Phase 4 (PWA) umgesetzt (HTTPS: ADR 0011): Manifest, eigener Service Worker, Installationsflow, Web Push ohne Bibliothek. Phase 5 begonnen: Dateianhänge (ADR 0012). Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
+Phase 0 abgeschlossen, Phase 1 (Foundation) umgesetzt: Monorepo, Server mit Auth (inkl. Login-Rate-Limiting, Passwort ändern) und Workspaces, Metriken, SPA-Grundgerüst, Docker Compose, CI. Phase 2 (Local editor) umgesetzt: lokale Dexie-Datenbank mit Offline-Queue, Block-Editor, Seitenbaum, Tags, Favoriten, Backlinks, lokale Suche; die App läuft ohne Server. Phase 3 (Sync) begonnen: Geräteverwaltung, serverseitiges Änderungslog (`apps/server/src/Sync/`) Push der Offline-Queue, Delta-Pull, Tombstones, Re-Sync, Sync-Trigger (`apps/web/src/sync/`), Block-Merge mit Konfliktobjekten und Konfliktansicht, serverseitige Suche (FTS5). Phase 4 (PWA) umgesetzt (HTTPS: ADR 0011): Manifest, eigener Service Worker, Installationsflow, Web Push ohne Bibliothek. Phase 5 begonnen: Dateianhänge (ADR 0012). Phase 8 begonnen: Workspaces teilen mit Rollen (ADR 0014). Entscheidungen werden als ADRs in `docs/adr/` getroffen. Keine Frameworks/Abhängigkeiten einführen, deren ADR noch auf `Proposed` steht, ohne Rücksprache.
 
 Entschieden (`Accepted`):
 
@@ -39,7 +39,7 @@ Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaff
 | `docs/adr/` | Architecture Decision Records (Vorlage: `0000-template.md`) |
 | `docs/process/` | Definition of Done, Aufgabenzerlegung für den Roadmap-Agenten |
 | `docs/testing/` | Testmatrix (offline/online, Mehrgeräte, Konflikte, Backups, Migrationen) |
-| `docs/user/` | Anleitungen für Nutzer (App installieren, Seiten bearbeiten, Export und Import) |
+| `docs/user/` | Anleitungen für Nutzer (App installieren, Seiten bearbeiten, Export und Import, Workspaces teilen) |
 | `docs/privacy/` | Datenschutz, z. B. Datenkatalog der Opt-in-Telemetrie |
 
 Bei Fragen zu Scope oder Architektur zuerst dort nachlesen, nicht raten.
@@ -120,5 +120,5 @@ Web-App: `src/local/` (Dexie-DB, `LocalStore`, Suche, Persistenz), `src/editor/`
 - Sync-Push: `Apply::batch` (`apps/server/src/Sync/Apply.php`) wendet einen Batch in einer Transaktion mit einem Savepoint je Operation an (#95). Prüfungen pro Operation gehören in `applyIn`; ein `reject` verwirft nur den Savepoint dieser Operation.
 - Neue synchronisierte Entitätstabelle: in `TABLES` von `apps/server/src/Sync/Snapshot.php` aufnehmen (seitenweiser Snapshot, #97) und per Migration einen Index auf `(workspace_id, id)` anlegen.
 - Lokaler Suchindex (#98): Neue Schreibpfade im `LocalStore` melden betroffene Seiten mit `mark()`. Sonst bleibt der gespeicherte Index veraltet. Ändern sich die Felder oder Optionen des Index, `SEARCH_INDEX_FORMAT` erhöhen.
-- Workspace-Daten immer über Funktionen abfragen, die die User-ID einschränken (`Workspaces::findForUser`).
+- Workspace-Daten immer über Funktionen abfragen, die auf Mitglieder einschränken (`Workspaces::findForUser($db, $ws, $user, $minimum)`, ADR 0014): Lesen ab `reader`, Inhalte ändern ab `editor`, Mitglieder verwalten nur `owner`; neue Endpunkte in die Matrix von `packages/contract-tests/test/sharing.test.ts` aufnehmen. Im Client sperrt `LocalStore` Schreibzugriffe in schreibgeschützten Workspaces; neue Bearbeitungsfunktionen der Oberfläche richten sich nach `useWorkspace().readOnly`.
 - Betrieb, Konfiguration: `docs/operations/deployment.md`; Backup, Restore, Upgrade: `docs/operations/backup.md`. Ändern sich die Backup-Befehle, beides anpassen: Doku und `scripts/backup-restore-test.sh`.
