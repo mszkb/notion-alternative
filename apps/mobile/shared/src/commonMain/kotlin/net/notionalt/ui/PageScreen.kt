@@ -74,6 +74,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.delay
@@ -195,12 +200,24 @@ fun PageScreen(
     val undoStack = remember(documentId) { mutableStateListOf<List<BlockState>>() }
     var pendingUndo by remember { mutableStateOf(false) }
     fun checkpoint() {
+        // Save what the open editor holds first, or undoing this step would drop it.
+        editorFlush.flush?.invoke()
         undoStack.add(store.blockStates(documentId))
         if (undoStack.size > 50) undoStack.removeAt(0)
     }
     fun undo() {
         val target = undoStack.removeLastOrNull() ?: return
         runCatching { store.applyBlockState(documentId, target) }
+    }
+    // Undo restores whole blocks; after another device changed this page it would overwrite that
+    // change without a conflict, so the history starts over (principle 6).
+    val remoteStamp = remember(version) { store.remoteStamp(documentId) }
+    var seenStamp by remember(documentId) { mutableStateOf(remoteStamp) }
+    LaunchedEffect(remoteStamp) {
+        if (remoteStamp != seenStamp) {
+            undoStack.clear()
+            seenStamp = remoteStamp
+        }
     }
     LaunchedEffect(pendingUndo, editingId) {
         if (pendingUndo && editingId == null) {
@@ -296,12 +313,10 @@ fun PageScreen(
                     blocks = blocks,
                     editingId = editingId,
                     setEditing = { id ->
-                        if (id != null && id != editingId) {
-                            editorFlush.flush?.invoke()
-                            checkpoint()
-                        }
+                        if (id != null && id != editingId) checkpoint()
                         editingId = id
                     },
+                    moveEditing = { id -> editingId = id },
                     editorFlush = editorFlush,
                     checkpoint = ::checkpoint,
                     collapsed = collapsed,
@@ -422,6 +437,7 @@ private fun PageEditor(
     blocks: List<Block>,
     editingId: String?,
     setEditing: (String?) -> Unit,
+    moveEditing: (String?) -> Unit,
     editorFlush: EditorFlush,
     checkpoint: () -> Unit,
     collapsed: Set<String>,
@@ -450,8 +466,9 @@ private fun PageEditor(
                 BlockEditor(
                     context = context,
                     block = block,
+                    previous = remember(visible, block.id) { visible.getOrNull(visible.indexOfFirst { it.id == block.id } - 1) },
                     done = { setEditing(null) },
-                    startEditing = setEditing,
+                    startEditing = moveEditing,
                     checkpoint = checkpoint,
                     editorFlush = editorFlush,
                 )
@@ -477,7 +494,7 @@ private fun PageEditor(
             TextButton(
                 onClick = {
                     checkpoint()
-                    runCatching { store.createBlock(documentId) }.getOrNull()?.let { setEditing(it.id) }
+                    runCatching { store.createBlock(documentId) }.getOrNull()?.let { moveEditing(it.id) }
                 },
                 modifier = Modifier.padding(horizontal = 8.dp),
             ) {
@@ -655,6 +672,7 @@ private fun BlockView(
 private fun BlockEditor(
     context: UserContext,
     block: Block,
+    previous: Block?,
     done: () -> Unit,
     startEditing: (String) -> Unit,
     checkpoint: () -> Unit,
@@ -681,10 +699,21 @@ private fun BlockEditor(
     }
     // A pull changed the block while it is open and nothing was typed: show the new text instead
     // of saving the old one over it (principle 6).
-    LaunchedEffect(block.content) {
-        if (value.text == saved && block.content != saved) {
-            value = TextFieldValue(block.content, TextRange(block.content.length))
-            saved = block.content
+    // Revision of the last state this editor agreed with; a pull changing the text while typing
+    // saves the typed text against it, so the server keeps both versions as a conflict.
+    var knownRevision by remember(block.id) { mutableStateOf(block.revision) }
+    LaunchedEffect(block.content, block.revision) {
+        when {
+            block.content == saved -> knownRevision = block.revision
+            value.text == saved -> {
+                value = TextFieldValue(block.content, TextRange(block.content.length))
+                saved = block.content
+                knownRevision = block.revision
+            }
+            else -> {
+                runCatching { store.updateBlock(block.id, content = value.text, staleBase = knownRevision) }
+                saved = value.text
+            }
         }
     }
     DisposableEffect(block.id) {
@@ -730,7 +759,11 @@ private fun BlockEditor(
                 return
             }
         }
-        val newline = next.text.indexOf('\n')
+        // Only a line break typed just now splits; ones already in the text (Shift+Enter on the
+        // web, pasted text) stay.
+        val typed = next.text.count { it == '\n' } > value.text.count { it == '\n' } &&
+            next.selection.start > 0 && next.text[next.selection.start - 1] == '\n'
+        val newline = if (typed) next.selection.start - 1 else -1
         if (block.type != "code" && newline >= 0) {
             // Enter splits the block: the tail becomes a new block of a sensible type.
             val head = next.text.substring(0, newline)
@@ -769,6 +802,29 @@ private fun BlockEditor(
         value = next
     }
 
+    // Backspace at the start, as in the web editor: a list item, to-do, heading … becomes text
+    // first; text is joined with the block above; an empty block is removed.
+    fun backspaceAtStart() {
+        flush()
+        if (block.type != "paragraph" && block.type != "code") {
+            checkpoint()
+            runCatching { store.updateBlock(block.id, type = "paragraph", attrs = JsonObject(emptyMap()).withIndent(block.indent)) }
+            return
+        }
+        val target = previous ?: return
+        val joinable = target.type !in setOf("divider", "image", "file", "code")
+        if (!joinable && value.text.isNotEmpty()) return
+        checkpoint()
+        retired = true
+        if (joinable) {
+            runCatching { store.mergeBlocks(target.id, block.id) }
+            startEditing(target.id)
+        } else {
+            runCatching { store.deleteBlock(block.id) }
+            done()
+        }
+    }
+
     Column(Modifier.fillMaxWidth().padding(start = (12 + block.indent * 20).dp, end = 12.dp, top = 4.dp, bottom = 4.dp)) {
         Surface(
             shape = RoundedCornerShape(6.dp),
@@ -780,7 +836,15 @@ private fun BlockEditor(
                 onValueChange = ::onChange,
                 textStyle = blockTextStyle(block, tokens),
                 cursorBrush = SolidColor(tokens.accent),
-                modifier = Modifier.fillMaxWidth().padding(10.dp).focusRequester(focus),
+                modifier = Modifier.fillMaxWidth().padding(10.dp).focusRequester(focus).onPreviewKeyEvent { event ->
+                    val atStart = value.selection.collapsed && value.selection.start == 0
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.Backspace && atStart && !retired) {
+                        backspaceAtStart()
+                        true
+                    } else {
+                        false
+                    }
+                },
             )
         }
         Row(

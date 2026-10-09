@@ -370,7 +370,17 @@ class LocalStore(
     ): Block = write { insertBlock(requireDocument(documentId), type, content, attrs, position) }
 
     /** Saves changed fields only; an unchanged save creates no operation. */
-    fun updateBlock(id: String, type: String? = null, content: String? = null, attrs: JsonObject? = null): Block = write {
+    /**
+     * `staleBase`: the revision the user's edit was based on, when a pull changed the block while
+     * the edit was not saved yet; the server then keeps both versions as a conflict (principle 6).
+     */
+    fun updateBlock(
+        id: String,
+        type: String? = null,
+        content: String? = null,
+        attrs: JsonObject? = null,
+        staleBase: Long? = null,
+    ): Block = write {
         val block = block(id)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $id not found")
         val document = requireDocument(block.documentId)
         val payload = buildJsonObject {
@@ -385,9 +395,28 @@ class LocalStore(
             attrs = attrs ?: block.attrs,
         )
         q.putBlock(next.toRow())
-        enqueue(document.workspaceId, "block", id, "update", block.revision, payload)
+        enqueue(document.workspaceId, "block", id, "update", staleBase ?: block.revision, payload)
         touch(document)
         next
+    }
+
+    /** Backspace at the start of a block: its text is appended to `targetId`, it is deleted. */
+    fun mergeBlocks(targetId: String, sourceId: String): Block = write {
+        val source = block(sourceId)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $sourceId not found")
+        val target = block(targetId)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $targetId not found")
+        val merged = updateBlock(targetId, content = target.content + source.content)
+        deleteBlock(sourceId)
+        merged
+    }
+
+    /** Pages changed by other devices (pull, page load), per page; the editor drops its undo then. */
+    private val remoteStamps = mutableMapOf<String, Long>()
+    private var remoteCounter = 0L
+
+    fun remoteStamp(documentId: String): Long = remoteStamps[documentId] ?: 0
+
+    private fun noteRemote(documentId: String?) {
+        if (documentId != null) remoteStamps[documentId] = ++remoteCounter
     }
 
     fun blockStates(documentId: String): List<BlockState> =
@@ -633,6 +662,7 @@ class LocalStore(
                     return
                 }
                 q.putBlock(next.toRow())
+                noteRemote(next.documentId)
             }
             "tag" -> {
                 val local = q.tagById(change.entityId).executeAsOneOrNull()
@@ -1027,6 +1057,7 @@ class LocalStore(
      */
     fun applyDocumentContent(workspaceId: String, content: DocumentResponse) = write {
         val documentId = content.document.id
+        noteRemote(documentId)
         val served = content.blocks.map { it.id }.toSet()
         val resent = resendNewer(workspaceId, emptyList(), content.blocks, emptyList(), emptyList())
         for (b in content.blocks) {

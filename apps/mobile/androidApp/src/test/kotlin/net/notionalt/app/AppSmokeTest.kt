@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextInputSelection
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -83,6 +85,15 @@ class AppSmokeTest {
         compose.waitUntilAtLeastOneExists(hasText("Kopf"), 5_000)
         compose.onNodeWithText("Schwanz").assertExists()
         compose.onNodeWithText("KopfSchwanz").assertDoesNotExist()
+
+        // Backspace at the start joins the block with the one above.
+        compose.onNodeWithText("Schwanz").performClick()
+        compose.waitUntilAtLeastOneExists(isFocused(), 5_000)
+        compose.onNode(isFocused()).performTextInputSelection(androidx.compose.ui.text.TextRange(0))
+        compose.onNode(isFocused()).performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Backspace) }
+        compose.waitUntilAtLeastOneExists(hasText("KopfSchwanz"), 5_000)
+        compose.onNodeWithContentDescription("Fertig").performClick()
+        compose.onNodeWithText("Schwanz").assertDoesNotExist()
 
         // Markdown shortcut, to-do, undo and the move dialog on the same page.
         compose.onNodeWithText("Block hinzufügen", substring = true).performClick()

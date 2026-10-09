@@ -271,6 +271,23 @@ class LocalStoreTest {
     }
 
     @Test
+    fun mergingAndStaleBases() {
+        val store = memoryStore()
+        val doc = store.createDocument(WS)
+        val a = store.blocks(doc.id).single()
+        store.updateBlock(a.id, content = "Hallo ")
+        val b = store.createBlock(doc.id, content = "Welt")
+        store.mergeBlocks(a.id, b.id)
+        assertEquals(listOf("Hallo Welt"), store.blocks(doc.id).map { it.content })
+        store.acknowledge(store.queuedOperations(0, 100).map { PushResult(it.second.opId, "applied", revision = 7, seq = 1) })
+        assertEquals(0L, store.remoteStamp(doc.id))
+        store.applyRemoteChanges(WS, listOf(change(9, "block", a.id, "update", JsonObject(mapOf("content" to JsonPrimitive("fremd"))), revision = 8)), 9)
+        assertTrue(store.remoteStamp(doc.id) > 0, "a change from another device marks the page")
+        store.updateBlock(a.id, content = "meins", staleBase = 7)
+        assertEquals(7L, store.queuedOperations(0, 10).single().second.baseRevision)
+    }
+
+    @Test
     fun iconsAndBacklinks() {
         val store = memoryStore()
         val target = store.createDocument(WS, title = "Ziel")
