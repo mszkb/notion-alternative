@@ -48,6 +48,17 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all { test ->
+                // UI smoke test against a running server (see apps/mobile/README.md).
+                System.getenv("NOTION_ALT_SERVER")?.let { test.environment("NOTION_ALT_SERVER", it) }
+                test.systemProperty("robolectric.logging", "stdout")
+            }
+        }
+    }
 }
 
 kotlin {
@@ -57,4 +68,10 @@ kotlin {
 dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.junit)
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

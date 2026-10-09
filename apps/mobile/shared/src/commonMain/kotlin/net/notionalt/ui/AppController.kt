@@ -1,6 +1,8 @@
 package net.notionalt.ui
 
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -17,7 +19,11 @@ import net.notionalt.core.UserContext
  * process; the Android worker uses the same one.
  */
 class AppController(val platform: Platform) {
-    val scope = CoroutineScope(SupervisorJob())
+    // A failing background task must never take the app down; the sync status shows errors.
+    val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default +
+            CoroutineExceptionHandler { _, error -> println("Notion Alt: background task failed: $error") },
+    )
     val session = AppSession(platform.drivers, platform.httpClient(), platform.deviceName)
     private var watcher: Job? = null
     private var watched: UserContext? = null

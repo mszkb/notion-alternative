@@ -24,15 +24,19 @@ class AndroidPlatform(private val context: Context) : Platform {
 
     override val backgroundSync: BackgroundSync = object : BackgroundSync {
         override fun schedule() {
+            runCatching { enqueue() }
+        }
+
+        override fun cancel() {
+            runCatching { WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK) }
+        }
+
+        private fun enqueue() {
             val request = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(context)
                 .enqueueUniquePeriodicWork(SYNC_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
-        }
-
-        override fun cancel() {
-            WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK)
         }
     }
 

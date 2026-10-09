@@ -37,8 +37,27 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Unit tests
-        run: ./gradlew --no-daemon :core:jvmTest :shared:testDebugUnitTest
+      # A real server for the integration and UI smoke tests (the contract tests are its spec).
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, mbstring, curl, openssl, sodium
+          coverage: none
+          tools: composer:v2
+      - name: Start PHP server with a test account
+        working-directory: apps/server
+        run: |
+          composer install --no-interaction --no-progress --prefer-dist --no-dev
+          mkdir -p "$RUNNER_TEMP/notion-alt"
+          DATA_DIR="$RUNNER_TEMP/notion-alt" DATABASE_PATH="$RUNNER_TEMP/notion-alt/app.sqlite" \
+            nohup php -S 127.0.0.1:8099 -t public public/index.php > "$RUNNER_TEMP/php.log" 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8099/api/health && break; sleep 1; done
+          curl -sf -X POST http://127.0.0.1:8099/api/auth/register -H 'content-type: application/json' \
+            -d '{"email":"test@example.org","password":"geheim12345"}' > /dev/null
+      - name: Unit, integration and UI smoke tests
+        env:
+          NOTION_ALT_SERVER: http://127.0.0.1:8099
+        run: ./gradlew --no-daemon :core:jvmTest :shared:testDebugUnitTest :androidApp:testDebugUnitTest
       - name: Build debug APK
         run: ./gradlew --no-daemon :androidApp:assembleDebug
       - name: Rename APK
@@ -52,7 +71,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: apps/mobile/**/build/reports/tests/
+          path: |
+            apps/mobile/**/build/reports/tests/
+            ${{ runner.temp }}/php.log
       # Pushes only (not pull requests): the pre-release always carries the latest build.
       - name: Update pre-release android-dev
         if: github.event_name != 'pull_request'
