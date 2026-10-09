@@ -2,15 +2,21 @@
 # Tests the shared-hosting package (release ZIP, #128) the way a web host runs it: Apache with
 # .htaccess and mod_php (php:8.3-apache), data directory outside the web root. From outside it runs
 # the setup check, the contract tests, the cron entry point and the PWA end-to-end tests.
-# Needs Linux (host network), Docker, pnpm install and Playwright's Chromium (PW_CHROMIUM_PATH).
+# Needs Docker, pnpm install and Playwright's Chromium (PW_CHROMIUM_PATH).
 # Usage: scripts/webspace-test.sh [release.zip]   (default: builds one with build-php-release.sh)
-#   PORT=8081                  port of the Apache container (host network)
+#   PORT=8081                  port Apache listens on
 #   E2E_ARGS='--project=pwa'   arguments for Playwright, e.g. '' for all end-to-end tests
+#   DOCKER_NETWORK=host        Linux with a local Docker daemon. Anything else (e.g. bridge, for a
+#                              remote Docker host such as the nightly on the NAS) publishes PORT;
+#                              then set BASE=http://<docker host>:PORT. The push contract tests
+#                              are skipped there: Apache cannot reach the fake push service.
 set -eu
 cd "$(dirname "$0")/.."
 
 PORT=${PORT:-8081}
 E2E_ARGS=${E2E_ARGS---project=pwa}
+DOCKER_NETWORK=${DOCKER_NETWORK:-host}
+BASE=${BASE:-http://localhost:$PORT}
 ZIP=${1:-}
 if [ -z "$ZIP" ]; then
   ZIP=$(scripts/build-php-release.sh webspace-test | tail -n 1)
@@ -20,32 +26,35 @@ WORK=$(mktemp -d)
 NAME=notion-alt-webspace-$$
 cleanup() {
   docker rm -f "$NAME" >/dev/null 2>&1 || true
-  # What Apache wrote belongs to its user; remove it inside a container.
-  docker run --rm -v "$WORK:/w" php:8.3-apache rm -rf /w/data /w/htdocs >/dev/null 2>&1 || true
   rm -rf "$WORK"
 }
 trap cleanup EXIT INT TERM
 
+if [ "$DOCKER_NETWORK" = host ]; then
+  NETWORK_ARGS='--network host'
+  CONTRACT_ARGS=''
+else
+  NETWORK_ARGS="--network $DOCKER_NETWORK --publish $PORT:$PORT"
+  CONTRACT_ARGS='--exclude test/push.test.ts'
+fi
+
+# Files are copied in, not bind-mounted, so that a remote Docker host works too.
+# shellcheck disable=SC2086 # NETWORK_ARGS is a list of arguments
+docker create --name "$NAME" $NETWORK_ARGS -e PORT="$PORT" php:8.3-apache sh -c '
+  a2enmod rewrite headers >/dev/null
+  # The contract tests fake the push service with this certificate.
+  echo "curl.cainfo=/etc/push-receiver.crt" > "$PHP_INI_DIR/conf.d/zz-webspace-test.ini"
+  echo "Listen $PORT" > /etc/apache2/ports.conf
+  # Outside the web root and writable for Apache, like a folder created over FTP.
+  mkdir -p /var/www/notion-data && chown www-data /var/www/notion-data
+  exec apache2-foreground' >/dev/null
 unzip -q "$ZIP" -d "$WORK"
-mv "$WORK/notion-alt" "$WORK/htdocs"
-# Outside the web root, writable for Apache's user like a folder created over FTP.
-mkdir "$WORK/data"
-chmod 777 "$WORK/data"
-cp scripts/webspace-test/config.contract.php "$WORK/htdocs/api/app/config.php"
+cp scripts/webspace-test/config.contract.php "$WORK/notion-alt/api/app/config.php"
+docker cp -q "$WORK/notion-alt/." "$NAME:/var/www/html/"
+docker cp -q scripts/webspace-test/apache.conf "$NAME:/etc/apache2/sites-enabled/000-default.conf"
+docker cp -q packages/contract-tests/fixtures/push-receiver.crt "$NAME:/etc/push-receiver.crt"
+docker start "$NAME" >/dev/null
 
-docker run -d --name "$NAME" --network host -e PORT="$PORT" \
-  -v "$WORK/htdocs:/var/www/html" \
-  -v "$WORK/data:/var/www/notion-data" \
-  -v "$PWD/scripts/webspace-test/apache.conf:/etc/apache2/sites-enabled/000-default.conf:ro" \
-  -v "$PWD/packages/contract-tests/fixtures/push-receiver.crt:/etc/push-receiver.crt:ro" \
-  php:8.3-apache sh -c '
-    a2enmod rewrite headers >/dev/null
-    # The contract tests fake the push service with this certificate.
-    echo "curl.cainfo=/etc/push-receiver.crt" > "$PHP_INI_DIR/conf.d/zz-webspace-test.ini"
-    echo "Listen $PORT" > /etc/apache2/ports.conf
-    exec apache2-foreground' >/dev/null
-
-BASE=http://127.0.0.1:$PORT
 i=0
 until curl -fsS "$BASE/api/health" >/dev/null 2>&1; do
   i=$((i + 1))
@@ -75,16 +84,17 @@ for path in /api/app/config.php /api/app/vendor/autoload.php /api/app/bin/consol
 done
 
 echo '--- contract tests'
-SERVER_URL=$BASE pnpm --filter @notion-alt/contract-tests test
+# shellcheck disable=SC2086 # CONTRACT_ARGS is a list of arguments
+SERVER_URL=$BASE pnpm --filter @notion-alt/contract-tests test $CONTRACT_ARGS
 
 echo '--- cron'
 docker exec -u www-data "$NAME" php /var/www/html/api/app/bin/cron.php
 
 echo '--- end-to-end tests'
-cp scripts/webspace-test/config.e2e.php "$WORK/htdocs/api/app/config.php"
+docker cp -q scripts/webspace-test/config.e2e.php "$NAME:/var/www/html/api/app/config.php"
 # OPcache would keep the old config.php for up to opcache.revalidate_freq (2 s).
 sleep 3
 # shellcheck disable=SC2086 # E2E_ARGS is a list of arguments
-BASE_URL=http://localhost:$PORT pnpm --filter @notion-alt/web exec playwright test $E2E_ARGS
+BASE_URL=$BASE pnpm --filter @notion-alt/web exec playwright test $E2E_ARGS
 
 echo 'webspace test passed'

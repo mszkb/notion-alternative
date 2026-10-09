@@ -33,7 +33,7 @@ SERVER_URL=http://127.0.0.1:3000 pnpm --filter @notion-alt/contract-tests test
 - den Cron-Einstiegspunkt,
 - die PWA-E2E-Tests (Playwright mit `BASE_URL`; `E2E_ARGS=''` für alle).
 
-Die Werte aus der Tabelle unten stehen in `scripts/webspace-test/config.contract.php`, die der E2E-Tests in `config.e2e.php`. Braucht Linux und Docker; die GitHub-CI führt es im Job `webspace` aus. So fiel auf, dass Apache `/icons/` selbst belegt, weshalb die App-Icons unter `/app-icons/` liegen.
+Die Werte aus der Tabelle unten stehen in `scripts/webspace-test/config.contract.php`, die der E2E-Tests in `config.e2e.php`. Braucht Docker; wie die anderen langsamen Tests gehört es in die Gitea-Nightly, nicht in die GitHub-CI. Gegen einen entfernten Docker-Host: `DOCKER_NETWORK=bridge BASE=http://<Host>:8081`, dann ohne die Push-Tests (Apache erreicht den Fake-Push-Dienst nicht). So fiel auf, dass Apache `/icons/` selbst belegt, weshalb die App-Icons unter `/app-icons/` liegen.
 
 Gegen den Docker-Stack (`SERVER_URL=http://127.0.0.1:8080`, Werte aus der Tabelle unten als Umgebung des Backends) laufen die Contract-Tests ebenfalls, außer den Rate-Limit-Tests pro Adresse (nginx trägt die Client-Adresse selbst ein, siehe „Client-Adresse“ unten) und den Push-Tests (der Fake-Push-Dienst auf dem Host ist aus dem Container nicht erreichbar).
 
