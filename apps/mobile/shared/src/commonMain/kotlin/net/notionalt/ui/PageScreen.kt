@@ -100,6 +100,24 @@ private val blockKinds = listOf(
     BlockKind("Trenner", "divider", JsonObject(emptyMap())),
 )
 
+/** Typed prefix → block kind (the web editor's Markdown shortcuts). */
+private val markdownShortcuts: List<Pair<String, BlockKind>> by lazy {
+    fun kind(label: String) = blockKinds.first { it.label == label }
+    listOf(
+        "### " to kind("H3"),
+        "## " to kind("H2"),
+        "# " to kind("H1"),
+        "- " to kind("• Liste"),
+        "* " to kind("• Liste"),
+        "1. " to kind("1. Liste"),
+        "[] " to kind("To-do"),
+        "[ ] " to kind("To-do"),
+        "> " to kind("Zitat"),
+        "```" to kind("Code"),
+        "---" to kind("Trenner"),
+    )
+}
+
 private fun JsonObject.withIndent(indent: Int): JsonObject {
     val map = toMutableMap()
     if (indent > 0) map["indent"] = JsonPrimitive(indent) else map.remove("indent")
@@ -483,6 +501,26 @@ private fun BlockEditor(
     }
 
     fun onChange(next: TextFieldValue) {
+        // Markdown shortcuts at the start of a text block, as in the web editor.
+        if (block.type == "paragraph" && next.text.length > value.text.length) {
+            val shortcut = markdownShortcuts.firstOrNull { next.text.startsWith(it.first) && !value.text.startsWith(it.first) }
+            if (shortcut != null) {
+                val kind = shortcut.second
+                val rest = next.text.removePrefix(shortcut.first)
+                runCatching {
+                    if (kind.type == "divider") {
+                        store.updateBlock(block.id, type = "divider", content = "", attrs = JsonObject(emptyMap()))
+                        saved = ""
+                        done()
+                    } else {
+                        store.updateBlock(block.id, type = kind.type, content = rest, attrs = attrsFor(kind, block))
+                        saved = rest
+                        value = TextFieldValue(rest, TextRange(rest.length))
+                    }
+                }
+                return
+            }
+        }
         val newline = next.text.indexOf('\n')
         if (block.type != "code" && newline >= 0) {
             // Enter splits the block: the tail becomes a new block of a sensible type.

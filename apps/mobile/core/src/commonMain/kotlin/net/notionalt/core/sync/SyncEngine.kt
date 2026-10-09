@@ -175,6 +175,26 @@ class SyncEngine(
         return true
     }
 
+    /**
+     * Loads every page this device has not loaded yet (ADR 0017), one page per request, under the
+     * sync lock per page so normal syncs keep running in between. Returns the number of pages
+     * loaded; switches to "all" only if nothing is missing afterwards.
+     */
+    suspend fun loadAll(onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): Int {
+        var loaded = 0
+        val missing = store.workspaces().flatMap { w -> store.unloadedDocumentIds(w.id).map { w.id to it } }
+        onProgress(0, missing.size)
+        for ((index, entry) in missing.withIndex()) {
+            val (workspaceId, id) = entry
+            mutex.withLock {
+                if (!store.isDocumentLoaded(id) && loadDocument(workspaceId, id)) loaded++
+            }
+            onProgress(index + 1, missing.size)
+        }
+        store.completeOfflineMode()
+        return loaded
+    }
+
     enum class OpenOutcome { LOADED, OFFLINE, MISSING }
 
     /** Makes sure a page's content is on this device before it is shown (ADR 0017). */

@@ -201,3 +201,17 @@ INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);
 
 deleteMeta:
 DELETE FROM meta WHERE key = ?;
+
+unloadedOfWorkspace:
+SELECT documentId FROM unloadedDocument WHERE workspaceId = ?;
+
+unloadedCount:
+SELECT count(*) FROM unloadedDocument;
+
+-- Local search (titles and block text); FTS5 is not available on every Android SQLite.
+searchDocuments:
+SELECT DISTINCT document.id FROM document
+LEFT JOIN block ON block.documentId = document.id AND block.deletedAt IS NULL
+WHERE document.workspaceId = :workspaceId AND document.deletedAt IS NULL
+  AND (document.title LIKE :pattern ESCAPE '\' OR block.content LIKE :pattern ESCAPE '\')
+LIMIT 50;

@@ -152,6 +152,19 @@ class LocalStoreTest {
     }
 
     @Test
+    fun searchFindsTitlesAndText() {
+        val store = memoryStore()
+        val a = store.createDocument(WS, title = "Einkauf")
+        val b = store.createDocument(WS, title = "Notizen")
+        store.updateBlock(store.blocks(b.id).single().id, content = "Milch fürs **Einkaufen**")
+        store.createDocument(WS, title = "100% sicher")
+        assertEquals(listOf(a.id, b.id), store.search(WS, "einkauf").map { it.id })
+        assertEquals(1, store.search(WS, "100%").size)
+        assertTrue(store.search(WS, "_").isEmpty())
+        assertTrue(store.search(WS, " ").isEmpty())
+    }
+
+    @Test
     fun onlyLocalEditsTriggerSync() {
         val store = memoryStore()
         val before = store.localEdits.value

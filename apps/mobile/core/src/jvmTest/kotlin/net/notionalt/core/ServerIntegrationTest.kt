@@ -79,6 +79,14 @@ class ServerIntegrationTest {
             assertTrue(merged.contains("Version A") && merged.contains("Version B"), merged)
         }
 
+        // A third device makes everything available offline at once.
+        val c = device().signIn()
+        c.sync.sync()
+        assertFalse(c.store.isDocumentLoaded(page.id))
+        assertTrue(c.sync.loadAll() >= 1)
+        assertTrue(c.store.isDocumentLoaded(page.id))
+        assertTrue(c.store.offlineModeAll())
+
         // Deleting on A arrives as a tombstone on B.
         a.store.deleteDocument(page.id)
         a.sync.sync()

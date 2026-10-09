@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
@@ -79,6 +80,7 @@ fun HomeScreen(
     context: UserContext,
     openPage: (String, String) -> Unit,
     openConflicts: (String) -> Unit,
+    openSearch: (String) -> Unit,
 ) {
     val store = context.store
     val version by store.version.collectAsState()
@@ -99,6 +101,7 @@ fun HomeScreen(
     var menu by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
+    val offlineProgress by controller.offlineProgress.collectAsState()
 
     Scaffold(
         topBar = {
@@ -129,12 +132,21 @@ fun HomeScreen(
                             Icon(Icons.Filled.Warning, contentDescription = "Konflikte", tint = tokens.warn)
                         }
                     }
+                    if (workspace != null) {
+                        IconButton(onClick = { openSearch(workspace.id) }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Suchen")
+                        }
+                    }
                     IconButton(onClick = { controller.requestSync() }, enabled = !status.running) {
                         Icon(Icons.Filled.Sync, contentDescription = "Jetzt synchronisieren")
                     }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Menü") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(text = { Text("Alles offline verfügbar machen") }, onClick = {
+                                menu = false
+                                controller.makeAllOffline()
+                            })
                             DropdownMenuItem(text = { Text("Neu synchronisieren") }, onClick = {
                                 menu = false
                                 controller.requestSync(full = true)
@@ -159,6 +171,11 @@ fun HomeScreen(
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             SyncStatusBar(context)
+            offlineProgress?.let { text ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { controller.dismissOfflineProgress() }.padding(horizontal = 16.dp, vertical = 6.dp),
+                ) { Text(text, style = MaterialTheme.typography.labelMedium, color = tokens.accent) }
+            }
             PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = {

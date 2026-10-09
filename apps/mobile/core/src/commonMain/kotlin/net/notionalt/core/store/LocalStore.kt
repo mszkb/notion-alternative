@@ -569,6 +569,25 @@ class LocalStore(
 
     fun isDocumentLoaded(documentId: String): Boolean = q.unloaded(documentId).executeAsOneOrNull() == null
 
+    fun unloadedDocumentIds(workspaceId: String): List<String> = q.unloadedOfWorkspace(workspaceId).executeAsList()
+
+    /** "Alles offline verfügbar machen" (ADR 0017): only once nothing is missing any more. */
+    fun completeOfflineMode(): Boolean = q.transactionWithResult {
+        if (q.unloadedCount().executeAsOne() > 0) return@transactionWithResult false
+        q.putMeta("offlineMode", "all")
+        true
+    }
+
+    /** Pages whose title or text contains `text` (case-insensitive for ASCII), best title matches first. */
+    fun search(workspaceId: String, text: String): List<Document> {
+        val needle = text.trim()
+        if (needle.isEmpty()) return emptyList()
+        val pattern = "%" + needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        val ids = q.searchDocuments(workspaceId, pattern).executeAsList()
+        return ids.mapNotNull { document(it) }
+            .sortedWith(compareBy({ !it.title.contains(needle, ignoreCase = true) }, { it.title.lowercase() }))
+    }
+
     /** Pages of a workspace whose content is on this device (synced at least once, not in the trash). */
     fun loadedDocumentIds(workspaceId: String): List<String> =
         documents(workspaceId).filter { it.revision != null && isDocumentLoaded(it.id) }.map { it.id }

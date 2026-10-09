@@ -53,6 +53,7 @@ sqldelight {
 }
 
 tasks.withType<Test>().configureEach {
+    testLogging { events("passed", "skipped", "failed") }
     // Integration test against a running PHP server (see apps/mobile/README.md).
     System.getenv("NOTION_ALT_SERVER")?.let { environment("NOTION_ALT_SERVER", it) }
 }
