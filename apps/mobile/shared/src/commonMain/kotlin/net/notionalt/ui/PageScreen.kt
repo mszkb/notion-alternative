@@ -173,7 +173,10 @@ fun PageScreen(
     val blocks = remember(version, loaded) { if (loaded) store.blocks(documentId) else emptyList() }
     val conflicts = remember(version) { store.openConflicts(workspaceId).filter { it.documentId == documentId } }
     var editingId by remember { mutableStateOf<String?>(null) }
-    var collapsed by remember { mutableStateOf(setOf<String>()) }
+    // Collapsed toggles are a per-device state (ADR 0019), not synced.
+    var collapsed by remember(documentId) {
+        mutableStateOf(store.preference("collapsed:$documentId")?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet())
+    }
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val titles = remember(version) { store.documents(workspaceId).associate { it.id to it.title } }
@@ -238,7 +241,10 @@ fun PageScreen(
                     editingId = editingId,
                     setEditing = { editingId = it },
                     collapsed = collapsed,
-                    toggleCollapsed = { id -> collapsed = if (id in collapsed) collapsed - id else collapsed + id },
+                    toggleCollapsed = { id ->
+                        collapsed = if (id in collapsed) collapsed - id else collapsed + id
+                        store.setPreference("collapsed:$documentId", collapsed.joinToString(","))
+                    },
                     pageTitle = { titles[it] },
                     openPage = openPage,
                     openUrl = { runCatching { uriHandler.openUri(it) } },
@@ -527,8 +533,19 @@ private fun BlockEditor(
             val head = next.text.substring(0, newline)
             val tail = next.text.substring(newline + 1)
             val continues = block.type == "list_item" || block.type == "todo"
+            if (continues && head.isEmpty() && tail.isEmpty()) {
+                // Enter in an empty list item ends the list.
+                runCatching {
+                    store.updateBlock(block.id, type = "paragraph", content = "", attrs = JsonObject(emptyMap()).withIndent(block.indent))
+                }
+                saved = ""
+                value = TextFieldValue("")
+                return
+            }
             val type = if (continues) block.type else "paragraph"
             val attrs = when {
+                // Enter on a toggle creates its first child (ADR 0019).
+                block.type == "toggle" -> JsonObject(mapOf("indent" to JsonPrimitive((block.indent + 1).coerceAtMost(5))))
                 block.type == "todo" -> JsonObject(block.attrs + ("checked" to JsonPrimitive(false)))
                 continues -> block.attrs
                 block.indent > 0 -> JsonObject(mapOf("indent" to JsonPrimitive(block.indent)))
