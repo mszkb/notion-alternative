@@ -18,7 +18,7 @@ Was geht:
 
 - Workspace wählen (Titel oben antippen), Seitenbaum auf- und zuklappen, Favoriten oben.
 - Seite öffnen: Titel, Icon und Blöcke (Absatz, Überschriften, Listen, To-do, Toggle, Zitat, Code, Trenner, Hinweis); fett, kursiv, Code und Links; Seitenlinks öffnen die verlinkte Seite.
-- Bilder: Bild-Blöcke werden vom Server geladen und für offline gespeichert (Hochladen geht noch nicht).
+- Bilder und Seitencover: werden vom Server geladen und für offline gespeichert (Hochladen geht noch nicht).
 - Bearbeiten: neue Seite (+), Unterseite (+ in der Zeile oder Menü), Titel ändern, Block antippen zum Bearbeiten, Enter teilt den Block (Enter in einem leeren Listenpunkt beendet die Liste, Enter am Toggle legt ein Kind an; Rücktaste am Blockanfang verbindet mit dem Block darüber, sofern die Tastatur sie meldet), Blocktyp, Einrückung und Verschieben über die Leiste unter dem Block, Slash-Menü (`/` in einem leeren Textblock, z. B. `/zit`), Markdown-Kürzel am Zeilenanfang (`# `, `## `, `- `, `1. `, `[] `, `> `, ` ``` `, `---`), Block löschen, To-do abhaken, Rückgängig (Pfeil oben, für die Änderungen seit dem Öffnen der Seite), Seite löschen (Papierkorb, Wiederherstellen über Menü ⋮ → Papierkorb), Seite verschieben (Menü der Seite), Tags unter dem Titel (antippen entfernt), Icon ändern (Menü der Seite), Favorit setzen. Am Seitenende: „Verlinkt von“.
 - Suche (Lupe): Titel und Text der Seiten, deren Inhalt auf dem Gerät ist; funktioniert offline.
 - „Alles offline verfügbar machen“ (Menü ⋮) lädt alle Seiteninhalte, danach ist alles im Flugmodus lesbar.
