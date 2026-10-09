@@ -146,5 +146,17 @@ class AppSmokeTest {
         compose.onNodeWithContentDescription("Menü").performClick()
         compose.onNodeWithText("Alles offline verfügbar machen").performClick()
         compose.waitUntilAtLeastOneExists(hasText("Fertig:", substring = true), 30_000)
+
+        // Sign out and in again: the session cookie belongs to the new login, sync works again.
+        compose.onNodeWithContentDescription("Menü").performClick()
+        compose.onNodeWithText("Abmelden", substring = true).performClick()
+        compose.onNode(hasText("Abmelden") and androidx.compose.ui.test.hasClickAction()).performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Passwort"), 10_000)
+        compose.onNodeWithText("E-Mail").performTextInput("test@example.org")
+        compose.onNodeWithText("Passwort").performTextInput("geheim12345")
+        compose.onNode(hasText("Anmelden") and androidx.compose.ui.test.hasClickAction()).performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Personal"), 30_000)
+        context().store.createDocument(context().store.workspaces().first().id, title = "Nach erneutem Login")
+        compose.waitUntil(30_000) { context().store.pendingCount() == 0L }
     }
 }
