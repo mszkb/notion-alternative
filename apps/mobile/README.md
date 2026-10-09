@@ -16,7 +16,7 @@ Kotlin Multiplatform + Compose Multiplatform ([ADR 0020](../../docs/adr/0020-nat
 
 Was geht:
 
-- Workspace wählen (Titel oben antippen), Seitenbaum auf- und zuklappen, Favoriten oben.
+- Workspace wählen (Titel oben antippen, bei mehreren Workspaces), Seitenbaum auf- und zuklappen, Favoriten oben.
 - Seite öffnen: Titel, Icon und Blöcke (Absatz, Überschriften, Listen, To-do, Toggle, Zitat, Code, Trenner, Hinweis); fett, kursiv, Code und Links; Seitenlinks öffnen die verlinkte Seite.
 - Bilder und Seitencover: werden vom Server geladen und für offline gespeichert (Hochladen geht noch nicht).
 - Bearbeiten: neue Seite (+), Unterseite (+ in der Zeile oder Menü), Titel ändern, Block antippen zum Bearbeiten, Enter teilt den Block (Enter in einem leeren Listenpunkt beendet die Liste, Enter am Toggle legt ein Kind an; Rücktaste am Blockanfang verbindet mit dem Block darüber, sofern die Tastatur sie meldet), Blocktyp, Einrückung und Verschieben über die Leiste unter dem Block, Slash-Menü (`/` in einem leeren Textblock, z. B. `/zit`), Markdown-Kürzel am Zeilenanfang (`# `, `## `, `- `, `1. `, `[] `, `> `, ` ``` `, `---`), Block löschen, To-do abhaken, Rückgängig (Pfeil oben, für die Änderungen seit dem Öffnen der Seite), Seite löschen (Papierkorb, Wiederherstellen über Menü ⋮ → Papierkorb), Seite verschieben (Menü der Seite), Tags unter dem Titel (antippen entfernt), Icon ändern (Menü der Seite), Favorit setzen. Am Seitenende: „Verlinkt von“.
@@ -30,10 +30,10 @@ Was geht:
 Bekannte Einschränkungen (Stand heute):
 
 - Keine Push-Benachrichtigungen (kein FCM), nur Sync-Trigger wie oben.
-- keine Datei-Anhänge (nur Bilder anzeigen, kein Hochladen), Suche ohne Volltextindex, kein Export.
+- Keine Datei-Anhänge (nur Bilder anzeigen, kein Hochladen), Suche ohne Volltextindex, kein Export.
 - Das Session-Cookie liegt in der App-Datenbank (Keystore folgt mit #171), keine Token-Auth (#152).
 - Datum der letzten Synchronisierung in UTC.
-- Große Workspaces: Listen werden auf dem Hauptthread gelesen; bei sehr vielen Seiten kann die App träge werden.
+- Große Workspaces: Ab mehreren tausend Seiten dauert der erste Sync länger (gemessen: 10 000 Seiten in ca. 4 s auf einem PC, auf dem Telefon mehr), und einige Ansichten lesen noch auf dem Hauptthread.
 
 ## Wenn etwas nicht klappt
 
@@ -43,7 +43,7 @@ Bekannte Einschränkungen (Stand heute):
 | „Unverschlüsseltes HTTP ist … nicht erlaubt“ | Nur der Debug-Build erlaubt `http://`; die APK aus `android-dev` ist ein Debug-Build. Sonst `https://` verwenden. |
 | „Das Zertifikat … wird nicht akzeptiert“ | Selbst signierte Zertifikate werden nicht akzeptiert. Tailscale-HTTPS (`tailscale serve`) oder ein Reverse Proxy mit Let’s Encrypt nutzen (ADR 0011). |
 | „Unter … antwortet kein Notion-Alt-Server“ | Die Adresse zeigt auf etwas anderes (z. B. Router-Seite, falscher Unterpfad). Die Adresse eintragen, unter der die Web-App läuft, ohne `/api`. |
-| Statuszeile „Sitzung abgelaufen“ | Antippen → neu anmelden. Ausstehende Änderungen bleiben erhalten und werden danach gesendet. |
+| Statuszeile „Sitzung abgelaufen“ | Antippen → neu anmelden. Ausstehende Änderungen bleiben erhalten und werden danach gesendet. Ohne Verbindung oder Passwort: „Zurück zu den lokalen Daten“. |
 | Statuszeile „… vom Server abgelehnt“ | Antippen zeigt die Gründe. Die Änderungen bleiben auf dem Gerät; bitte melden (Screenshot). |
 | Seite zeigt „noch nicht auf diesem Gerät“ | Inhalt wird beim Öffnen geladen; ohne Verbindung geht das nicht. Vorher „Alles offline verfügbar machen“ (Menü ⋮). |
 | Hängt / unklarer Zustand | Menü ⋮ → „Info“ zeigt Server, Geräte-ID, ausstehende Änderungen und den letzten Fehler. Menü ⋮ → „Neu synchronisieren“ lädt alles neu, ohne lokale Änderungen zu verwerfen. |
