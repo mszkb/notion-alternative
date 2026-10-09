@@ -19,7 +19,7 @@ Was geht:
 - Workspace wählen (Titel oben antippen), Seitenbaum auf- und zuklappen, Favoriten oben.
 - Seite öffnen: Titel, Icon und Blöcke (Absatz, Überschriften, Listen, To-do, Toggle, Zitat, Code, Trenner, Hinweis); fett, kursiv, Code und Links; Seitenlinks öffnen die verlinkte Seite.
 - Bilder: Bild-Blöcke werden vom Server geladen und für offline gespeichert (Hochladen geht noch nicht).
-- Bearbeiten: neue Seite (+), Unterseite (+ in der Zeile oder Menü), Titel ändern, Block antippen zum Bearbeiten, Enter teilt den Block (Enter in einem leeren Listenpunkt beendet die Liste, Enter am Toggle legt ein Kind an; Rücktaste am Blockanfang verbindet mit dem Block darüber, sofern die Tastatur sie meldet), Blocktyp, Einrückung und Verschieben über die Leiste unter dem Block, Markdown-Kürzel am Zeilenanfang (`# `, `## `, `- `, `1. `, `[] `, `> `, ` ``` `, `---`), Block löschen, To-do abhaken, Rückgängig (Pfeil oben, für die Änderungen seit dem Öffnen der Seite), Seite löschen (Papierkorb, Wiederherstellen über Menü ⋮ → Papierkorb), Seite verschieben (Menü der Seite), Tags unter dem Titel (antippen entfernt), Icon ändern (Menü der Seite), Favorit setzen. Am Seitenende: „Verlinkt von“.
+- Bearbeiten: neue Seite (+), Unterseite (+ in der Zeile oder Menü), Titel ändern, Block antippen zum Bearbeiten, Enter teilt den Block (Enter in einem leeren Listenpunkt beendet die Liste, Enter am Toggle legt ein Kind an; Rücktaste am Blockanfang verbindet mit dem Block darüber, sofern die Tastatur sie meldet), Blocktyp, Einrückung und Verschieben über die Leiste unter dem Block, Slash-Menü (`/` in einem leeren Textblock, z. B. `/zit`), Markdown-Kürzel am Zeilenanfang (`# `, `## `, `- `, `1. `, `[] `, `> `, ` ``` `, `---`), Block löschen, To-do abhaken, Rückgängig (Pfeil oben, für die Änderungen seit dem Öffnen der Seite), Seite löschen (Papierkorb, Wiederherstellen über Menü ⋮ → Papierkorb), Seite verschieben (Menü der Seite), Tags unter dem Titel (antippen entfernt), Icon ändern (Menü der Seite), Favorit setzen. Am Seitenende: „Verlinkt von“.
 - Suche (Lupe): Titel und Text der Seiten, deren Inhalt auf dem Gerät ist; funktioniert offline.
 - „Alles offline verfügbar machen“ (Menü ⋮) lädt alle Seiteninhalte, danach ist alles im Flugmodus lesbar.
 - Offline: Alles Geladene ist ohne Netz lesbar und bearbeitbar (auch im Flugmodus nach Neustart). Änderungen landen in der Queue und werden später gesendet.
@@ -30,7 +30,7 @@ Was geht:
 Bekannte Einschränkungen (Stand heute):
 
 - Keine Push-Benachrichtigungen (kein FCM), nur Sync-Trigger wie oben.
-- Kein Slash-Menü (stattdessen Leiste unter dem Block), keine Datei-Anhänge (nur Bilder anzeigen, kein Hochladen), Suche ohne Volltextindex, kein Export.
+- keine Datei-Anhänge (nur Bilder anzeigen, kein Hochladen), Suche ohne Volltextindex, kein Export.
 - Das Session-Cookie liegt in der App-Datenbank (Keystore folgt mit #171), keine Token-Auth (#152).
 - Datum der letzten Synchronisierung in UTC.
 - Große Workspaces: Listen werden auf dem Hauptthread gelesen; bei sehr vielen Seiten kann die App träge werden.

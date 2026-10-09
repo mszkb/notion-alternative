@@ -95,6 +95,17 @@ class AppSmokeTest {
         compose.onNodeWithContentDescription("Fertig").performClick()
         compose.onNodeWithText("Schwanz").assertDoesNotExist()
 
+        // Slash menu: "/zit" offers the quote block.
+        compose.onNodeWithText("Block hinzufügen", substring = true).performClick()
+        compose.waitUntilAtLeastOneExists(isFocused(), 5_000)
+        compose.onNode(isFocused()).performTextInput("/zit")
+        compose.waitUntilAtLeastOneExists(hasText("Zitat"), 5_000)
+        compose.onNodeWithText("Zitat").performClick()
+        compose.onNode(isFocused()).performTextInput("Weisheit")
+        compose.onNodeWithContentDescription("Fertig").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Weisheit"), 5_000)
+        compose.onNodeWithText("/zit").assertDoesNotExist()
+
         // Markdown shortcut, to-do, undo and the move dialog on the same page.
         compose.onNodeWithText("Block hinzufügen", substring = true).performClick()
         compose.waitUntilAtLeastOneExists(isFocused(), 5_000)

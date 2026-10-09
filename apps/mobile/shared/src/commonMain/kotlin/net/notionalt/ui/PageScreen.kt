@@ -802,6 +802,32 @@ private fun BlockEditor(
         value = next
     }
 
+    // Slash menu: "/" plus an optional filter at the start of a text block lists the block types.
+    val slashQuery = if (block.type == "paragraph" && value.text.startsWith("/") && value.text.length <= 20 &&
+        value.text.none { it.isWhitespace() }
+    ) {
+        value.text.drop(1)
+    } else {
+        null
+    }
+    val slashKinds = slashQuery?.let { q -> blockKinds.filter { it.label.contains(q, ignoreCase = true) || it.type.contains(q, ignoreCase = true) } }
+        .orEmpty()
+
+    fun applySlash(kind: BlockKind) {
+        checkpoint()
+        if (kind.type == "divider") {
+            runCatching { store.updateBlock(block.id, type = "divider", content = "", attrs = JsonObject(emptyMap())) }
+            saved = ""
+            value = TextFieldValue("")
+            retired = true
+            done()
+        } else {
+            runCatching { store.updateBlock(block.id, type = kind.type, content = "", attrs = attrsFor(kind, block)) }
+            saved = ""
+            value = TextFieldValue("")
+        }
+    }
+
     // Backspace at the start, as in the web editor: a list item, to-do, heading … becomes text
     // first; text is joined with the block above; an empty block is removed.
     fun backspaceAtStart() {
@@ -846,6 +872,18 @@ private fun BlockEditor(
                     }
                 },
             )
+        }
+        if (slashKinds.isNotEmpty()) {
+            Surface(shape = RoundedCornerShape(6.dp), color = tokens.sidebar, modifier = Modifier.padding(top = 4.dp)) {
+                Column {
+                    for (kind in slashKinds) {
+                        Text(
+                            kind.label,
+                            modifier = Modifier.fillMaxWidth().clickable { applySlash(kind) }.padding(horizontal = 12.dp, vertical = 10.dp),
+                        )
+                    }
+                }
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
