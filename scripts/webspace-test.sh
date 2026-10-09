@@ -56,7 +56,7 @@ docker cp -q packages/contract-tests/fixtures/push-receiver.crt "$NAME:/etc/push
 docker start "$NAME" >/dev/null
 
 i=0
-until curl -fsS "$BASE/api/health" >/dev/null 2>&1; do
+until curl -fsS --max-time 5 "$BASE/api/health" >/dev/null 2>&1; do
   i=$((i + 1))
   if [ "$i" -gt 60 ]; then
     docker logs "$NAME"
@@ -68,7 +68,9 @@ done
 
 echo '--- setup check (api/check.php)'
 # Everything green except COOKIE_SECURE, which needs HTTPS.
-FAILED=$(curl -fsS "$BASE/api/check.php" | grep '❌' | grep -v COOKIE_SECURE || true)
+# Fetched first: a failing request must not look like an empty list of failures.
+CHECK=$(curl -fsS --max-time 30 "$BASE/api/check.php")
+FAILED=$(printf '%s\n' "$CHECK" | grep '❌' | grep -v COOKIE_SECURE || true)
 if [ -n "$FAILED" ]; then
   echo "$FAILED" >&2
   exit 1
