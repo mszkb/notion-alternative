@@ -3,7 +3,10 @@ package net.notionalt.app
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -28,6 +31,8 @@ class AppSmokeTest {
     val compose = createAndroidComposeRule<MainActivity>()
 
     private val server: String? = System.getenv("NOTION_ALT_SERVER")
+
+    private fun context() = AppGraph.controller(compose.activity).current!!
 
     @Test
     fun onboardingLoginAndEditing() {
@@ -54,12 +59,27 @@ class AppSmokeTest {
         compose.onNode(isFocused()).performTextInput("Hallo vom Smoketest")
         compose.onNodeWithContentDescription("Fertig").performClick()
         compose.waitUntilAtLeastOneExists(hasText("Hallo vom Smoketest"), 5_000)
+
+        // Markdown shortcut, to-do, undo and the move dialog on the same page.
+        compose.onNodeWithText("Block hinzufügen", substring = true).performClick()
+        compose.waitUntilAtLeastOneExists(isFocused(), 5_000)
+        compose.onNode(isFocused()).performTextInput("[] ")
+        compose.onNode(isFocused()).performTextInput("Aufgabe")
+        compose.onNodeWithContentDescription("Fertig").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Aufgabe"), 5_000)
+        compose.onNode(isToggleable()).performClick()
+        compose.onNode(isToggleable()).assertIsOn()
+        compose.onNodeWithContentDescription("Rückgängig").performClick()
+        compose.onNode(isToggleable()).assertIsOff()
+        compose.onNodeWithContentDescription("Menü").performClick()
+        compose.onNodeWithText("Verschieben nach …").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Oberste Ebene"), 5_000)
+        compose.onNodeWithText("Abbrechen").performClick()
         compose.onNodeWithContentDescription("Zurück").performClick()
 
         // The change reaches the server (queue empty again).
         compose.waitUntilAtLeastOneExists(hasContentDescription("Neue Seite"), 5_000)
-        val context = AppGraph.controller(compose.activity).current!!
-        compose.waitUntil(30_000) { context.store.pendingCount() == 0L }
+        compose.waitUntil(30_000) { context().store.pendingCount() == 0L }
 
         // Local search finds the new text and opens the page.
         compose.onNodeWithContentDescription("Suchen").performClick()
