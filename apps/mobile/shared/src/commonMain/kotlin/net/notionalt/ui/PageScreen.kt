@@ -503,8 +503,8 @@ private fun PageEditor(
             }
         }
         item(key = "backlinks") {
-            val version by store.version.collectAsState()
-            val links = remember(version) { store.backlinks(documentId) }
+            // Scans all block text: once per opened page, not on every save.
+            val links = remember(documentId) { store.backlinks(documentId) }
             if (links.isNotEmpty()) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text("Verlinkt von", style = MaterialTheme.typography.labelLarge, color = tokens.muted)
