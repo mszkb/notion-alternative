@@ -176,12 +176,13 @@ class LocalStore(
         document
     }
 
-    fun renameDocument(id: String, title: String) = write {
+    /** `staleBase`: as for [updateBlock], a remote change arrived while the title was typed. */
+    fun renameDocument(id: String, title: String, staleBase: Long? = null) = write {
         require(title.length <= 500) { "Title too long" }
         val document = requireDocument(id)
         if (document.title == title) return@write
         q.putDocument(document.copy(title = title, updatedAt = now()).toRow())
-        enqueue(document.workspaceId, "document", id, "update", document.revision, buildJsonObject { put("title", title) })
+        enqueue(document.workspaceId, "document", id, "update", staleBase ?: document.revision, buildJsonObject { put("title", title) })
     }
 
     fun setFavorite(id: String, favorite: Boolean) = write {

@@ -451,7 +451,7 @@ private fun PageEditor(
     val visible = remember(blocks, collapsed) { visibleBlocks(blocks, collapsed) }
     val listState = rememberLazyListState()
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 200.dp)) {
-        item(key = "title") { TitleField(context, documentId, title) }
+        item(key = "title") { TitleField(context, documentId, title, store.document(documentId)?.revision) }
         item(key = "tags") {
             val version by store.version.collectAsState()
             val workspaceId = remember(documentId) { store.document(documentId)?.workspaceId ?: "" }
@@ -540,11 +540,26 @@ private fun orderedNumber(blocks: List<Block>, block: Block): Int {
 }
 
 @Composable
-private fun TitleField(context: UserContext, documentId: String, title: String) {
+private fun TitleField(context: UserContext, documentId: String, title: String, revision: Long?) {
     var value by remember(documentId) { mutableStateOf(title) }
     var saved by remember(documentId) { mutableStateOf(title) }
-    // A title changed elsewhere (pull) shows up unless the user is typing.
-    LaunchedEffect(title) { if (value == saved) { value = title; saved = title } }
+    var knownRevision by remember(documentId) { mutableStateOf(revision) }
+    // A title changed elsewhere (pull) shows up unless the user is typing; then the typed title
+    // is saved against the old revision and the server keeps both as a conflict.
+    LaunchedEffect(title, revision) {
+        when {
+            title == saved -> knownRevision = revision
+            value == saved -> {
+                value = title
+                saved = title
+                knownRevision = revision
+            }
+            else -> {
+                runCatching { context.store.renameDocument(documentId, value.take(500), staleBase = knownRevision) }
+                saved = value
+            }
+        }
+    }
     LaunchedEffect(value) {
         delay(600)
         if (value != saved) {
