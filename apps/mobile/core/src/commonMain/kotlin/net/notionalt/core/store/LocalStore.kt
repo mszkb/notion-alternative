@@ -1,0 +1,1158 @@
+package net.notionalt.core.store
+
+import app.cash.sqldelight.db.SqlDriver
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+import net.notionalt.core.SortKey
+import net.notionalt.core.api.ApiJson
+import net.notionalt.core.db.UserDatabase
+import net.notionalt.core.model.Block
+import net.notionalt.core.model.Change
+import net.notionalt.core.model.ConflictInfo
+import net.notionalt.core.model.Document
+import net.notionalt.core.model.DocumentResponse
+import net.notionalt.core.model.Operation
+import net.notionalt.core.model.PushResult
+import net.notionalt.core.model.SnapshotResponse
+import net.notionalt.core.model.Tag
+import net.notionalt.core.model.Workspace
+import net.notionalt.core.newId
+import net.notionalt.core.nowIso
+import net.notionalt.core.sortedBySortKey
+import net.notionalt.core.db.Block as BlockRow
+import net.notionalt.core.db.Document as DocumentRow
+import net.notionalt.core.db.Operation as OperationRow
+
+class LocalStoreException(message: String) : Exception(message)
+
+/** A queued operation the server did not accept; it stays queued and is shown (principle 6). */
+data class OperationIssue(val seq: Long, val entity: String, val kind: String, val code: String, val message: String)
+
+/** A block's editable state, for undo (apps/web/src/local/store.ts `BlockState`). */
+data class BlockState(val id: String, val type: String, val content: String, val attrs: JsonObject)
+
+/** Position among siblings: `afterId == null` with [atStart] = first, nothing = append. */
+data class Position(val afterId: String? = null, val atStart: Boolean = false)
+
+/**
+ * Local data of one user (ADR 0009, ADR 0020): every change writes the entity and its operation
+ * in one SQLite transaction, so either both persist or neither. Port of the essential parts of
+ * apps/web/src/local/store.ts.
+ */
+class LocalStore(
+    driver: SqlDriver,
+    private val now: () -> String = ::nowIso,
+) {
+    val db = UserDatabase(driver)
+    private val q = db.contentQueries
+
+    /** Bumped after every committed write; the UI re-reads on change. */
+    private val _version = MutableStateFlow(0L)
+    val version: StateFlow<Long> = _version.asStateFlow()
+
+    /** Bumped only after writes that queued operations (local edits): the sync trigger. */
+    private val _localEdits = MutableStateFlow(0L)
+    val localEdits: StateFlow<Long> = _localEdits.asStateFlow()
+    /** Operations queued so far (all threads); `write` compares it before and after. */
+    private val queued = MutableStateFlow(0L)
+
+    /** Stable id of this installation, created on first use. */
+    var deviceId: String = q.transactionWithResult {
+        q.metaValue("deviceId").executeAsOneOrNull() ?: newId().also { q.putMeta("deviceId", it) }
+    }
+        private set
+
+    private fun changed(edited: Boolean) {
+        _version.update { it + 1 }
+        if (edited) _localEdits.update { it + 1 }
+    }
+
+    private fun <T> write(body: () -> T): T {
+        val before = queued.value
+        val result = q.transactionWithResult { body() }
+        changed(edited = queued.value != before)
+        return result
+    }
+
+    private fun enqueue(
+        workspaceId: String,
+        entity: String,
+        entityId: String,
+        kind: String,
+        baseRevision: Long?,
+        payload: JsonObject,
+    ) {
+        queued.update { it + 1 }
+        q.insertOperation(
+            opId = newId(),
+            deviceId = deviceId,
+            workspaceId = workspaceId,
+            entity = entity,
+            entityId = entityId,
+            kind = kind,
+            baseRevision = baseRevision,
+            payload = ApiJson.encodeToString(JsonObject.serializer(), payload),
+            createdAt = now(),
+        )
+    }
+
+    // ------------------------------------------------------------------ workspaces
+
+    fun workspaces(): List<Workspace> = q.workspaces().executeAsList().map {
+        Workspace(it.id, it.name, it.ownerId, it.createdAt)
+    }
+
+    fun saveWorkspaces(list: List<Workspace>) = write {
+        for (w in list) q.putWorkspace(net.notionalt.core.db.Workspace(w.id, w.name, w.ownerId, w.createdAt))
+        // Workspaces the account no longer has are hidden; their content stays in the database.
+        if (list.isNotEmpty()) q.deleteWorkspacesExcept(list.map { it.id })
+    }
+
+    // ------------------------------------------------------------------ documents
+
+    fun documents(workspaceId: String): List<Document> =
+        q.documentsOfWorkspace(workspaceId).executeAsList().map { it.toModel() }
+            .sortedBySortKey({ it.sortKey }, { it.id })
+
+    fun document(id: String): Document? = q.document(id).executeAsOneOrNull()?.toModel()
+
+    private fun requireDocument(id: String): Document =
+        document(id)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Document $id not found")
+
+    private fun children(workspaceId: String, parentId: String?): List<Document> =
+        documents(workspaceId).filter { it.parentId == parentId }
+
+    private fun <T> sortKeyAt(siblings: List<T>, position: Position, key: (T) -> String, id: (T) -> String, exclude: String? = null): String {
+        val list = siblings.filter { id(it) != exclude }.sortedBySortKey(key, id)
+        if (position.atStart) return SortKey.between(null, list.firstOrNull()?.let(key))
+        val afterId = position.afterId ?: return SortKey.between(list.lastOrNull()?.let(key), null)
+        val index = list.indexOfFirst { id(it) == afterId }
+        if (index == -1) throw LocalStoreException("Sibling $afterId not found")
+        val before = key(list[index])
+        val next = list.drop(index + 1).firstOrNull { key(it) > before }
+        return SortKey.between(before, next?.let(key))
+    }
+
+    /** Creates a page with one empty paragraph so the editor always has a block to type into. */
+    fun createDocument(workspaceId: String, parentId: String? = null, title: String = ""): Document = write {
+        if (parentId != null) {
+            val parent = requireDocument(parentId)
+            if (parent.workspaceId != workspaceId) throw LocalStoreException("Parent belongs to another workspace")
+        }
+        val time = now()
+        val document = Document(
+            id = newId(),
+            workspaceId = workspaceId,
+            parentId = parentId,
+            title = title,
+            sortKey = sortKeyAt(children(workspaceId, parentId), Position(), { it.sortKey }, { it.id }),
+            favorite = false,
+            createdAt = time,
+            updatedAt = time,
+            revision = null,
+            deletedAt = null,
+        )
+        q.putDocument(document.toRow())
+        enqueue(workspaceId, "document", document.id, "create", null, buildJsonObject {
+            put("parentId", parentId)
+            put("title", title)
+            put("sortKey", document.sortKey)
+            put("favorite", false)
+            put("createdAt", time)
+        })
+        insertBlock(document, "paragraph", "", JsonObject(emptyMap()), Position())
+        document
+    }
+
+    /** `staleBase`: as for [updateBlock], a remote change arrived while the title was typed. */
+    fun renameDocument(id: String, title: String, staleBase: Long? = null) = write {
+        require(title.length <= 500) { "Title too long" }
+        val document = requireDocument(id)
+        if (document.title == title) return@write
+        q.putDocument(document.copy(title = title, updatedAt = now()).toRow())
+        enqueue(document.workspaceId, "document", id, "update", staleBase ?: document.revision, buildJsonObject { put("title", title) })
+    }
+
+    fun setFavorite(id: String, favorite: Boolean) = write {
+        val document = requireDocument(id)
+        if (document.favorite == favorite) return@write
+        q.putDocument(document.copy(favorite = favorite).toRow())
+        enqueue(document.workspaceId, "document", id, "update", document.revision, buildJsonObject { put("favorite", favorite) })
+    }
+
+    /** Sets (emoji) or removes (null) the page icon (#136). */
+    fun setIcon(id: String, icon: String?) = write {
+        val document = requireDocument(id)
+        val value = icon?.trim()?.ifEmpty { null }
+        require(value == null || value.length <= 16) { "Icon too long" }
+        if (document.icon == value) return@write
+        q.putDocument(document.copy(icon = value, updatedAt = now()).toRow())
+        enqueue(document.workspaceId, "document", id, "update", document.revision, buildJsonObject { put("icon", value) })
+    }
+
+    /** Pages on this device that link to `documentId`. */
+    fun backlinks(documentId: String): List<Document> =
+        q.backlinks("%(page:$documentId)%", documentId).executeAsList().mapNotNull { document(it) }
+            .sortedBy { it.title.lowercase() }
+
+    /** The page and all its subpages (ids), e.g. to exclude them as move targets. */
+    fun subtree(id: String): Set<String> {
+        val document = document(id) ?: return emptySet()
+        val byParent = documents(document.workspaceId).groupBy { it.parentId }
+        val out = mutableSetOf<String>()
+        fun visit(current: String) {
+            out += current
+            for (child in byParent[current].orEmpty()) visit(child.id)
+        }
+        visit(id)
+        return out
+    }
+
+    /** Moves a page under another parent (null = top level), at the end of its new siblings. */
+    fun moveDocument(id: String, parentId: String?) = write {
+        val document = requireDocument(id)
+        if (parentId != null) {
+            val parent = requireDocument(parentId)
+            if (parent.workspaceId != document.workspaceId) throw LocalStoreException("Parent belongs to another workspace")
+            if (parentId in subtree(id)) throw LocalStoreException("A page cannot move into itself")
+        }
+        if (document.parentId == parentId) return@write
+        val sortKey = sortKeyAt(children(document.workspaceId, parentId), Position(), { it.sortKey }, { it.id }, exclude = id)
+        q.putDocument(document.copy(parentId = parentId, sortKey = sortKey, updatedAt = now()).toRow())
+        enqueue(document.workspaceId, "document", id, "move", document.revision, buildJsonObject {
+            put("parentId", parentId)
+            put("sortKey", sortKey)
+        })
+    }
+
+    /** Moves the page and its subpages to the trash (tombstones, parent first, as the web client). */
+    fun deleteDocument(id: String): List<String> = write {
+        val root = requireDocument(id)
+        val all = documents(root.workspaceId)
+        val subtree = mutableListOf<Document>()
+        fun visit(document: Document) {
+            subtree += document
+            for (child in all.filter { it.parentId == document.id }) visit(child)
+        }
+        visit(root)
+        val deletedAt = now()
+        for (document in subtree) {
+            q.putDocument(document.copy(deletedAt = deletedAt).toRow())
+            enqueue(document.workspaceId, "document", document.id, "delete", document.revision, JsonObject(emptyMap()))
+        }
+        subtree.map { it.id }
+    }
+
+    /** Deleted pages to offer in the trash: those whose parent is not deleted too, newest first. */
+    fun trashedDocuments(workspaceId: String): List<Document> {
+        val all = q.allDocumentsOfWorkspace(workspaceId).executeAsList().map { it.toModel() }
+        val byId = all.associateBy { it.id }
+        return all.filter { d -> d.deletedAt != null && d.parentId?.let { byId[it]?.deletedAt } == null }
+            .sortedByDescending { it.deletedAt }
+    }
+
+    /** Restores a deleted page with its deleted subpages (trash, #66); blocks come back under the same ids. */
+    fun restoreDocument(id: String): List<String> = write {
+        val root = document(id)?.takeIf { it.deletedAt != null } ?: return@write emptyList()
+        val all = q.allDocumentsOfWorkspace(root.workspaceId).executeAsList().map { it.toModel() }
+        val restored = mutableListOf<Document>()
+        fun visit(document: Document) {
+            restored += document
+            for (child in all.filter { it.parentId == document.id && it.deletedAt != null }) visit(child)
+        }
+        visit(root)
+        for (document in restored) {
+            q.putDocument(document.copy(deletedAt = null).toRow())
+            enqueue(document.workspaceId, "document", document.id, "restore", document.revision, JsonObject(emptyMap()))
+        }
+        restored.map { it.id }
+    }
+
+    // ------------------------------------------------------------------ tags
+
+    fun tags(workspaceId: String): List<Tag> = q.tagsOfWorkspace(workspaceId).executeAsList().map {
+        Tag(it.id, it.workspaceId, it.name, it.revision, it.deletedAt)
+    }
+
+    fun tagsForDocument(documentId: String): List<Tag> =
+        q.assignmentsOfDocument(documentId).executeAsList()
+            .mapNotNull { q.tagById(it.tagId).executeAsOneOrNull()?.takeIf { tag -> tag.deletedAt == null } }
+            .distinctBy { it.id }
+            .map { Tag(it.id, it.workspaceId, it.name, it.revision, it.deletedAt) }
+            .sortedBy { it.name.lowercase() }
+
+    /** Adds a tag to a page; reuses a tag of the same name (case-insensitive), as the web client. */
+    fun addTag(documentId: String, name: String): Tag = write {
+        val trimmed = name.trim()
+        require(trimmed.isNotEmpty() && trimmed.length <= 50) { "Tag name must have 1–50 characters" }
+        val document = requireDocument(documentId)
+        val tag = tags(document.workspaceId).firstOrNull { it.name.lowercase() == trimmed.lowercase() }
+            ?: Tag(newId(), document.workspaceId, trimmed, null, null).also {
+                q.putTag(net.notionalt.core.db.Tag(it.id, it.workspaceId, it.name, null, null))
+                enqueue(it.workspaceId, "tag", it.id, "create", null, buildJsonObject { put("name", it.name) })
+            }
+        val assigned = q.assignmentsOfDocument(documentId).executeAsList().any { it.tagId == tag.id }
+        if (!assigned) {
+            val id = newId()
+            q.putDocumentTag(net.notionalt.core.db.DocumentTag(id, document.workspaceId, documentId, tag.id, null, null))
+            enqueue(document.workspaceId, "document_tag", id, "create", null, buildJsonObject {
+                put("documentId", documentId)
+                put("tagId", tag.id)
+            })
+            touch(document)
+        }
+        tag
+    }
+
+    fun removeTag(documentId: String, tagId: String) = write {
+        val document = requireDocument(documentId)
+        val deletedAt = now()
+        for (assignment in q.assignmentsOfDocument(documentId).executeAsList()) {
+            if (assignment.tagId != tagId) continue
+            q.putDocumentTag(assignment.copy(deletedAt = deletedAt))
+            enqueue(document.workspaceId, "document_tag", assignment.id, "delete", assignment.revision, JsonObject(emptyMap()))
+            touch(document)
+        }
+    }
+
+    // ------------------------------------------------------------------ blocks
+
+    fun blocks(documentId: String): List<Block> =
+        q.blocksOfDocument(documentId).executeAsList().map { it.toModel() }
+            .sortedBySortKey({ it.sortKey }, { it.id })
+
+    fun block(id: String): Block? = q.block(id).executeAsOneOrNull()?.toModel()
+
+    private fun touch(document: Document) {
+        q.putDocument(document.copy(updatedAt = now()).toRow())
+    }
+
+    private fun insertBlock(document: Document, type: String, content: String, attrs: JsonObject, position: Position): Block {
+        val block = Block(
+            id = newId(),
+            documentId = document.id,
+            type = type,
+            content = content,
+            attrs = attrs,
+            sortKey = sortKeyAt(blocks(document.id), position, { it.sortKey }, { it.id }),
+            revision = null,
+            deletedAt = null,
+        )
+        q.putBlock(block.toRow())
+        enqueue(document.workspaceId, "block", block.id, "create", null, buildJsonObject {
+            put("documentId", block.documentId)
+            put("type", block.type)
+            put("content", block.content)
+            put("attrs", block.attrs)
+            put("sortKey", block.sortKey)
+        })
+        touch(requireDocument(document.id))
+        return block
+    }
+
+    fun createBlock(
+        documentId: String,
+        type: String = "paragraph",
+        content: String = "",
+        attrs: JsonObject = JsonObject(emptyMap()),
+        position: Position = Position(),
+    ): Block = write { insertBlock(requireDocument(documentId), type, content, attrs, position) }
+
+    /** Saves changed fields only; an unchanged save creates no operation. */
+    /**
+     * `staleBase`: the revision the user's edit was based on, when a pull changed the block while
+     * the edit was not saved yet; the server then keeps both versions as a conflict (principle 6).
+     */
+    fun updateBlock(
+        id: String,
+        type: String? = null,
+        content: String? = null,
+        attrs: JsonObject? = null,
+        staleBase: Long? = null,
+    ): Block = write {
+        val block = block(id)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $id not found")
+        val document = requireDocument(block.documentId)
+        val payload = buildJsonObject {
+            if (type != null && type != block.type) put("type", type)
+            if (content != null && content != block.content) put("content", content)
+            if (attrs != null && attrs != block.attrs) put("attrs", attrs)
+        }
+        if (payload.isEmpty()) return@write block
+        val next = block.copy(
+            type = type ?: block.type,
+            content = content ?: block.content,
+            attrs = attrs ?: block.attrs,
+        )
+        q.putBlock(next.toRow())
+        enqueue(document.workspaceId, "block", id, "update", staleBase ?: block.revision, payload)
+        touch(document)
+        next
+    }
+
+    /** Backspace at the start of a block: its text is appended to `targetId`, it is deleted. */
+    fun mergeBlocks(targetId: String, sourceId: String): Block = write {
+        val source = block(sourceId)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $sourceId not found")
+        val target = block(targetId)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $targetId not found")
+        val merged = updateBlock(targetId, content = target.content + source.content)
+        deleteBlock(sourceId)
+        merged
+    }
+
+    /** Pages changed by other devices (pull, page load), per page; the editor drops its undo then. */
+    private val remoteStamps = MutableStateFlow<Map<String, Long>>(emptyMap())
+
+    fun remoteStamp(documentId: String): Long = remoteStamps.value[documentId] ?: 0
+
+    private fun noteRemote(documentId: String?) {
+        if (documentId != null) remoteStamps.update { it + (documentId to (it.values.maxOrNull() ?: 0) + 1) }
+    }
+
+    fun blockStates(documentId: String): List<BlockState> =
+        blocks(documentId).map { BlockState(it.id, it.type, it.content, it.attrs) }
+
+    /**
+     * Brings a page's blocks to `target` (undo) with ordinary operations in one transaction.
+     * Blocks that no longer exist are recreated under a new id: tombstones stay final.
+     */
+    fun applyBlockState(documentId: String, target: List<BlockState>) = write {
+        val document = requireDocument(documentId)
+        val current = blocks(documentId)
+        val wanted = target.map { it.id }.toSet()
+        for (block in current) {
+            if (block.id !in wanted) {
+                q.putBlock(block.copy(deletedAt = now()).toRow())
+                enqueue(document.workspaceId, "block", block.id, "delete", block.revision, JsonObject(emptyMap()))
+            }
+        }
+        val existing = current.map { it.id }.toSet()
+        var previousId: String? = null
+        for (state in target) {
+            var id = state.id
+            if (id in existing) {
+                updateBlock(id, type = state.type, content = state.content, attrs = state.attrs)
+                val list = blocks(documentId)
+                val index = list.indexOfFirst { it.id == id }
+                val before = if (index > 0) list[index - 1].id else null
+                if (before != previousId) {
+                    moveBlock(id, if (previousId == null) Position(atStart = true) else Position(afterId = previousId))
+                }
+            } else {
+                val position = if (previousId == null) Position(atStart = true) else Position(afterId = previousId)
+                id = insertBlock(requireDocument(documentId), state.type, state.content, state.attrs, position).id
+            }
+            previousId = id
+        }
+    }
+
+    /** Moves a block among its page's blocks (`move` with the new sort key). */
+    fun moveBlock(id: String, position: Position) = write {
+        val block = block(id)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $id not found")
+        val document = requireDocument(block.documentId)
+        val sortKey = sortKeyAt(blocks(document.id), position, { it.sortKey }, { it.id }, exclude = id)
+        if (sortKey == block.sortKey) return@write
+        q.putBlock(block.copy(sortKey = sortKey).toRow())
+        enqueue(document.workspaceId, "block", id, "move", block.revision, buildJsonObject { put("sortKey", sortKey) })
+        touch(document)
+    }
+
+    /** One step up (-1) or down (+1) in the page. */
+    fun moveBlockBy(id: String, step: Int) {
+        val list = blocks(block(id)?.documentId ?: return)
+        val index = list.indexOfFirst { it.id == id }
+        val target = index + step
+        if (index < 0 || target !in list.indices) return
+        val others = list.filter { it.id != id }
+        val position = if (target == 0) Position(atStart = true) else Position(afterId = others[target - 1].id)
+        moveBlock(id, position)
+    }
+
+    /** Enter in the editor: the head stays in the block, the tail becomes a new block after it. */
+    fun splitBlock(id: String, head: String, tail: String, type: String = "paragraph", attrs: JsonObject = JsonObject(emptyMap())): Block = write {
+        val block = block(id)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $id not found")
+        updateBlock(id, content = head)
+        insertBlock(requireDocument(block.documentId), type, tail, attrs, Position(afterId = id))
+    }
+
+    fun deleteBlock(id: String) = write {
+        val block = block(id)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $id not found")
+        val document = requireDocument(block.documentId)
+        q.putBlock(block.copy(deletedAt = now()).toRow())
+        enqueue(document.workspaceId, "block", id, "delete", block.revision, JsonObject(emptyMap()))
+        touch(document)
+    }
+
+    // ------------------------------------------------------------------ attachment contents
+
+    fun cachedAttachment(id: String): ByteArray? = q.attachmentData(id).executeAsOneOrNull()
+
+    fun cacheAttachment(id: String, data: ByteArray) = q.putAttachmentData(id, data)
+
+    // ------------------------------------------------------------------ device preferences
+
+    fun preference(key: String): String? = q.metaValue("pref:$key").executeAsOneOrNull()
+
+    fun setPreference(key: String, value: String) = q.putMeta("pref:$key", value)
+
+    // ------------------------------------------------------------------ queue
+
+    fun pendingCount(): Long = q.operationCount().executeAsOne()
+
+    fun queuedOperations(afterSeq: Long, limit: Long): List<Pair<Long, Operation>> =
+        q.queuedOperations(afterSeq, limit).executeAsList().map { it.seq to it.toModel() }
+
+    fun issues(): List<OperationIssue> = q.operationsWithIssues().executeAsList().map {
+        OperationIssue(it.seq, it.entity, it.kind, it.issueCode ?: "", it.issueMessage ?: "")
+    }
+
+    /**
+     * Applies push results in one transaction: confirmed operations leave the queue and their
+     * entity learns the server revision; conflicts leave the queue (the server keeps the change in
+     * a conflict object, ADR 0003); rejections stay queued and are marked.
+     */
+    fun acknowledge(results: List<PushResult>) = write {
+        for (result in results) {
+            val op = q.operationByOpId(result.opId).executeAsOneOrNull() ?: continue
+            when {
+                result.status == "conflict" -> q.deleteOperation(op.seq)
+                result.confirmed -> {
+                    q.deleteOperation(op.seq)
+                    val revision = result.revision ?: continue
+                    setRevision(op.entity, op.entityId, revision)
+                }
+                else -> q.markOperation(result.code ?: result.status, result.message ?: "", op.seq)
+            }
+        }
+    }
+
+    /** After the device was removed and the user signed in again (#46): queue moves to a new id. */
+    fun replaceDeviceId(): String = write {
+        val old = deviceId
+        val next = newId()
+        q.putMeta("deviceId", next)
+        q.renameOperationDevice(new = next, old = old)
+        deviceId = next
+        next
+    }
+
+    // ------------------------------------------------------------------ pull
+
+    fun syncCursor(workspaceId: String): Long =
+        q.metaValue("syncCursor:$workspaceId").executeAsOneOrNull()?.toLongOrNull() ?: 0
+
+    fun offlineModeAll(): Boolean = q.metaValue("offlineMode").executeAsOneOrNull() == "all"
+
+    /**
+     * Applies pulled changes and the new cursor in one transaction, without creating operations.
+     * Own changes only confirm. Entities with unsynced local operations stay as they are; their
+     * push then meets the conflict path instead of being overwritten (principle 6).
+     */
+    fun applyRemoteChanges(workspaceId: String, changes: List<Change>, cursor: Long) = write {
+        for (change in changes) applyRemoteChange(workspaceId, change)
+        q.putMeta("syncCursor:$workspaceId", cursor.toString())
+    }
+
+    private fun setRevision(entity: String, id: String, revision: Long) {
+        when (entity) {
+            "document" -> q.setDocumentRevision(revision, id)
+            "block" -> q.setBlockRevision(revision, id)
+            "tag" -> q.setTagRevision(revision, id)
+            "document_tag" -> q.setDocumentTagRevision(revision, id)
+        }
+    }
+
+    private fun hasQueued(entityId: String) = q.operationCountForEntity(entityId).executeAsOne() > 0
+
+    private fun applyRemoteChange(workspaceId: String, change: Change) {
+        if (change.entity == "conflict") {
+            applyRemoteConflict(workspaceId, change)
+            return
+        }
+        val queued = q.operationByOpId(change.opId).executeAsOneOrNull()
+        if (queued != null) q.deleteOperation(queued.seq)
+        if (queued != null || change.deviceId == deviceId) {
+            setRevision(change.entity, change.entityId, change.revision)
+            return
+        }
+        if (hasQueued(change.entityId)) return
+        val p = change.payload
+        when (change.entity) {
+            "document" -> {
+                val local = document(change.entityId)
+                if (change.kind == "delete") {
+                    // A page deleted elsewhere stays while this device has unsynced edits in it.
+                    val blockIds = q.allBlockIdsOfDocument(change.entityId).executeAsList()
+                    if (blockIds.any(::hasQueued)) return
+                }
+                if (change.kind == "create") {
+                    q.putDocument(
+                        Document(
+                            id = change.entityId,
+                            workspaceId = workspaceId,
+                            parentId = p.str("parentId"),
+                            title = p.str("title") ?: "",
+                            sortKey = p.str("sortKey") ?: "a0",
+                            favorite = p.bool("favorite") ?: false,
+                            icon = p.str("icon"),
+                            cover = p.str("cover"),
+                            createdAt = p.str("createdAt") ?: change.appliedAt,
+                            updatedAt = change.appliedAt,
+                            revision = change.revision,
+                            deletedAt = null,
+                        ).toRow(),
+                    )
+                    // Created on another device: its content loads when the page is opened (ADR 0017).
+                    if (!offlineModeAll() && local == null) q.putUnloaded(change.entityId, workspaceId)
+                } else if (local != null) {
+                    val next = when (change.kind) {
+                        "delete" -> local.copy(deletedAt = change.appliedAt)
+                        "restore" -> local.copy(deletedAt = null, updatedAt = change.appliedAt)
+                        else -> local.copy(
+                            parentId = if (p.containsKey("parentId")) p.str("parentId") else local.parentId,
+                            title = p.str("title") ?: local.title,
+                            sortKey = p.str("sortKey") ?: local.sortKey,
+                            favorite = p.bool("favorite") ?: local.favorite,
+                            icon = if (p.containsKey("icon")) p.str("icon") else local.icon,
+                            cover = if (p.containsKey("cover")) p.str("cover") else local.cover,
+                            updatedAt = change.appliedAt,
+                        )
+                    }
+                    q.putDocument(next.copy(revision = change.revision).toRow())
+                }
+            }
+            "block" -> {
+                val local = block(change.entityId)
+                // Already contained in a state loaded later (ADR 0017); revisions only grow.
+                if (local != null && (local.revision ?: 0) >= change.revision) return
+                val next = if (change.kind == "create") {
+                    val documentId = p.str("documentId") ?: return
+                    if (q.unloaded(documentId).executeAsOneOrNull() != null) return
+                    Block(
+                        id = change.entityId,
+                        documentId = documentId,
+                        type = p.str("type") ?: "paragraph",
+                        content = p.str("content") ?: "",
+                        attrs = (p["attrs"] as? JsonObject) ?: JsonObject(emptyMap()),
+                        sortKey = p.str("sortKey") ?: "a0",
+                        revision = change.revision,
+                        deletedAt = null,
+                    )
+                } else if (local != null) {
+                    when (change.kind) {
+                        "delete" -> local.copy(deletedAt = change.appliedAt)
+                        else -> local.copy(
+                            type = p.str("type") ?: local.type,
+                            content = p.str("content") ?: local.content,
+                            attrs = (p["attrs"] as? JsonObject) ?: local.attrs,
+                            sortKey = p.str("sortKey") ?: local.sortKey,
+                        )
+                    }.copy(revision = change.revision)
+                } else {
+                    return
+                }
+                q.putBlock(next.toRow())
+                noteRemote(next.documentId)
+            }
+            "tag" -> {
+                val local = q.tagById(change.entityId).executeAsOneOrNull()
+                when {
+                    change.kind == "create" -> q.putTag(
+                        net.notionalt.core.db.Tag(change.entityId, workspaceId, p.str("name") ?: "", change.revision, null),
+                    )
+                    local == null -> {}
+                    change.kind == "delete" -> q.putTag(local.copy(deletedAt = change.appliedAt, revision = change.revision))
+                    else -> q.putTag(local.copy(name = p.str("name") ?: local.name, revision = change.revision))
+                }
+            }
+            "document_tag" -> {
+                val local = q.documentTagById(change.entityId).executeAsOneOrNull()
+                when {
+                    change.kind == "create" -> q.putDocumentTag(
+                        net.notionalt.core.db.DocumentTag(
+                            change.entityId, workspaceId, p.str("documentId") ?: return, p.str("tagId") ?: return, change.revision, null,
+                        ),
+                    )
+                    local != null && change.kind == "delete" ->
+                        q.putDocumentTag(local.copy(deletedAt = change.appliedAt, revision = change.revision))
+                }
+            }
+            // Attachment metadata is not kept by the app yet; image blocks load contents by id.
+        }
+    }
+
+    private fun applyRemoteConflict(workspaceId: String, change: Change) {
+        if (change.kind == "create") {
+            val entity = buildJsonObject {
+                put("id", change.entityId)
+                put("workspaceId", workspaceId)
+                change.payload.forEach { (k, v) -> put(k, v) }
+                put("revision", change.revision)
+                put("deletedAt", JsonNull)
+            }
+            putConflict(entity)
+            val info = parseConflict(entity) ?: return
+            // On the device whose change became a conflict: show the server state again; its own
+            // version lives on in the conflict until someone decides (ADR 0003).
+            if (info.local.deviceId == deviceId) adoptRemote(info)
+        } else if (change.kind == "update") {
+            val row = q.conflict(change.entityId).executeAsOneOrNull() ?: return
+            val json = ApiJson.parseToJsonElement(row.json) as JsonObject
+            val updated = JsonObject(json + mapOf(
+                "resolution" to (change.payload["resolution"] ?: JsonNull),
+                "resolvedAt" to JsonPrimitive(change.appliedAt),
+                "revision" to JsonPrimitive(change.revision),
+            ))
+            putConflict(updated)
+        }
+    }
+
+    private fun adoptRemote(conflict: ConflictInfo) {
+        if (hasQueued(conflict.entityId)) return
+        val remote = conflict.remote
+        if (remote != null) {
+            try {
+                when (conflict.entity) {
+                    "document" -> q.putDocument(ApiJson.decodeFromJsonElement(Document.serializer(), remote).toRow())
+                    "block" -> q.putBlock(ApiJson.decodeFromJsonElement(Block.serializer(), remote).toRow())
+                }
+            } catch (_: IllegalArgumentException) {
+                // Unknown shape: keep the local state; the conflict stays visible.
+            }
+        }
+        if (conflict.reason == "parent_deleted" && conflict.documentId != null) {
+            val document = document(conflict.documentId)
+            if (document != null && document.deletedAt == null) {
+                q.putDocument(document.copy(deletedAt = conflict.createdAt).toRow())
+            }
+        }
+    }
+
+    private fun putConflict(json: JsonObject) {
+        q.putConflict(
+            net.notionalt.core.db.Conflict(
+                id = json.str("id") ?: return,
+                workspaceId = json.str("workspaceId") ?: return,
+                documentId = json.str("documentId"),
+                json = json.toString(),
+                createdAt = json.str("createdAt") ?: now(),
+                resolvedAt = json.str("resolvedAt"),
+                revision = (json["revision"] as? JsonPrimitive)?.longOrNull,
+            ),
+        )
+    }
+
+    fun openConflicts(workspaceId: String): List<ConflictInfo> =
+        q.openConflicts(workspaceId).executeAsList().mapNotNull {
+            parseConflict(ApiJson.parseToJsonElement(it.json) as JsonObject)
+        }
+
+    /** Whether "keep the other version" can be done here (changed block or page); else web app. */
+    fun canApplyLocalSide(conflict: ConflictInfo): Boolean {
+        if (conflict.reason != "changed") return false
+        return when (conflict.entity) {
+            "block" -> block(conflict.entityId)?.deletedAt == null && block(conflict.entityId) != null &&
+                conflict.local.kind in setOf("update", "delete", "move")
+            "document" -> document(conflict.entityId)?.let { it.deletedAt == null } == true && conflict.local.kind == "update" &&
+                conflict.local.payload.keys.all { it in setOf("title", "favorite", "icon") }
+            else -> false
+        }
+    }
+
+    /**
+     * Resolves a conflict (ADR 0003), offline too: `keepLocal` applies the change that was not
+     * applied as ordinary operations; either way a `conflict` update marks it resolved everywhere.
+     */
+    fun resolveConflict(id: String, keepLocal: Boolean) = write {
+        val row = q.conflict(id).executeAsOneOrNull() ?: throw LocalStoreException("Conflict $id not found")
+        val json = ApiJson.parseToJsonElement(row.json) as JsonObject
+        val conflict = parseConflict(json) ?: throw LocalStoreException("Conflict $id unreadable")
+        if (conflict.resolvedAt != null) throw LocalStoreException("Conflict $id already resolved")
+        val resolution = if (keepLocal) "local" else "remote"
+        if (keepLocal) {
+            if (!canApplyLocalSide(conflict)) throw LocalStoreException("Resolve this conflict in the web app")
+            val payload = conflict.local.payload
+            when (conflict.entity) {
+                "block" -> when (conflict.local.kind) {
+                    "delete" -> deleteBlock(conflict.entityId)
+                    "move" -> {
+                        val block = block(conflict.entityId)!!
+                        val document = requireDocument(block.documentId)
+                        val sortKey = payload.str("sortKey") ?: block.sortKey
+                        q.putBlock(block.copy(sortKey = sortKey).toRow())
+                        enqueue(document.workspaceId, "block", block.id, "move", block.revision, buildJsonObject { put("sortKey", sortKey) })
+                    }
+                    else -> updateBlock(
+                        conflict.entityId,
+                        type = payload.str("type"),
+                        content = payload.str("content"),
+                        attrs = payload["attrs"] as? JsonObject,
+                    )
+                }
+                "document" -> {
+                    payload.str("title")?.let { renameDocument(conflict.entityId, it) }
+                    payload.bool("favorite")?.let { setFavorite(conflict.entityId, it) }
+                    if (payload.containsKey("icon")) setIcon(conflict.entityId, payload.str("icon"))
+                }
+            }
+        }
+        putConflict(JsonObject(json + mapOf("resolution" to JsonPrimitive(resolution), "resolvedAt" to JsonPrimitive(now()))))
+        enqueue(conflict.workspaceId, "conflict", id, "update", row.revision, buildJsonObject { put("resolution", resolution) })
+    }
+
+    private fun parseConflict(json: JsonObject): ConflictInfo? = try {
+        ApiJson.decodeFromJsonElement(ConflictInfo.serializer(), json)
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+
+    // ------------------------------------------------------------------ snapshot (re-sync)
+
+    /** Starts a full re-sync: without a cursor an interrupted re-sync starts over. */
+    fun beginResync(workspaceId: String) = write { q.deleteMeta("syncCursor:$workspaceId") }
+
+    /**
+     * Writes one snapshot page in one transaction. Entities with queued operations keep their
+     * local state, so nothing unsynced is lost. Synced local states newer than the server's
+     * (server restored from an older backup, #75) are kept and sent again. Without content
+     * (ADR 0017) pages new to this device are marked as not loaded.
+     */
+    fun applySnapshotPage(workspaceId: String, page: SnapshotResponse, content: Boolean, seen: MutableSet<String>) = write {
+        val resent = resendNewer(workspaceId, page.documents, page.blocks, page.tags, page.documentTags)
+        fun keep(id: String) = !hasQueued(id) && id !in resent
+        for (d in page.documents) {
+            seen += d.id
+            if (!keep(d.id)) continue
+            if (!content && document(d.id) == null) q.putUnloaded(d.id, workspaceId)
+            q.putDocument(d.copy(workspaceId = workspaceId).toRow())
+        }
+        for (b in page.blocks) {
+            seen += b.id
+            if (keep(b.id)) q.putBlock(b.toRow())
+        }
+        for (c in page.conflicts) {
+            val id = c.str("id") ?: continue
+            seen += id
+            // A resolution still queued here wins over the server's open state.
+            if (!hasQueued(id)) putConflict(c)
+        }
+        for (t in page.tags) {
+            seen += t.id
+            if (keep(t.id)) q.putTag(net.notionalt.core.db.Tag(t.id, workspaceId, t.name, t.revision, t.deletedAt))
+        }
+        for (a in page.documentTags) {
+            seen += a.id
+            if (keep(a.id)) {
+                q.putDocumentTag(net.notionalt.core.db.DocumentTag(a.id, workspaceId, a.documentId, a.tagId, a.revision, a.deletedAt))
+            }
+        }
+    }
+
+    /**
+     * Ends a re-sync: local entities the snapshot lacked are removed unless queued, or recreated
+     * on the server if they are active content it lost (restore from an older backup, #75).
+     * Then the cursor is stored.
+     */
+    fun finishResync(workspaceId: String, cursor: Long, content: Boolean, seen: Set<String>) = write {
+        val documents = q.allDocumentsOfWorkspace(workspaceId).executeAsList().map { it.toModel() }
+            .filter { it.id !in seen && !hasQueued(it.id) }
+        // Without blocks in the snapshot only those of pages it lacked are unseen.
+        val owners = if (content) q.allDocumentIdsOfWorkspace(workspaceId).executeAsList() else documents.map { it.id }
+        val blocks = owners.flatMap { q.blockRowsOfDocument(it).executeAsList() }.map { it.toModel() }
+            .filter { it.id !in seen && !hasQueued(it.id) }
+        val tags = q.allTagIdsOfWorkspace(workspaceId).executeAsList()
+            .filter { it !in seen && !hasQueued(it) }.mapNotNull { q.tagById(it).executeAsOneOrNull() }
+        val assignments = q.allDocumentTagIdsOfWorkspace(workspaceId).executeAsList()
+            .filter { it !in seen && !hasQueued(it) }.mapNotNull { q.documentTagById(it).executeAsOneOrNull() }
+        val lost = recreateLost(workspaceId, documents, blocks, tags, assignments)
+        for (d in documents) if (d.id !in lost) {
+            q.deleteDocument(d.id)
+            q.deleteUnloaded(d.id)
+        }
+        for (b in blocks) if (b.id !in lost) q.deleteBlock(b.id)
+        for (t in tags) if (t.id !in lost) q.deleteTagRow(t.id)
+        for (a in assignments) if (a.id !in lost) q.deleteDocumentTagRow(a.id)
+        for (id in q.allConflictIdsOfWorkspace(workspaceId).executeAsList()) {
+            if (id !in seen && !hasQueued(id)) q.deleteConflict(id)
+        }
+        q.putMeta("syncCursor:$workspaceId", cursor.toString())
+    }
+
+    /**
+     * After a server restore from an older backup (#75): queues `create` operations for active
+     * local entities the server lacks (parents first) and marks them unsynced. Returns their ids.
+     */
+    private fun recreateLost(
+        workspaceId: String,
+        documents: List<Document>,
+        blocks: List<Block>,
+        tags: List<net.notionalt.core.db.Tag>,
+        assignments: List<net.notionalt.core.db.DocumentTag>,
+    ): Set<String> {
+        val recreated = mutableSetOf<String>()
+        val activeDocs = documents.filter { it.deletedAt == null }
+        val byId = activeDocs.associateBy { it.id }
+        fun depth(d: Document): Int = d.parentId?.let { byId[it] }?.let { depth(it) + 1 } ?: 0
+        for (d in activeDocs.sortedBy(::depth)) {
+            enqueue(workspaceId, "document", d.id, "create", null, buildJsonObject {
+                put("parentId", d.parentId)
+                put("title", d.title)
+                put("sortKey", d.sortKey)
+                put("favorite", d.favorite)
+                d.icon?.let { put("icon", it) }
+                d.cover?.let { put("cover", it) }
+                put("createdAt", d.createdAt)
+            })
+            q.putDocument(d.copy(revision = null).toRow())
+            recreated += d.id
+        }
+        for (t in tags.filter { it.deletedAt == null }) {
+            enqueue(workspaceId, "tag", t.id, "create", null, buildJsonObject { put("name", t.name) })
+            q.putTag(t.copy(revision = null))
+            recreated += t.id
+        }
+        for (b in blocks.filter { it.deletedAt == null }) {
+            enqueue(workspaceId, "block", b.id, "create", null, buildJsonObject {
+                put("documentId", b.documentId)
+                put("type", b.type)
+                put("content", b.content)
+                put("attrs", b.attrs)
+                put("sortKey", b.sortKey)
+            })
+            q.putBlock(b.copy(revision = null).toRow())
+            recreated += b.id
+        }
+        for (a in assignments.filter { it.deletedAt == null }) {
+            enqueue(workspaceId, "document_tag", a.id, "create", null, buildJsonObject {
+                put("documentId", a.documentId)
+                put("tagId", a.tagId)
+            })
+            q.putDocumentTag(a.copy(revision = null))
+            recreated += a.id
+        }
+        return recreated
+    }
+
+    /**
+     * Entities the restored server (#75) has in an older synced state than this device: sends the
+     * newer local state against the server's revision (merged there, or a visible conflict) and
+     * keeps it locally, never drops it. Returns the ids kept local.
+     */
+    private fun resendNewer(
+        workspaceId: String,
+        documents: List<Document>,
+        blocks: List<Block>,
+        tags: List<Tag>,
+        assignments: List<net.notionalt.core.model.DocumentTag>,
+    ): Set<String> {
+        val kept = mutableSetOf<String>()
+        fun newer(local: Long?, server: Long?) = server != null && local != null && local > server
+        fun resend(entity: String, id: String, base: Long, ops: List<Pair<String, JsonObject>>): Boolean {
+            if (ops.isEmpty()) return false
+            for ((kind, payload) in ops) enqueue(workspaceId, entity, id, kind, base, payload)
+            kept += id
+            return true
+        }
+        for (server in documents) {
+            if (hasQueued(server.id)) continue
+            val d = document(server.id) ?: continue
+            if (!newer(d.revision, server.revision)) continue
+            val ops = mutableListOf<Pair<String, JsonObject>>()
+            if (d.deletedAt != null) {
+                if (server.deletedAt == null) ops += "delete" to JsonObject(emptyMap())
+            } else if (server.deletedAt == null) {
+                val fields = buildJsonObject {
+                    if (d.title != server.title) put("title", d.title)
+                    if (d.favorite != server.favorite) put("favorite", d.favorite)
+                    if (d.icon != server.icon) put("icon", d.icon)
+                    if (d.cover != server.cover) put("cover", d.cover)
+                }
+                if (fields.isNotEmpty()) ops += "update" to fields
+                if (d.parentId != server.parentId || d.sortKey != server.sortKey) {
+                    ops += "move" to buildJsonObject {
+                        put("parentId", d.parentId)
+                        put("sortKey", d.sortKey)
+                    }
+                }
+            }
+            if (resend("document", d.id, server.revision!!, ops)) q.putDocument(d.copy(revision = server.revision).toRow())
+        }
+        for (server in blocks) {
+            if (hasQueued(server.id)) continue
+            val b = block(server.id) ?: continue
+            if (!newer(b.revision, server.revision)) continue
+            val ops = mutableListOf<Pair<String, JsonObject>>()
+            if (b.deletedAt != null) {
+                if (server.deletedAt == null) ops += "delete" to JsonObject(emptyMap())
+            } else if (server.deletedAt == null) {
+                val fields = buildJsonObject {
+                    if (b.type != server.type) put("type", b.type)
+                    if (b.content != server.content) put("content", b.content)
+                    if (b.attrs != server.attrs) put("attrs", b.attrs)
+                }
+                if (fields.isNotEmpty()) ops += "update" to fields
+                if (b.sortKey != server.sortKey) ops += "move" to buildJsonObject { put("sortKey", b.sortKey) }
+            }
+            if (resend("block", b.id, server.revision!!, ops)) q.putBlock(b.copy(revision = server.revision).toRow())
+        }
+        for (server in tags) {
+            if (hasQueued(server.id)) continue
+            val t = q.tagById(server.id).executeAsOneOrNull() ?: continue
+            if (!newer(t.revision, server.revision)) continue
+            val ops = if (t.deletedAt != null && server.deletedAt == null) listOf("delete" to JsonObject(emptyMap())) else emptyList()
+            if (resend("tag", t.id, server.revision!!, ops)) q.putTag(t.copy(revision = server.revision))
+        }
+        for (server in assignments) {
+            if (hasQueued(server.id)) continue
+            val a = q.documentTagById(server.id).executeAsOneOrNull() ?: continue
+            if (!newer(a.revision, server.revision)) continue
+            val ops = if (a.deletedAt != null && server.deletedAt == null) listOf("delete" to JsonObject(emptyMap())) else emptyList()
+            if (resend("document_tag", a.id, server.revision!!, ops)) q.putDocumentTag(a.copy(revision = server.revision))
+        }
+        return kept
+    }
+
+    // ------------------------------------------------------------------ content on demand
+
+    fun isDocumentLoaded(documentId: String): Boolean = q.unloaded(documentId).executeAsOneOrNull() == null
+
+    fun unloadedDocumentIds(workspaceId: String): List<String> = q.unloadedOfWorkspace(workspaceId).executeAsList()
+
+    /** "Alles offline verfügbar machen" (ADR 0017): only once nothing is missing any more. */
+    fun completeOfflineMode(): Boolean = q.transactionWithResult {
+        if (q.unloadedCount().executeAsOne() > 0) return@transactionWithResult false
+        q.putMeta("offlineMode", "all")
+        true
+    }
+
+    /** Pages whose title or text contains `text` (case-insensitive for ASCII), best title matches first. */
+    fun search(workspaceId: String, text: String): List<Document> {
+        val needle = text.trim()
+        if (needle.isEmpty()) return emptyList()
+        val pattern = "%" + needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        val ids = q.searchDocuments(workspaceId, pattern).executeAsList()
+        return ids.mapNotNull { document(it) }
+            .sortedWith(compareBy({ !it.title.contains(needle, ignoreCase = true) }, { it.title.lowercase() }))
+    }
+
+    /** Pages of a workspace whose content is on this device (synced at least once, not in the trash). */
+    fun loadedDocumentIds(workspaceId: String): List<String> =
+        documents(workspaceId).filter { it.revision != null && isDocumentLoaded(it.id) }.map { it.id }
+
+    /**
+     * Writes the content of one page as loaded from the server (ADR 0017) in one transaction, like
+     * a snapshot of that page: queued blocks keep their local state, newer synced states and
+     * blocks the server lost (restored backup, #75) are sent again. The caller holds the sync
+     * lock, so no pull runs in between.
+     */
+    fun applyDocumentContent(workspaceId: String, content: DocumentResponse) = write {
+        val documentId = content.document.id
+        noteRemote(documentId)
+        val served = content.blocks.map { it.id }.toSet()
+        val resent = resendNewer(workspaceId, emptyList(), content.blocks, emptyList(), emptyList())
+        for (b in content.blocks) {
+            if (!hasQueued(b.id) && b.id !in resent) q.putBlock(b.toRow())
+        }
+        // The server never forgets a block (tombstones stay); one it lacks was lost with a restore.
+        val missing = q.blockRowsOfDocument(documentId).executeAsList().map { it.toModel() }
+            .filter { it.id !in served && !hasQueued(it.id) }
+        val lost = recreateLost(workspaceId, emptyList(), missing, emptyList(), emptyList())
+        for (b in missing) if (b.id !in lost) q.deleteBlock(b.id)
+        if (!hasQueued(documentId)) {
+            val local = document(documentId)
+            if (local == null || (local.revision ?: 0) <= (content.document.revision ?: 0)) {
+                q.putDocument(content.document.copy(workspaceId = workspaceId).toRow())
+            }
+        }
+        q.deleteUnloaded(documentId)
+    }
+}
+
+// ---------------------------------------------------------------------- mapping
+
+private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
+
+private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
+
+internal fun DocumentRow.toModel() = Document(
+    id = id,
+    workspaceId = workspaceId,
+    parentId = parentId,
+    title = title,
+    sortKey = sortKey,
+    favorite = favorite != 0L,
+    icon = icon,
+    cover = cover,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    revision = revision,
+    deletedAt = deletedAt,
+)
+
+internal fun Document.toRow() = DocumentRow(
+    id = id,
+    workspaceId = workspaceId,
+    parentId = parentId,
+    title = title,
+    sortKey = sortKey,
+    favorite = if (favorite) 1L else 0L,
+    icon = icon,
+    cover = cover,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    revision = revision,
+    deletedAt = deletedAt,
+)
+
+internal fun BlockRow.toModel() = Block(
+    id = id,
+    documentId = documentId,
+    type = type,
+    content = content,
+    attrs = (ApiJson.parseToJsonElement(attrs) as? JsonObject) ?: JsonObject(emptyMap()),
+    sortKey = sortKey,
+    revision = revision,
+    deletedAt = deletedAt,
+)
+
+internal fun Block.toRow() = BlockRow(
+    id = id,
+    documentId = documentId,
+    type = type,
+    content = content,
+    attrs = attrs.toString(),
+    sortKey = sortKey,
+    revision = revision,
+    deletedAt = deletedAt,
+)
+
+internal fun OperationRow.toModel() = Operation(
+    opId = opId,
+    deviceId = deviceId,
+    workspaceId = workspaceId,
+    entity = entity,
+    entityId = entityId,
+    kind = kind,
+    baseRevision = baseRevision,
+    payload = ApiJson.parseToJsonElement(payload) as JsonObject,
+    createdAt = createdAt,
+)
+
+/** Typed access to block attributes (ADR 0019). */
+val Block.indent: Int get() = (attrs["indent"] as? JsonPrimitive)?.longOrNull?.toInt() ?: 0
+val Block.checked: Boolean get() = (attrs["checked"] as? JsonPrimitive)?.booleanOrNull ?: false
+val Block.level: Int get() = (attrs["level"] as? JsonPrimitive)?.longOrNull?.toInt() ?: 1
+val Block.listStyle: String get() = (attrs["list"] as? JsonPrimitive)?.contentOrNull ?: "bullet"
+val Block.calloutIcon: String? get() = (attrs["icon"] as? JsonPrimitive)?.contentOrNull
+
+fun JsonObject.with(key: String, value: JsonElement): JsonObject = JsonObject(this + (key to value))

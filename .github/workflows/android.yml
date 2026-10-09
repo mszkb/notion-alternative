@@ -1,0 +1,92 @@
+name: Android
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      # Replaces the APK of the `android-dev` pre-release.
+      contents: write
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      # A real server for the integration and UI smoke tests (the contract tests are its spec).
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, mbstring, curl, openssl, sodium
+          coverage: none
+          tools: composer:v2
+      - name: Start PHP server with a test account
+        working-directory: apps/server
+        run: |
+          composer install --no-interaction --no-progress --prefer-dist --no-dev
+          mkdir -p "$RUNNER_TEMP/notion-alt"
+          DATA_DIR="$RUNNER_TEMP/notion-alt" DATABASE_PATH="$RUNNER_TEMP/notion-alt/app.sqlite" \
+            nohup php -S 127.0.0.1:8099 -t public public/index.php > "$RUNNER_TEMP/php.log" 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8099/api/health && break; sleep 1; done
+          curl -sf -X POST http://127.0.0.1:8099/api/auth/register -H 'content-type: application/json' \
+            -d '{"email":"test@example.org","password":"geheim12345"}' > /dev/null
+      - name: Unit, integration and UI smoke tests
+        env:
+          NOTION_ALT_SERVER: http://127.0.0.1:8099
+        run: ./gradlew --no-daemon :core:jvmTest :shared:testDebugUnitTest :androidApp:testDebugUnitTest
+      - name: Build debug APK
+        run: ./gradlew --no-daemon :androidApp:assembleDebug
+      - name: Rename APK
+        run: cp androidApp/build/outputs/apk/debug/androidApp-debug.apk notion-alt-dev.apk
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: notion-alt-dev-apk
+          path: apps/mobile/notion-alt-dev.apk
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-reports
+          path: |
+            apps/mobile/**/build/reports/tests/
+            ${{ runner.temp }}/php.log
+      # Pushes only (not pull requests): the pre-release always carries the latest build.
+      - name: Update pre-release android-dev
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          notes="Debug-Build der Android-App (nicht für den Store). Commit ${GITHUB_SHA} auf ${GITHUB_REF_NAME}, $(date -u '+%Y-%m-%d %H:%M UTC'). Anleitung: apps/mobile/README.md"
+          if gh release view android-dev --repo "$REPO" > /dev/null 2>&1; then
+            gh api -X PATCH "repos/$REPO/git/refs/tags/android-dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
+            gh release edit android-dev --repo "$REPO" --prerelease --notes "$notes"
+          else
+            gh release create android-dev --repo "$REPO" --prerelease --target "$GITHUB_SHA" \
+              --title "Android Dev Build" --notes "$notes"
+          fi
+          gh release upload android-dev notion-alt-dev.apk --repo "$REPO" --clobber

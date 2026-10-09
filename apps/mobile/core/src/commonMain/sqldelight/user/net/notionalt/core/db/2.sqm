@@ -1,0 +1,19 @@
+-- Version 2 → 3: tags and their assignment to pages (ADR 0009).
+CREATE TABLE tag (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    revision INTEGER,
+    deletedAt TEXT
+);
+
+CREATE TABLE documentTag (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    documentId TEXT NOT NULL,
+    tagId TEXT NOT NULL,
+    revision INTEGER,
+    deletedAt TEXT
+);
+
+CREATE INDEX documentTag_document ON documentTag (documentId);

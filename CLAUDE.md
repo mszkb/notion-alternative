@@ -34,7 +34,7 @@ Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaff
 | --- | --- |
 | `ROADMAP.md` | Phasen 0–9, Milestones, Fortschritt (Checklisten) |
 | `docs/product/` | Vision, Zielgruppen, Prinzipien, MVP-Scope, Nicht-Ziele, Akzeptanzkriterien, UX-Leitlinie (`ux-guide.md`) |
-| `docs/architecture/` | Architekturüberblick, Datenmodell & Sync, Push-Strategie |
+| `docs/architecture/` | Architekturüberblick, Datenmodell & Sync, Push-Strategie, Feature-Verzeichnis Web ↔ native App (`feature-parity.md`) |
 | `docs/adr/` | Architecture Decision Records (Vorlage: `0000-template.md`) |
 | `docs/process/` | Definition of Done, Aufgabenzerlegung für den Roadmap-Agenten |
 | `docs/testing/` | Testmatrix (offline/online, Mehrgeräte, Konflikte, Backups, Migrationen) |
@@ -75,6 +75,7 @@ Relationale Datenbanken mit vielen Views, Echtzeit-Kollaboration/Cursor-Präsenz
 - **Definition of Done** (`docs/process/definition-of-done.md`) gilt für jede Aufgabe: Tests, Security, Doku, reproduzierbares Deployment.
 - Sync-, Konflikt- und Export-Code braucht Tests für die Fälle aus `docs/testing/test-matrix.md`.
 - Kleine, fokussierte Commits; keine unbeteiligten Refactorings mitliefern.
+- **Zwei Clients:** Web-App (`apps/web`) und native App (`apps/mobile`, ADR 0020) teilen keinen Code. Neue oder geänderte Features und vor allem Sync-, Konflikt- und Datenlogik in `docs/architecture/feature-parity.md` eintragen und im anderen Client nachziehen oder die Lücke dort markieren.
 
 ## Autonomer Agent
 

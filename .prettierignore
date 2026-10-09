@@ -10,3 +10,6 @@ apps/server/vendor
 apps/server/composer.json
 apps/server/composer.lock
 apps/server/tests/fixtures
+
+# Android / KMP build output (apps/mobile)
+apps/mobile/**/build/

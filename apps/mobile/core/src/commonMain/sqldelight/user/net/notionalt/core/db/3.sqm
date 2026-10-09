@@ -1,0 +1,4 @@
+-- Version 3 → 4: devices synced before tags were stored locally never received the existing
+-- tags (pull is delta-only). Dropping the cursors makes the next sync a full re-sync; queued
+-- operations are kept.
+DELETE FROM meta WHERE key LIKE 'syncCursor:%';
