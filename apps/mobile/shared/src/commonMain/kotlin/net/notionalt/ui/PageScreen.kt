@@ -737,7 +737,12 @@ private fun BlockEditor(
         onDispose {
             if (editorFlush.flush === own) editorFlush.flush = null
             // Reads the state itself: a captured copy would miss changes made in the last event.
-            if (value.text != saved) runCatching { store.updateBlock(block.id, content = value.text) }
+            if (value.text != saved) {
+                runCatching { store.updateBlock(block.id, content = value.text) }.onFailure {
+                    // Deleted on another device meanwhile: keep the typed text as a new block.
+                    runCatching { store.createBlock(block.documentId, block.type, value.text, block.attrs) }
+                }
+            }
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
