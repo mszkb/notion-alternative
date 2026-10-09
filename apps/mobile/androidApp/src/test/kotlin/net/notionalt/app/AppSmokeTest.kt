@@ -152,7 +152,8 @@ class AppSmokeTest {
         compose.onNodeWithText("Abmelden", substring = true).performClick()
         compose.onNode(hasText("Abmelden") and androidx.compose.ui.test.hasClickAction()).performClick()
         compose.waitUntilAtLeastOneExists(hasText("Passwort"), 10_000)
-        compose.onNodeWithText("E-Mail").performTextInput("test@example.org")
+        // The e-mail of the last login is prefilled.
+        compose.onNodeWithText("test@example.org").assertExists()
         compose.onNodeWithText("Passwort").performTextInput("geheim12345")
         compose.onNode(hasText("Anmelden") and androidx.compose.ui.test.hasClickAction()).performClick()
         compose.waitUntilAtLeastOneExists(hasText("Personal"), 30_000)

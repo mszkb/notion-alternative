@@ -81,6 +81,9 @@ class AppSession(
 
     val serverUrl: String? get() = setting(KEY_SERVER)
 
+    /** E-mail of the last successful login, to prefill the form (not a secret). */
+    val lastEmail: String? get() = setting(KEY_LAST_EMAIL)
+
     private fun initialState(): SessionState {
         val server = setting(KEY_SERVER) ?: return SessionState.NeedsServer
         val user = cachedUser() ?: return SessionState.NeedsLogin(server)
@@ -158,6 +161,7 @@ class AppSession(
         putSetting(KEY_COOKIE, fresh.cookie())
         putSetting(KEY_COOKIE_OWNER, user.id)
         putSetting(KEY_USER, ApiJson.encodeToString(User.serializer(), user))
+        putSetting(KEY_LAST_EMAIL, user.email)
         _state.value = SessionState.Ready(open(server, user))
         return null
     }
@@ -205,6 +209,7 @@ class AppSession(
         private const val KEY_COOKIE = "sessionCookie"
         private const val KEY_COOKIE_OWNER = "sessionCookieUser"
         private const val KEY_USER = "user"
+        private const val KEY_LAST_EMAIL = "lastEmail"
 
         fun describeConnectError(url: String, error: Exception): String = when (error) {
             is UnreachableException -> buildString {

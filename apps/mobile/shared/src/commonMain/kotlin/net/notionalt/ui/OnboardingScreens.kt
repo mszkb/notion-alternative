@@ -108,7 +108,7 @@ fun ServerScreen(controller: AppController) {
 @Composable
 fun LoginScreen(controller: AppController, serverUrl: String, message: String?, localUser: String? = null) {
     val scope = rememberCoroutineScope()
-    var email by rememberSaveable { mutableStateOf(localUser ?: "") }
+    var email by rememberSaveable { mutableStateOf(localUser ?: controller.session.lastEmail ?: "") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(message) }
     var busy by remember { mutableStateOf(false) }
