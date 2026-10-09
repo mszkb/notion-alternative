@@ -36,6 +36,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -108,7 +109,11 @@ fun HomeScreen(
         value = withContext(Dispatchers.Default) { workspace?.let { store.documents(it.id) }.orEmpty() }
     }
     val conflicts = remember(version, workspace?.id) { workspace?.let { store.openConflicts(it.id) }.orEmpty() }
-    var expanded by remember { mutableStateOf(setOf<String>()) }
+    // Expanded pages in the tree are a per-device preference, like collapsed toggles.
+    var expanded by remember {
+        mutableStateOf(store.preference("expanded")?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet())
+    }
+    LaunchedEffect(expanded) { store.setPreference("expanded", expanded.joinToString(",")) }
     val rows = remember(documents, expanded) { visibleTree(documents, expanded) }
     val favorites = remember(documents) { documents.filter { it.favorite } }
     val recent = remember(documents) { documents.sortedByDescending { it.updatedAt }.take(5) }
