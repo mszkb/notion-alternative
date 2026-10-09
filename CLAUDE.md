@@ -25,6 +25,7 @@ Entschieden (`Accepted`):
 - **Inhalte bei Bedarf** ([ADR 0017](docs/adr/0017-content-on-demand.md)): neue Geräte laden Seitenbaum und Metadaten, Seiteninhalte beim Öffnen; `unloadedDocuments` (Dexie v5) markiert fehlende Inhalte, „Alles offline verfügbar machen“ stellt auf `offlineMode = all`.
 - **Referenz-Deployment** ([ADR 0010](docs/adr/0010-reference-deployment-and-https.md)): Linux-Host, App nur auf `127.0.0.1`, Zugriff per SSH-Tunnel (`localhost` = sicherer Kontext). CI baut die Images auch für `linux/arm64`. Kein dritter Container.
 - **HTTPS für Smartphones** ([ADR 0011](docs/adr/0011-https-for-mobile-devices.md)): Home-Lab/Raspberry Pi per `tailscale serve`, sonst Webhosting bzw. vorhandener Reverse Proxy; keine Code-Änderung, `COOKIE_SECURE=true`.
+- **Teilen und Rechte** ([ADR 0014](docs/adr/0014-sharing-and-permissions.md)): Freigabeeinheit ist der Workspace (`workspace_members`, Rollen `reader`/`commenter`/`editor`/`owner`); mehrere Besitzer, der Ersteller (`owner_id`) trägt das Kontingent und bleibt fest; Rechte nur serverseitig maßgeblich, Operationen ohne Recht → `rejected` `forbidden`.
 
 Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaffine (`docs/product/vision.md`).
 

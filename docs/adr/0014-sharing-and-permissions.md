@@ -1,7 +1,7 @@
 # 0014 – Sharing, Berechtigungen und Kommentare
 
-- **Status:** Proposed
-- **Datum:** 2026-10-03
+- **Status:** Accepted
+- **Datum:** 2026-10-03, angenommen 2026-10-09
 
 ## Kontext
 
@@ -29,7 +29,7 @@ Folgende Prinzipien gelten weiter:
    - **−** Viel mehr Fälle für Tests und Lecks.
 3. **Öffentliche Lese-Links für Externe:** Ergänzung zu 1 oder 2, kein Ersatz.
 
-## Entscheidung (Vorschlag)
+## Entscheidung
 
 Option 1. Option 3 kommt später mit eigenem ADR.
 
@@ -44,7 +44,9 @@ Option 1. Option 3 kommt später mit eigenem ADR.
 | `editor` | ✓ | ✓ | ✓ | – |
 | `owner` | ✓ | ✓ | ✓ | ✓ |
 
-**Einladen:** Der Besitzer lädt ein existierendes Konto derselben Installation per E-Mail-Adresse ein. Der Server verschickt keine Mails. Mitglieder entfernen und Rollen ändern darf nur der Besitzer. Ein Workspace hat immer mindestens einen `owner`.
+**Einladen:** Ein Besitzer lädt ein existierendes Konto derselben Installation per E-Mail-Adresse ein. Der Server verschickt keine Mails. Mitglieder hinzufügen, entfernen und Rollen ändern darf nur ein Besitzer.
+
+**Mehrere Besitzer:** Ein Besitzer darf andere Mitglieder zu `owner` machen. Der Ersteller (`owner_id`) trägt das Speicherkontingent; er lässt sich weder entfernen noch herabstufen. Damit hat ein Workspace immer mindestens einen `owner`. Jedes Mitglied außer dem Ersteller kann den Workspace selbst verlassen.
 
 **Durchsetzung, nur serverseitig maßgeblich:**
 
@@ -88,7 +90,8 @@ Option 1. Option 3 kommt später mit eigenem ADR.
 - Der Client braucht einen Workspace-Wechsler, einen schreibgeschützten Modus (Rolle wird lokal zwischengespeichert, offline gilt die zuletzt bekannte) und eine Ansicht für nicht übertragbare Operationen.
 - „Seite teilen“ heißt in der UI: „In geteilten Workspace verschieben“. Das Verschieben zwischen Workspaces ist ein eigener Schritt: kopieren mit neuen IDs, dann im Quell-Workspace löschen. Der Verlauf bleibt im Quell-Workspace.
 - Die Testmatrix bekommt einen Abschnitt „Teilen & Rechte“ (u. a. Pull nie mit fremden Daten, Entzug offline, entfernter Besitzer).
-- Offene Fragen an den Maintainer:
-  - Reichen Freigaben pro Workspace für die Zielgruppe?
-  - Soll ein Besitzer andere zu `owner` machen dürfen?
-  - Wer trägt das Speicherkontingent?
+- Entschieden vom Maintainer (2026-10-09, #78):
+  - Freigaben pro Workspace reichen für die Zielgruppe.
+  - Besitzer dürfen weitere Besitzer ernennen; der Ersteller bleibt fest.
+  - Das Speicherkontingent trägt der Ersteller (`owner_id`).
+- Kommentare (#79) folgen in einem eigenen Schritt nach Freigaben und Rechten.
