@@ -151,6 +151,7 @@ class AppSession(
             throw error
         } catch (error: ApiException) {
             return when {
+                error.code == "redirect" -> describeConnectError(server, error)
                 error.status == 401 -> "E-Mail oder Passwort ist falsch."
                 error.status == 429 -> "Zu viele Versuche. Bitte etwas warten und erneut versuchen."
                 error.status == 400 -> "Bitte eine gültige E-Mail-Adresse und ein Passwort eingeben."
@@ -228,7 +229,7 @@ class AppSession(
             }
             is NotOurServerException -> "Unter $url antwortet kein Notion-Alt-Server. Bitte die Adresse prüfen (ohne /api am Ende)."
             is ApiException -> if (error.code == "redirect") {
-                "Der Server leitet weiter${error.message?.takeIf { it.isNotEmpty() }?.let { " nach $it" } ?: ""}. Bitte diese Adresse direkt eintragen."
+                "Der Server leitet weiter${error.message?.substringBefore("/api/")?.takeIf { it.isNotEmpty() }?.let { " nach $it" } ?: ""}. Bitte diese Adresse direkt eintragen."
             } else {
                 "Der Server antwortet mit einem Fehler (${error.status}: ${error.message})."
             }
