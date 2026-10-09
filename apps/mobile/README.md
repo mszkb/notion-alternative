@@ -49,6 +49,8 @@ Bekannte Einschränkungen (Stand heute):
 
 Das Gerät erscheint in der Web-App unter den Geräten als „Android-App auf …“. Deinstallieren löscht die lokalen Daten der App (auch nicht synchronisierte Änderungen) – vorher in der Statuszeile prüfen, dass nichts aussteht.
 
+Welche Features es in Web-App und App gibt, was fehlt und wo es im Code steht: [`docs/architecture/feature-parity.md`](../../docs/architecture/feature-parity.md).
+
 ## Aufbau
 
 | Modul | Inhalt |
