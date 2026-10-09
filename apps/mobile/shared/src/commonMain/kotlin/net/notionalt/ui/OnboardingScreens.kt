@@ -106,9 +106,9 @@ fun ServerScreen(controller: AppController) {
 }
 
 @Composable
-fun LoginScreen(controller: AppController, serverUrl: String, message: String?) {
+fun LoginScreen(controller: AppController, serverUrl: String, message: String?, localUser: String? = null) {
     val scope = rememberCoroutineScope()
-    var email by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf(localUser ?: "") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(message) }
     var busy by remember { mutableStateOf(false) }
@@ -152,6 +152,9 @@ fun LoginScreen(controller: AppController, serverUrl: String, message: String?) 
         error?.let { Text(it, color = tokens.error) }
         Button(onClick = { submit() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Anmelden")
+        }
+        if (localUser != null) {
+            TextButton(onClick = { controller.session.backToLocalData() }) { Text("Zurück zu den lokalen Daten") }
         }
         TextButton(onClick = { controller.session.changeServer() }) { Text("Anderen Server wählen") }
         Text(

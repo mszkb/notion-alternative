@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import net.notionalt.core.api.ApiClient
 import net.notionalt.core.api.ApiException
 import net.notionalt.core.api.ApiJson
+import net.notionalt.core.api.InMemoryCookieStore
 import net.notionalt.core.api.NotOurServerException
 import net.notionalt.core.api.ServerUrl
 import net.notionalt.core.api.SessionCookieStore
@@ -37,7 +38,8 @@ class UserContext(
 
 sealed interface SessionState {
     data object NeedsServer : SessionState
-    data class NeedsLogin(val serverUrl: String, val message: String? = null) : SessionState
+    /** `localUser`: signing in again after an expired session; its local data stays reachable. */
+    data class NeedsLogin(val serverUrl: String, val message: String? = null, val localUser: User? = null) : SessionState
     data class Ready(val context: UserContext) : SessionState
 }
 
@@ -58,13 +60,21 @@ class AppSession(
         if (value == null) settings.remove(key) else settings.put(key, value)
     }
 
-    private val cookies = object : SessionCookieStore {
-        override fun cookie(): String? = setting(KEY_COOKIE)
-        override fun setCookie(value: String?) = putSetting(KEY_COOKIE, value)
+    /**
+     * The session cookie as one user's API client sees it: only while that user owns it, so a sync
+     * still running for a previous user can never act with the next user's session.
+     */
+    private fun cookiesOf(userId: String) = object : SessionCookieStore {
+        override fun cookie(): String? = if (setting(KEY_COOKIE_OWNER) == userId) setting(KEY_COOKIE) else null
+        override fun setCookie(value: String?) {
+            if (setting(KEY_COOKIE_OWNER) == userId) putSetting(KEY_COOKIE, value)
+        }
     }
 
     // Declared before `_state`: the initial state opens the last user's store.
     private val stores = mutableMapOf<String, LocalStore>()
+    /** One context (and so one sync engine) per server and user: never two engines on one store. */
+    private val contexts = mutableMapOf<String, UserContext>()
 
     private val _state = MutableStateFlow<SessionState>(initialState())
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -73,18 +83,20 @@ class AppSession(
 
     private fun initialState(): SessionState {
         val server = setting(KEY_SERVER) ?: return SessionState.NeedsServer
-        val user = setting(KEY_USER)?.let {
-            runCatching { ApiJson.decodeFromString(User.serializer(), it) }.getOrNull()
-        } ?: return SessionState.NeedsLogin(server)
+        val user = cachedUser() ?: return SessionState.NeedsLogin(server)
         return SessionState.Ready(open(server, user))
     }
 
-    private fun open(server: String, user: User): UserContext {
-        val api = ApiClient(http, server, cookies)
+    private fun open(server: String, user: User): UserContext = contexts.getOrPut("$server|${user.id}") {
+        val api = ApiClient(http, server, cookiesOf(user.id))
         val store = stores.getOrPut(user.id) {
             LocalStore(drivers.create("user-${user.id}.db", UserDatabase.Schema))
         }
-        return UserContext(user, api, store, SyncEngine(store, ApiTransport(api), deviceName))
+        UserContext(user, api, store, SyncEngine(store, ApiTransport(api), deviceName))
+    }
+
+    private fun cachedUser(): User? = setting(KEY_USER)?.let {
+        runCatching { ApiJson.decodeFromString(User.serializer(), it) }.getOrNull()
     }
 
     /** Checks the address and stores it; returns an error message in German, or null. */
@@ -93,7 +105,8 @@ class AppSession(
             is ServerUrl.Result.Invalid -> return result.message
             is ServerUrl.Result.Ok -> result.url
         }
-        val api = ApiClient(http, url, cookies)
+        // No cookie goes to an address that was not checked yet.
+        val api = ApiClient(http, url, InMemoryCookieStore())
         try {
             if (api.health().status != "ok") return "Der Server meldet ein Problem. Bitte später erneut versuchen."
             api.authStatus()
@@ -102,7 +115,10 @@ class AppSession(
         } catch (error: Exception) {
             return describeConnectError(url, error)
         }
-        if (url != setting(KEY_SERVER)) putSetting(KEY_COOKIE, null)
+        if (url != setting(KEY_SERVER)) {
+            putSetting(KEY_COOKIE, null)
+            putSetting(KEY_COOKIE_OWNER, null)
+        }
         putSetting(KEY_SERVER, url)
         _state.value = SessionState.NeedsLogin(url)
         return null
@@ -115,7 +131,8 @@ class AppSession(
     /** Signs in; returns an error message in German, or null. */
     suspend fun login(email: String, password: String): String? {
         val server = setting(KEY_SERVER) ?: return "Kein Server eingestellt."
-        val api = ApiClient(http, server, cookies)
+        val fresh = InMemoryCookieStore()
+        val api = ApiClient(http, server, fresh)
         val user = try {
             api.login(email.trim().lowercase(), password).user
         } catch (error: CancellationException) {
@@ -133,6 +150,8 @@ class AppSession(
         if (!api.hasSession) {
             return "Der Server hat keine Sitzung gesetzt. Läuft er hinter einem Proxy, der Cookies entfernt?"
         }
+        putSetting(KEY_COOKIE, fresh.cookie())
+        putSetting(KEY_COOKIE_OWNER, user.id)
         putSetting(KEY_USER, ApiJson.encodeToString(User.serializer(), user))
         _state.value = SessionState.Ready(open(server, user))
         return null
@@ -149,13 +168,37 @@ class AppSession(
             // Offline: the cookie is dropped locally anyway; the server session expires by itself.
         }
         putSetting(KEY_COOKIE, null)
+        putSetting(KEY_COOKIE_OWNER, null)
         putSetting(KEY_USER, null)
         _state.value = SessionState.NeedsLogin(setting(KEY_SERVER) ?: "")
+    }
+
+    /**
+     * Sign in again after the session expired: the user stays cached, so the local data remains
+     * reachable (back button, and after a restart) until a login succeeds (local-first).
+     */
+    fun relogin() {
+        val ready = _state.value as? SessionState.Ready ?: return
+        putSetting(KEY_COOKIE, null)
+        putSetting(KEY_COOKIE_OWNER, null)
+        _state.value = SessionState.NeedsLogin(
+            setting(KEY_SERVER) ?: "",
+            "Die Sitzung ist abgelaufen. Bitte erneut anmelden; deine lokalen Änderungen bleiben erhalten.",
+            ready.context.user,
+        )
+    }
+
+    /** Back to the cached user's local data without signing in (offline, password not at hand). */
+    fun backToLocalData() {
+        val server = setting(KEY_SERVER) ?: return
+        val user = cachedUser() ?: return
+        _state.value = SessionState.Ready(open(server, user))
     }
 
     companion object {
         private const val KEY_SERVER = "serverUrl"
         private const val KEY_COOKIE = "sessionCookie"
+        private const val KEY_COOKIE_OWNER = "sessionCookieUser"
         private const val KEY_USER = "user"
 
         fun describeConnectError(url: String, error: Exception): String = when (error) {

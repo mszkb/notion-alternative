@@ -16,7 +16,7 @@ fun App(controller: AppController) {
             val state by controller.session.state.collectAsState()
             when (val s = state) {
                 is SessionState.NeedsServer -> ServerScreen(controller)
-                is SessionState.NeedsLogin -> LoginScreen(controller, s.serverUrl, s.message)
+                is SessionState.NeedsLogin -> LoginScreen(controller, s.serverUrl, s.message, s.localUser?.email)
                 is SessionState.Ready -> MainScreen(controller, s.context)
             }
         }

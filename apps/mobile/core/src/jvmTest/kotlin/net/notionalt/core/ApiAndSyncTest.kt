@@ -26,6 +26,7 @@ import net.notionalt.core.sync.SyncTransport
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -222,8 +223,15 @@ class ApiAndSyncTest {
         val restored = (second.state.value as SessionState.Ready).context
         assertEquals("a@b.de", restored.user.email)
         assertEquals("lokal", restored.store.documents(WS).single().title)
+        // Expired session: signing in again keeps the local data reachable.
+        second.relogin()
+        assertEquals("a@b.de", (second.state.value as SessionState.NeedsLogin).localUser?.email)
+        assertFalse(restored.api.hasSession, "a sync still running sends no cookie")
+        second.backToLocalData()
+        assertTrue(second.state.value is SessionState.Ready)
         second.logout()
         assertTrue(second.state.value is SessionState.NeedsLogin)
+        assertFalse(restored.api.hasSession)
         assertNull(second.login("a@b.de", "pw"))
         assertEquals(2, (second.state.value as SessionState.Ready).context.store.pendingCount())
     }

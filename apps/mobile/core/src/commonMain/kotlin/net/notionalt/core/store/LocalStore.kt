@@ -411,13 +411,12 @@ class LocalStore(
     }
 
     /** Pages changed by other devices (pull, page load), per page; the editor drops its undo then. */
-    private val remoteStamps = mutableMapOf<String, Long>()
-    private var remoteCounter = 0L
+    private val remoteStamps = MutableStateFlow<Map<String, Long>>(emptyMap())
 
-    fun remoteStamp(documentId: String): Long = remoteStamps[documentId] ?: 0
+    fun remoteStamp(documentId: String): Long = remoteStamps.value[documentId] ?: 0
 
     private fun noteRemote(documentId: String?) {
-        if (documentId != null) remoteStamps[documentId] = ++remoteCounter
+        if (documentId != null) remoteStamps.update { it + (documentId to (it.values.maxOrNull() ?: 0) + 1) }
     }
 
     fun blockStates(documentId: String): List<BlockState> =
