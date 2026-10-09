@@ -343,6 +343,12 @@ class LocalStore(
         touch(document)
     }
 
+    // ------------------------------------------------------------------ attachment contents
+
+    fun cachedAttachment(id: String): ByteArray? = q.attachmentData(id).executeAsOneOrNull()
+
+    fun cacheAttachment(id: String, data: ByteArray) = q.putAttachmentData(id, data)
+
     // ------------------------------------------------------------------ device preferences
 
     fun preference(key: String): String? = q.metaValue("pref:$key").executeAsOneOrNull()

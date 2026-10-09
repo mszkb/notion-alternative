@@ -191,6 +191,18 @@ class LocalStoreTest {
     }
 
     @Test
+    fun databasesOfTheFirstVersionAreMigrated() {
+        val driver = app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver(app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver.IN_MEMORY)
+        net.notionalt.core.db.UserDatabase.Schema.create(driver)
+        driver.execute(null, "DROP TABLE attachmentContent", 0)
+        assertEquals(2, net.notionalt.core.db.UserDatabase.Schema.version)
+        net.notionalt.core.db.UserDatabase.Schema.migrate(driver, 1, 2)
+        val store = net.notionalt.core.store.LocalStore(driver)
+        store.cacheAttachment("a", byteArrayOf(1, 2))
+        assertEquals(listOf<Byte>(1, 2), store.cachedAttachment("a")!!.toList())
+    }
+
+    @Test
     fun searchFindsTitlesAndText() {
         val store = memoryStore()
         val a = store.createDocument(WS, title = "Einkauf")

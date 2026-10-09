@@ -7,6 +7,7 @@ import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -189,6 +190,21 @@ class ApiClient(
 
     suspend fun documents(workspaceId: String, ids: List<String>): DocumentsResponse =
         post("/sync/documents", DocumentsInput(workspaceId, ids), DocumentsInput.serializer(), DocumentsResponse.serializer())
+
+    /** Content of an attachment (ADR 0012); null if the server does not have it (404). */
+    suspend fun attachmentContent(id: String): ByteArray? {
+        val response = send(HttpMethod.Get, "/attachments/${id.encodeURLParameter()}/content", null)
+        val status = response.status.value
+        if (status == 404 || status == 410) return null
+        if (status !in 200..299) throw ApiException(status, "download_failed", "HTTP $status")
+        return try {
+            response.readRawBytes()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            throw UnreachableException(error)
+        }
+    }
 
     private fun query(vararg params: Pair<String, String>): String =
         params.joinToString("&") { (k, v) -> "${k.encodeURLParameter()}=${v.encodeURLParameter()}" }

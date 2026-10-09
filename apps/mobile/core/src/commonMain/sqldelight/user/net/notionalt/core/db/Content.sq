@@ -215,3 +215,15 @@ LEFT JOIN block ON block.documentId = document.id AND block.deletedAt IS NULL
 WHERE document.workspaceId = :workspaceId AND document.deletedAt IS NULL
   AND (document.title LIKE :pattern ESCAPE '\' OR block.content LIKE :pattern ESCAPE '\')
 LIMIT 50;
+
+-- Cached attachment contents (ADR 0012); added by migration 1.sqm.
+CREATE TABLE attachmentContent (
+    id TEXT NOT NULL PRIMARY KEY,
+    data BLOB NOT NULL
+);
+
+attachmentData:
+SELECT data FROM attachmentContent WHERE id = ?;
+
+putAttachmentData:
+INSERT OR REPLACE INTO attachmentContent (id, data) VALUES (?, ?);

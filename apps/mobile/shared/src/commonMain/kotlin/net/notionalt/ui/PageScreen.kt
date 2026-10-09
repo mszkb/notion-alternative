@@ -340,7 +340,9 @@ private fun PageEditor(
         item(key = "title") { TitleField(context, documentId, title) }
         items(visible, key = { it.id }) { block ->
             val number = remember(blocks, block.id) { orderedNumber(blocks, block) }
-            if (block.id == editingId) {
+            if (block.type == "image" && block.id != editingId) {
+                ImageBlock(context, block, edit = { setEditing(block.id) })
+            } else if (block.id == editingId) {
                 BlockEditor(
                     context = context,
                     block = block,
@@ -649,7 +651,8 @@ private fun BlockEditor(
             }, enabled = block.indent < 5) {
                 Icon(Icons.AutoMirrored.Filled.FormatIndentIncrease, contentDescription = "Einrücken")
             }
-            for (kind in blockKinds) {
+            // Attachment blocks keep their type: changing it would drop the attachment reference.
+            for (kind in if (block.type == "image" || block.type == "file") emptyList() else blockKinds) {
                 val selected = kind.type == block.type &&
                     (kind.type != "heading" || block.level == (kind.attrs["level"] as JsonPrimitive).content.toInt()) &&
                     (kind.type != "list_item" || block.listStyle == (kind.attrs["list"] as JsonPrimitive).content)
