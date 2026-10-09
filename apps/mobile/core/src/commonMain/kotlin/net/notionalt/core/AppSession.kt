@@ -73,7 +73,7 @@ class AppSession(
 
     // Declared before `_state`: the initial state opens the last user's store.
     private val stores = mutableMapOf<String, LocalStore>()
-    /** One context (and so one sync engine) per server and user: never two engines on one store. */
+    /** One context (and so one sync engine) per user; replaced only when the server address changes. */
     private val contexts = mutableMapOf<String, UserContext>()
 
     private val _state = MutableStateFlow<SessionState>(initialState())
@@ -87,12 +87,17 @@ class AppSession(
         return SessionState.Ready(open(server, user))
     }
 
-    private fun open(server: String, user: User): UserContext = contexts.getOrPut("$server|${user.id}") {
+    private fun open(server: String, user: User): UserContext {
+        contexts[user.id]?.takeIf { it.api.baseUrl == server }?.let { return it }
+        return createContext(server, user).also { contexts[user.id] = it }
+    }
+
+    private fun createContext(server: String, user: User): UserContext {
         val api = ApiClient(http, server, cookiesOf(user.id))
         val store = stores.getOrPut(user.id) {
             LocalStore(drivers.create("user-${user.id}.db", UserDatabase.Schema))
         }
-        UserContext(user, api, store, SyncEngine(store, ApiTransport(api), deviceName))
+        return UserContext(user, api, store, SyncEngine(store, ApiTransport(api), deviceName))
     }
 
     private fun cachedUser(): User? = setting(KEY_USER)?.let {

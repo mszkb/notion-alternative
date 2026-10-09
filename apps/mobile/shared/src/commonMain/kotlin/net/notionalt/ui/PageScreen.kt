@@ -561,24 +561,24 @@ private fun TitleField(context: UserContext, documentId: String, title: String, 
             }
         }
     }
+    fun saveTitle() {
+        if (value == saved) return
+        val stale = context.store.document(documentId)?.title != saved
+        runCatching { context.store.renameDocument(documentId, value.take(500), staleBase = if (stale) knownRevision else null) }
+        saved = value
+    }
     LaunchedEffect(value) {
         delay(600)
-        if (value != saved) {
-            runCatching { context.store.renameDocument(documentId, value.take(500)) }
-            saved = value
-        }
+        saveTitle()
     }
     DisposableEffect(documentId) {
         onDispose {
-            if (value != saved) runCatching { context.store.renameDocument(documentId, value.take(500)) }
+            saveTitle()
         }
     }
     // Android may end the app in the background: save what was typed when it leaves the screen.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        if (value != saved) {
-            runCatching { context.store.renameDocument(documentId, value.take(500)) }
-            saved = value
-        }
+        saveTitle()
     }
     val tokens = LocalTokens.current
     // A page without a title is usually new: start typing its title right away.
@@ -698,18 +698,25 @@ private fun BlockEditor(
     val tokens = LocalTokens.current
     var value by remember(block.id) { mutableStateOf(TextFieldValue(block.content, TextRange(block.content.length))) }
     var saved by remember(block.id) { mutableStateOf(block.content) }
+    var knownRevision by remember(block.id) { mutableStateOf(block.revision) }
+    // A pull may have changed the block before the effect below saw it: then the typed text goes
+    // against the revision this editor knew, never silently over the newer one.
+    fun staleBase(): Long? = if (store.block(block.id)?.content != saved) knownRevision else null
+    fun save(text: String) {
+        runCatching { store.updateBlock(block.id, content = text, staleBase = staleBase()) }
+    }
     val focus = remember { FocusRequester() }
     LaunchedEffect(block.id) { runCatching { focus.requestFocus() } }
     LaunchedEffect(value.text) {
         delay(500)
         if (value.text != saved) {
-            runCatching { store.updateBlock(block.id, content = value.text) }
+            save(value.text)
             saved = value.text
         }
     }
     fun flush() {
         if (value.text != saved) {
-            runCatching { store.updateBlock(block.id, content = value.text) }
+            save(value.text)
             saved = value.text
         }
     }
@@ -717,7 +724,6 @@ private fun BlockEditor(
     // of saving the old one over it (principle 6).
     // Revision of the last state this editor agreed with; a pull changing the text while typing
     // saves the typed text against it, so the server keeps both versions as a conflict.
-    var knownRevision by remember(block.id) { mutableStateOf(block.revision) }
     LaunchedEffect(block.content, block.revision) {
         when {
             block.content == saved -> knownRevision = block.revision
@@ -739,7 +745,7 @@ private fun BlockEditor(
             if (editorFlush.flush === own) editorFlush.flush = null
             // Reads the state itself: a captured copy would miss changes made in the last event.
             if (value.text != saved) {
-                runCatching { store.updateBlock(block.id, content = value.text) }.onFailure {
+                runCatching { store.updateBlock(block.id, content = value.text, staleBase = staleBase()) }.onFailure {
                     // Deleted on another device meanwhile: keep the typed text as a new block.
                     runCatching { store.createBlock(block.documentId, block.type, value.text, block.attrs) }
                 }
@@ -852,6 +858,8 @@ private fun BlockEditor(
     // Backspace at the start, as in the web editor: a list item, to-do, heading … becomes text
     // first; text is joined with the block above; an empty block is removed.
     fun backspaceAtStart() {
+        // An image or file block keeps its type: converting it would drop the attachment.
+        if (block.type == "image" || block.type == "file") return
         flush()
         if (block.type != "paragraph" && block.type != "code") {
             checkpoint()

@@ -103,6 +103,8 @@ fun HomeScreen(
     // Read synchronously once, then off the main thread after every change (large workspaces).
     val firstDocuments = remember(workspace?.id) { workspace?.let { store.documents(it.id) }.orEmpty() }
     val documents by produceState(firstDocuments, version, workspace?.id) {
+        // Never show the previous workspace's pages while the new ones load.
+        if (value.firstOrNull()?.workspaceId != workspace?.id) value = firstDocuments
         value = withContext(Dispatchers.Default) { workspace?.let { store.documents(it.id) }.orEmpty() }
     }
     val conflicts = remember(version, workspace?.id) { workspace?.let { store.openConflicts(it.id) }.orEmpty() }
