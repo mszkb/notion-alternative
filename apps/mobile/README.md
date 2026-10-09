@@ -35,6 +35,21 @@ Bekannte Einschränkungen (Stand heute):
 - Datum der letzten Synchronisierung in UTC.
 - Große Workspaces: Listen werden auf dem Hauptthread gelesen; bei sehr vielen Seiten kann die App träge werden.
 
+## Wenn etwas nicht klappt
+
+| Meldung / Verhalten | Ursache und Abhilfe |
+| --- | --- |
+| „Server … ist nicht erreichbar“ | Adresse im Browser des Telefons öffnen. Heimnetz: richtige IP und Port (Docker-Stack: `:8080`), Telefon im selben WLAN. Tailscale: Tailscale-App auf dem Telefon verbunden. |
+| „Unverschlüsseltes HTTP ist … nicht erlaubt“ | Nur der Debug-Build erlaubt `http://`; die APK aus `android-dev` ist ein Debug-Build. Sonst `https://` verwenden. |
+| „Das Zertifikat … wird nicht akzeptiert“ | Selbst signierte Zertifikate werden nicht akzeptiert. Tailscale-HTTPS (`tailscale serve`) oder ein Reverse Proxy mit Let’s Encrypt nutzen (ADR 0011). |
+| „Unter … antwortet kein Notion-Alt-Server“ | Die Adresse zeigt auf etwas anderes (z. B. Router-Seite, falscher Unterpfad). Die Adresse eintragen, unter der die Web-App läuft, ohne `/api`. |
+| Statuszeile „Sitzung abgelaufen“ | Antippen → neu anmelden. Ausstehende Änderungen bleiben erhalten und werden danach gesendet. |
+| Statuszeile „… vom Server abgelehnt“ | Antippen zeigt die Gründe. Die Änderungen bleiben auf dem Gerät; bitte melden (Screenshot). |
+| Seite zeigt „noch nicht auf diesem Gerät“ | Inhalt wird beim Öffnen geladen; ohne Verbindung geht das nicht. Vorher „Alles offline verfügbar machen“ (Menü ⋮). |
+| Hängt / unklarer Zustand | Menü ⋮ → „Info“ zeigt Server, Geräte-ID, ausstehende Änderungen und den letzten Fehler. Menü ⋮ → „Neu synchronisieren“ lädt alles neu, ohne lokale Änderungen zu verwerfen. |
+
+Das Gerät erscheint in der Web-App unter den Geräten als „Android-App auf …“. Deinstallieren löscht die lokalen Daten der App (auch nicht synchronisierte Änderungen) – vorher in der Statuszeile prüfen, dass nichts aussteht.
+
 ## Aufbau
 
 | Modul | Inhalt |
