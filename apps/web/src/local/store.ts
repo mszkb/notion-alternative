@@ -35,11 +35,13 @@ import {
   INLINE_IMAGE_TYPES,
   attachmentSchema,
   validateOperationPayload,
+  roleAtLeast,
   type Workspace,
 } from '@notion-alt/shared'
 import type { Table } from 'dexie'
 import type {
   AttachmentContent,
+  CachedWorkspace,
   LinkEntry,
   LocalDb,
   OfflineMode,
@@ -49,6 +51,16 @@ import type {
 
 export class LocalStoreError extends Error {
   override name = 'LocalStoreError'
+}
+
+/** A change in a workspace this user may only read, or no longer has access to (ADR 0014). */
+export class ReadOnlyWorkspaceError extends LocalStoreError {
+  override name = 'ReadOnlyWorkspaceError'
+}
+
+/** Whether a cached workspace is read-only here: role below `editor` or access revoked. */
+export function isReadOnly(workspace: CachedWorkspace): boolean {
+  return !!workspace.revoked || (!!workspace.role && !roleAtLeast(workspace.role, 'editor'))
 }
 
 /** Emitted after a write transaction has committed. */
@@ -123,6 +135,10 @@ export class LocalStore {
   private readonly listeners = new Set<ChangeListener>()
 
   private currentDeviceId: string
+  /** Workspaces changes are refused for (ADR 0014), from the last cached list. */
+  private readOnlyWorkspaces = new Set<string>()
+  /** Workspaces whose access was revoked: nothing of them is sent any more. */
+  private revokedWorkspaces = new Set<string>()
   /** Ids this device had before it was removed from the account and signed in again (#46). */
   private formerDeviceIds: Set<string>
 
@@ -245,6 +261,11 @@ export class LocalStore {
     ctx.touched.set(workspaceId, set)
   }
 
+  /**
+   * Queues an operation. Changes by the user in a read-only workspace throw (and so roll back the
+   * whole write); `fromSync` operations re-send local state after a re-sync and are let through:
+   * the server refuses them visibly instead of the re-sync failing.
+   */
   private async enqueue(
     workspaceId: string,
     entity: OperationEntity,
@@ -252,7 +273,11 @@ export class LocalStore {
     kind: OperationKind,
     baseRevision: number | null,
     payload: Record<string, unknown>,
+    fromSync = false,
   ): Promise<void> {
+    if (!fromSync && this.readOnlyWorkspaces.has(workspaceId)) {
+      throw new ReadOnlyWorkspaceError('This workspace is read-only for you')
+    }
     const operation: Operation = {
       opId: newId(),
       deviceId: this.deviceId,
@@ -1386,7 +1411,7 @@ export class LocalStore {
       item: { id: string },
       payload: Record<string, unknown>,
     ) => {
-      await this.enqueue(workspaceId, entity, item.id, 'create', null, payload)
+      await this.enqueue(workspaceId, entity, item.id, 'create', null, payload, true)
       // Unsynced again: the server assigns a new revision.
       await this.entityTables[entity].update(item.id, { revision: null })
       recreated.add(item.id)
@@ -1475,7 +1500,7 @@ export class LocalStore {
     ) => {
       if (ops.length === 0) return
       for (const [kind, payload] of ops) {
-        await this.enqueue(workspaceId, entity, id, kind, base, payload)
+        await this.enqueue(workspaceId, entity, id, kind, base, payload, true)
       }
       await this.entityTables[entity].update(id, { revision: base })
       recreated.add(id)
@@ -1988,16 +2013,104 @@ export class LocalStore {
     await this.db.attachmentContents.update(id, { uploaded: true })
   }
 
+  /**
+   * Replaces the cached list with the server's. A workspace the server no longer lists stays as
+   * `revoked` while pages or queued changes of it remain here: they cannot be deleted from the
+   * server side (offline-first), and nothing disappears silently (ADR 0014).
+   */
   async cacheWorkspaces(workspaces: Workspace[]): Promise<void> {
-    await this.db.transaction('rw', this.db.workspaces, async () => {
-      await this.db.workspaces.clear()
-      await this.db.workspaces.bulkPut(workspaces)
-    })
+    const listed = new Set(workspaces.map((w) => w.id))
+    await this.db.transaction(
+      'rw',
+      [this.db.workspaces, this.db.documents, this.db.operations],
+      async () => {
+        for (const old of await this.db.workspaces.toArray()) {
+          if (listed.has(old.id)) continue
+          if (await this.hasLocalData(old.id)) {
+            await this.db.workspaces.put({ ...old, revoked: true })
+          } else {
+            await this.db.workspaces.delete(old.id)
+          }
+        }
+        await this.db.workspaces.bulkPut(workspaces)
+      },
+    )
+    await this.cachedWorkspaces()
   }
 
-  async cachedWorkspaces(): Promise<Workspace[]> {
+  /** The server answered 404 for the workspace: access was revoked (ADR 0014). */
+  async markWorkspaceRevoked(workspaceId: string): Promise<void> {
+    await this.db.workspaces.update(workspaceId, { revoked: true })
+    this.readOnlyWorkspaces.add(workspaceId)
+    this.revokedWorkspaces.add(workspaceId)
+  }
+
+  /** Cached workspaces by creation; also updates which of them are read-only. */
+  async cachedWorkspaces(): Promise<CachedWorkspace[]> {
     const workspaces = await this.db.workspaces.toArray()
+    this.readOnlyWorkspaces = new Set(workspaces.filter(isReadOnly).map((w) => w.id))
+    this.revokedWorkspaces = new Set(workspaces.filter((w) => w.revoked).map((w) => w.id))
     return workspaces.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  }
+
+  /** Whether this account lost access to the workspace (ADR 0014). */
+  isRevoked(workspaceId: string): boolean {
+    return this.revokedWorkspaces.has(workspaceId)
+  }
+
+  /** Whether changes in the workspace are refused here (role or revoked access). */
+  isReadOnly(workspaceId: string): boolean {
+    return this.readOnlyWorkspaces.has(workspaceId)
+  }
+
+  /**
+   * Removes a workspace whose access was revoked from this device: its pages, queue and caches.
+   * Only for revoked workspaces, after the user confirmed (export first).
+   */
+  async forgetWorkspace(workspaceId: string): Promise<void> {
+    const workspace = await this.db.workspaces.get(workspaceId)
+    if (!workspace?.revoked) throw new LocalStoreError('Only revoked workspaces can be removed')
+    await this.db.transaction(
+      'rw',
+      [...CONTENT_TABLES, 'workspaces', 'meta', 'searchIndexes'],
+      async () => {
+        const documentIds = await this.db.documents
+          .where('workspaceId')
+          .equals(workspaceId)
+          .primaryKeys()
+        await this.db.blocks.where('documentId').anyOf(documentIds).delete()
+        const attachmentIds = await this.db.attachments
+          .where('workspaceId')
+          .equals(workspaceId)
+          .primaryKeys()
+        await this.db.attachmentContents.bulkDelete(attachmentIds)
+        for (const table of [
+          this.db.documents,
+          this.db.tags,
+          this.db.documentTags,
+          this.db.operations,
+          this.db.links,
+          this.db.conflicts,
+          this.db.attachments,
+          this.db.searchDirty,
+          this.db.unloadedDocuments,
+        ] as Table<unknown, unknown>[]) {
+          await table.where('workspaceId').equals(workspaceId).delete()
+        }
+        await this.db.searchIndexes.delete(workspaceId)
+        await this.db.meta.delete(LocalStore.cursorKey(workspaceId))
+        await this.db.workspaces.delete(workspaceId)
+      },
+    )
+    this.readOnlyWorkspaces.delete(workspaceId)
+    this.revokedWorkspaces.delete(workspaceId)
+  }
+
+  private async hasLocalData(workspaceId: string): Promise<boolean> {
+    return (
+      (await this.db.documents.where('workspaceId').equals(workspaceId).count()) > 0 ||
+      (await this.db.operations.where('workspaceId').equals(workspaceId).count()) > 0
+    )
   }
 }
 

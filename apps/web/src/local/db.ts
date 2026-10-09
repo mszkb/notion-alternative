@@ -79,10 +79,18 @@ export interface UnloadedDocument {
 /** How much content a device keeps (ADR 0017); stored in `meta` under `offlineMode`. */
 export type OfflineMode = 'all' | 'onDemand'
 
+/**
+ * A workspace as cached on this device (ADR 0014): the server's object with the user's role, and
+ * `revoked` once the server no longer grants access while pages remain here (read-only then).
+ */
+export interface CachedWorkspace extends Workspace {
+  revoked?: boolean
+}
+
 /** Local database of one user account (ADR 0009). */
 export class LocalDb extends Dexie {
   meta!: EntityTable<MetaEntry, 'key'>
-  workspaces!: EntityTable<Workspace, 'id'>
+  workspaces!: EntityTable<CachedWorkspace, 'id'>
   documents!: EntityTable<Document, 'id'>
   blocks!: EntityTable<Block, 'id'>
   tags!: EntityTable<Tag, 'id'>
