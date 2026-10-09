@@ -33,7 +33,7 @@ Folgende Prinzipien gelten weiter:
 
 Option 1. Option 3 kommt später mit eigenem ADR.
 
-**Datenmodell:** neue Tabelle `workspace_members(workspace_id, user_id, role, added_at)`, Primärschlüssel `(workspace_id, user_id)`. Die Migration trägt jeden bisherigen Besitzer als `owner` ein. `owner_id` bleibt erhalten; es bestimmt, wessen Speicherkontingent die Anhänge belasten.
+**Datenmodell:** neue Tabelle `workspace_members(workspace_id, user_id, role, added_at)`, Primärschlüssel `(workspace_id, user_id)`, für alle Mitglieder außer dem Ersteller. Der Ersteller (`owner_id`) ist immer `owner` und hat keine Zeile; dadurch braucht die Migration keine Daten zu übernehmen. `owner_id` bestimmt auch, wessen Speicherkontingent die Anhänge belasten.
 
 **Rollen:**
 
