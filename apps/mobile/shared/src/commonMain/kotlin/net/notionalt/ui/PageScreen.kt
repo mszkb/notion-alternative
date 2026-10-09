@@ -74,6 +74,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -529,6 +531,13 @@ private fun TitleField(context: UserContext, documentId: String, title: String) 
             if (current != saved) runCatching { context.store.renameDocument(documentId, current.take(500)) }
         }
     }
+    // Android may end the app in the background: save what was typed when it leaves the screen.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (current != saved) {
+            runCatching { context.store.renameDocument(documentId, current.take(500)) }
+            saved = current
+        }
+    }
     val tokens = LocalTokens.current
     // A page without a title is usually new: start typing its title right away.
     val focus = remember { FocusRequester() }
@@ -658,6 +667,12 @@ private fun BlockEditor(
     DisposableEffect(block.id) {
         onDispose {
             if (current != saved) runCatching { store.updateBlock(block.id, content = current) }
+        }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (current != saved) {
+            runCatching { store.updateBlock(block.id, content = current) }
+            saved = current
         }
     }
 
