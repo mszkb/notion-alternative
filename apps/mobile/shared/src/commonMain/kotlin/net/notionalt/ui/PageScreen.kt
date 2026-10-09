@@ -451,6 +451,7 @@ private fun PageEditor(
     val visible = remember(blocks, collapsed) { visibleBlocks(blocks, collapsed) }
     val listState = rememberLazyListState()
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 200.dp)) {
+        item(key = "cover") { PageCover(context, store.document(documentId)?.cover) }
         item(key = "title") { TitleField(context, documentId, title, store.document(documentId)?.revision) }
         item(key = "tags") {
             val version by store.version.collectAsState()
