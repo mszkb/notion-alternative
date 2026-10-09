@@ -21,7 +21,21 @@ SERVER_URL=http://127.0.0.1:3000 pnpm --filter @notion-alt/contract-tests test
 
 - `pnpm test` im Wurzelverzeichnis führt die Contract-Tests **nicht** aus (`--filter '!@notion-alt/contract-tests'`); die GitHub-CI startet sie im Job `checks` als eigenen Schritt. `pnpm typecheck` prüft das Paket mit.
 - `CONTRACT_SERVER_LOG=1` gibt die Ausgabe des gestarteten Servers mit aus; bricht der Start ab, steht sie ohnehin in der Fehlermeldung.
-- Playwright (`apps/web/playwright.config.ts`) startet ebenfalls den PHP-Server (`php -S`, Port `3100`); mit gesetztem `SERVER_CMD` diesen Befehl (`PORT`/`{port}`, Arbeitsverzeichnis: Repo-Wurzel).
+- Playwright (`apps/web/playwright.config.ts`) startet ebenfalls den PHP-Server (`php -S`, Port `3100`); mit gesetztem `SERVER_CMD` diesen Befehl (`PORT`/`{port}`, Arbeitsverzeichnis: Repo-Wurzel). Mit `BASE_URL` startet es nichts und testet eine laufende Installation.
+
+### Gegen das Webhosting-Paket unter Apache
+
+`scripts/webspace-test.sh` baut das Release-ZIP ([Webhosting](../user/webhosting.md), #128), entpackt es wie auf einem Webspace und startet es in `php:8.3-apache`: `.htaccess`, `mod_php`, Datenordner außerhalb des Webroots. Von außen prüft es danach:
+
+- Einrichtungs-Check (`api/check.php`, alles grün außer `COOKIE_SECURE` ohne HTTPS),
+- dass Code und Konfiguration nicht ausgeliefert werden,
+- alle Contract-Tests (`SERVER_URL`),
+- den Cron-Einstiegspunkt,
+- die PWA-E2E-Tests (Playwright mit `BASE_URL`; `E2E_ARGS=''` für alle).
+
+Die Werte aus der Tabelle unten stehen in `scripts/webspace-test/config.contract.php`, die der E2E-Tests in `config.e2e.php`. Braucht Linux und Docker; die GitHub-CI führt es im Job `webspace` aus. So fiel auf, dass Apache `/icons/` selbst belegt, weshalb die App-Icons unter `/app-icons/` liegen.
+
+Gegen den Docker-Stack (`SERVER_URL=http://127.0.0.1:8080`, Werte aus der Tabelle unten als Umgebung des Backends) laufen die Contract-Tests ebenfalls, außer den Rate-Limit-Tests pro Adresse (nginx trägt die Client-Adresse selbst ein, siehe „Client-Adresse“ unten) und den Push-Tests (der Fake-Push-Dienst auf dem Host ist aus dem Container nicht erreichbar).
 
 ### Ablauf
 

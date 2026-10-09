@@ -65,6 +65,10 @@ test('T-OFF-01/02/03 with the network really offline: reload works, edits surviv
 })
 
 test('a new version offers a reload that keeps unsaved edits', async ({ signedIn: page }) => {
+  test.skip(
+    !!process.env.BASE_URL,
+    'changes the local build, which an external server does not serve',
+  )
   await newPage(page, 'Vor dem Update')
   await waitForSaved(page)
   await controlled(page)

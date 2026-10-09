@@ -152,7 +152,7 @@ Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/no
 - [x] Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125); Bündeln über `push_hints`, Versand nach der Antwort, Rest per Cron #127)
 - [x] Versionsverlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126); Sperre per `flock`)
 - [x] CLI, Cron, Metriken ([#127](https://github.com/mszkb/notion-alternative/issues/127); `bin/console`, `bin/cron.php`, Tabelle `metrics`)
-- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128); ZIP, `.htaccess`, Einrichtungs-Check und PHP-FPM-Image gebaut, offen: echter Webspace-Test und Gitea-Nightly gegen PHP)
+- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128); ZIP, `.htaccess`, Einrichtungs-Check und PHP-FPM-Image gebaut; Images auf amd64 und arm64 (QEMU) gebaut und mit den Contract-Tests geprüft; ZIP unter Apache mit `mod_php` in der CI, `scripts/webspace-test.sh`; offen: echter Webspace-Test und Gitea-Nightly gegen PHP)
 - [x] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129); Contract-Tests sind die Spezifikation, Fixtures eingefroren)
 
 ## Phase 8 – Collaboration
