@@ -526,7 +526,6 @@ private fun orderedNumber(blocks: List<Block>, block: Block): Int {
 private fun TitleField(context: UserContext, documentId: String, title: String) {
     var value by remember(documentId) { mutableStateOf(title) }
     var saved by remember(documentId) { mutableStateOf(title) }
-    val current by rememberUpdatedState(value)
     // A title changed elsewhere (pull) shows up unless the user is typing.
     LaunchedEffect(title) { if (value == saved) { value = title; saved = title } }
     LaunchedEffect(value) {
@@ -538,14 +537,14 @@ private fun TitleField(context: UserContext, documentId: String, title: String) 
     }
     DisposableEffect(documentId) {
         onDispose {
-            if (current != saved) runCatching { context.store.renameDocument(documentId, current.take(500)) }
+            if (value != saved) runCatching { context.store.renameDocument(documentId, value.take(500)) }
         }
     }
     // Android may end the app in the background: save what was typed when it leaves the screen.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        if (current != saved) {
-            runCatching { context.store.renameDocument(documentId, current.take(500)) }
-            saved = current
+        if (value != saved) {
+            runCatching { context.store.renameDocument(documentId, value.take(500)) }
+            saved = value
         }
     }
     val tokens = LocalTokens.current
@@ -665,7 +664,6 @@ private fun BlockEditor(
     val tokens = LocalTokens.current
     var value by remember(block.id) { mutableStateOf(TextFieldValue(block.content, TextRange(block.content.length))) }
     var saved by remember(block.id) { mutableStateOf(block.content) }
-    val current by rememberUpdatedState(value.text)
     val focus = remember { FocusRequester() }
     LaunchedEffect(block.id) { runCatching { focus.requestFocus() } }
     LaunchedEffect(value.text) {
@@ -694,14 +692,12 @@ private fun BlockEditor(
         editorFlush.flush = own
         onDispose {
             if (editorFlush.flush === own) editorFlush.flush = null
-            if (current != saved) runCatching { store.updateBlock(block.id, content = current) }
+            // Reads the state itself: a captured copy would miss changes made in the last event.
+            if (value.text != saved) runCatching { store.updateBlock(block.id, content = value.text) }
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        if (current != saved) {
-            runCatching { store.updateBlock(block.id, content = current) }
-            saved = current
-        }
+        flush()
     }
 
     fun onChange(next: TextFieldValue) {
