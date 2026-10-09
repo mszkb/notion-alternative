@@ -48,7 +48,7 @@ class AppController(val platform: Platform) {
         watched = context
         watcher = scope.launch {
             launch {
-                context.store.version.drop(1).debounce(2_000).collect {
+                context.store.localEdits.drop(1).debounce(2_000).collect {
                     context.sync.refreshCounts()
                     context.sync.sync()
                 }

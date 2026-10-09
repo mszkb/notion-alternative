@@ -57,6 +57,11 @@ class LocalStore(
     private val _version = MutableStateFlow(0L)
     val version: StateFlow<Long> = _version.asStateFlow()
 
+    /** Bumped only after writes that queued operations (local edits): the sync trigger. */
+    private val _localEdits = MutableStateFlow(0L)
+    val localEdits: StateFlow<Long> = _localEdits.asStateFlow()
+    private var queuedInWrite = 0
+
     /** Stable id of this installation, created on first use. */
     var deviceId: String = q.transactionWithResult {
         q.metaValue("deviceId").executeAsOneOrNull() ?: newId().also { q.putMeta("deviceId", it) }
@@ -65,6 +70,10 @@ class LocalStore(
 
     private fun changed() {
         _version.value += 1
+        if (queuedInWrite > 0) {
+            queuedInWrite = 0
+            _localEdits.value += 1
+        }
     }
 
     private fun <T> write(body: () -> T): T {
@@ -81,6 +90,7 @@ class LocalStore(
         baseRevision: Long?,
         payload: JsonObject,
     ) {
+        queuedInWrite++
         q.insertOperation(
             opId = newId(),
             deviceId = deviceId,

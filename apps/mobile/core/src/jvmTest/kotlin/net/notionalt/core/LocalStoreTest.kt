@@ -152,6 +152,17 @@ class LocalStoreTest {
     }
 
     @Test
+    fun onlyLocalEditsTriggerSync() {
+        val store = memoryStore()
+        val before = store.localEdits.value
+        store.applyRemoteChanges(WS, emptyList(), 9)
+        store.saveWorkspaces(emptyList())
+        assertEquals(before, store.localEdits.value, "sync's own writes must not trigger another sync")
+        store.createDocument(WS)
+        assertEquals(before + 1, store.localEdits.value)
+    }
+
+    @Test
     fun ownChangesComingBackOnlyConfirm() {
         val store = memoryStore()
         val doc = store.createDocument(WS)
