@@ -580,6 +580,57 @@ class LocalStore(
             parseConflict(ApiJson.parseToJsonElement(it.json) as JsonObject)
         }
 
+    /** Whether "keep the other version" can be done here (changed block or page); else web app. */
+    fun canApplyLocalSide(conflict: ConflictInfo): Boolean {
+        if (conflict.reason != "changed") return false
+        return when (conflict.entity) {
+            "block" -> block(conflict.entityId)?.deletedAt == null && block(conflict.entityId) != null &&
+                conflict.local.kind in setOf("update", "delete", "move")
+            "document" -> document(conflict.entityId)?.let { it.deletedAt == null } == true && conflict.local.kind == "update"
+            else -> false
+        }
+    }
+
+    /**
+     * Resolves a conflict (ADR 0003), offline too: `keepLocal` applies the change that was not
+     * applied as ordinary operations; either way a `conflict` update marks it resolved everywhere.
+     */
+    fun resolveConflict(id: String, keepLocal: Boolean) = write {
+        val row = q.conflict(id).executeAsOneOrNull() ?: throw LocalStoreException("Conflict $id not found")
+        val json = ApiJson.parseToJsonElement(row.json) as JsonObject
+        val conflict = parseConflict(json) ?: throw LocalStoreException("Conflict $id unreadable")
+        if (conflict.resolvedAt != null) throw LocalStoreException("Conflict $id already resolved")
+        val resolution = if (keepLocal) "local" else "remote"
+        if (keepLocal) {
+            if (!canApplyLocalSide(conflict)) throw LocalStoreException("Resolve this conflict in the web app")
+            val payload = conflict.local.payload
+            when (conflict.entity) {
+                "block" -> when (conflict.local.kind) {
+                    "delete" -> deleteBlock(conflict.entityId)
+                    "move" -> {
+                        val block = block(conflict.entityId)!!
+                        val document = requireDocument(block.documentId)
+                        val sortKey = payload.str("sortKey") ?: block.sortKey
+                        q.putBlock(block.copy(sortKey = sortKey).toRow())
+                        enqueue(document.workspaceId, "block", block.id, "move", block.revision, buildJsonObject { put("sortKey", sortKey) })
+                    }
+                    else -> updateBlock(
+                        conflict.entityId,
+                        type = payload.str("type"),
+                        content = payload.str("content"),
+                        attrs = payload["attrs"] as? JsonObject,
+                    )
+                }
+                "document" -> {
+                    payload.str("title")?.let { renameDocument(conflict.entityId, it) }
+                    payload.bool("favorite")?.let { setFavorite(conflict.entityId, it) }
+                }
+            }
+        }
+        putConflict(JsonObject(json + mapOf("resolution" to JsonPrimitive(resolution), "resolvedAt" to JsonPrimitive(now()))))
+        enqueue(conflict.workspaceId, "conflict", id, "update", row.revision, buildJsonObject { put("resolution", resolution) })
+    }
+
     private fun parseConflict(json: JsonObject): ConflictInfo? = try {
         ApiJson.decodeFromJsonElement(ConflictInfo.serializer(), json)
     } catch (_: IllegalArgumentException) {

@@ -257,4 +257,28 @@ class LocalStoreTest {
         )
         assertTrue(store.openConflicts(WS).isEmpty())
     }
+
+    @Test
+    fun keepingTheOtherVersionQueuesOrdinaryOperations() {
+        val store = memoryStore()
+        val doc = store.createDocument(WS)
+        val block = store.blocks(doc.id).single()
+        store.acknowledge(store.queuedOperations(0, 10).map { PushResult(it.second.opId, "applied", revision = 2, seq = 1) })
+        val conflictId = newId()
+        val payload = kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"entity":"block","entityId":"${block.id}","documentId":"${doc.id}","reason":"changed","baseRevision":1,
+               "local":{"kind":"update","payload":{"content":"Meins"},"deviceId":"$OTHER_DEVICE","opId":"${newId()}"},
+               "remote":null,"createdAt":"2026-10-09T13:00:00.000Z","resolvedAt":null,"resolution":null}""",
+        ).jsonObject
+        store.applyRemoteChanges(WS, listOf(change(1, "conflict", conflictId, "create", payload, revision = 1)), 1)
+        val conflict = store.openConflicts(WS).single()
+        assertTrue(store.canApplyLocalSide(conflict))
+        store.resolveConflict(conflictId, keepLocal = true)
+        assertEquals("Meins", store.block(block.id)!!.content)
+        assertTrue(store.openConflicts(WS).isEmpty())
+        val ops = store.queuedOperations(0, 10).map { it.second }
+        assertEquals(listOf("block/update", "conflict/update"), ops.map { "${it.entity}/${it.kind}" })
+        assertEquals(JsonObject(mapOf("resolution" to JsonPrimitive("local"))), ops[1].payload)
+        assertEquals(1, ops[1].baseRevision)
+    }
 }

@@ -1,7 +1,9 @@
 package net.notionalt.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,6 +16,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -57,7 +60,7 @@ fun ConflictsScreen(context: UserContext, workspaceId: String, openPage: (String
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
             item {
                 Text(
-                    "Beide Versionen sind gespeichert, nichts wurde überschrieben. Auflösen kannst du Konflikte vorerst in der Web-App.",
+                    "Beide Versionen sind gespeichert, nichts wurde überschrieben. Entscheide hier, welche gilt; Fälle wie gelöschte Seiten löst du in der Web-App.",
                     modifier = Modifier.padding(16.dp),
                     color = tokens.muted,
                 )
@@ -86,6 +89,16 @@ private fun ConflictRow(context: UserContext, conflict: ConflictInfo, openPage: 
             modifier = Modifier.padding(top = 6.dp),
         )
         Text("Server: " + preview(conflict.remote), style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            OutlinedButton(onClick = { runCatching { context.store.resolveConflict(conflict.id, keepLocal = false) } }) {
+                Text("Server-Version behalten")
+            }
+            if (context.store.canApplyLocalSide(conflict)) {
+                OutlinedButton(onClick = { runCatching { context.store.resolveConflict(conflict.id, keepLocal = true) } }) {
+                    Text(if (own) "Meine übernehmen" else "Andere übernehmen")
+                }
+            }
+        }
     }
     HorizontalDivider(color = tokens.border)
 }

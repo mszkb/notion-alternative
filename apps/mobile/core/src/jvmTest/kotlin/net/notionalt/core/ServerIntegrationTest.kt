@@ -73,6 +73,13 @@ class ServerIntegrationTest {
         val conflict = b.store.openConflicts(workspace).firstOrNull { it.entityId == first.id }
         if (conflict != null) {
             assertEquals("Version B", conflict.local.payload["content"].toString().trim('"'))
+            // B keeps its version: ordinary operations plus the resolution reach A.
+            b.store.resolveConflict(conflict.id, keepLocal = true)
+            b.sync.sync()
+            assertEquals(0, b.store.pendingCount(), b.sync.status.value.lastError ?: b.store.issues().toString())
+            a.sync.sync()
+            assertEquals("Version B", a.store.block(first.id)!!.content)
+            assertTrue(a.store.openConflicts(workspace).none { it.id == conflict.id })
         } else {
             // The server merged instead; then both versions must be in the text.
             val merged = b.store.block(first.id)!!.content
