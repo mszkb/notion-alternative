@@ -25,6 +25,9 @@ data class ConflictsRoute(val workspaceId: String)
 @Serializable
 data class SearchRoute(val workspaceId: String)
 
+@Serializable
+data class TrashRoute(val workspaceId: String)
+
 @Composable
 fun MainScreen(controller: AppController, context: UserContext) {
     val nav = rememberNavController()
@@ -41,7 +44,11 @@ fun MainScreen(controller: AppController, context: UserContext) {
                 openPage = { workspaceId, id -> nav.navigate(PageRoute(workspaceId, id)) },
                 openConflicts = { workspaceId -> nav.navigate(ConflictsRoute(workspaceId)) },
                 openSearch = { workspaceId -> nav.navigate(SearchRoute(workspaceId)) },
+                openTrash = { workspaceId -> nav.navigate(TrashRoute(workspaceId)) },
             )
+        }
+        composable<TrashRoute> { entry ->
+            TrashScreen(context = context, workspaceId = entry.toRoute<TrashRoute>().workspaceId, back = { nav.popBackStack() })
         }
         composable<SearchRoute> { entry ->
             val route = entry.toRoute<SearchRoute>()

@@ -154,7 +154,12 @@ class LocalStoreTest {
         assertTrue(store.documents(WS).isEmpty())
         assertTrue(store.document(child.id)!!.deletedAt != null)
         val deletes = store.queuedOperations(0, 100).map { it.second }.filter { it.kind == "delete" }
-        assertEquals(2, deletes.size)
+        assertEquals(listOf(parent.id, child.id), deletes.map { it.entityId }, "parent first")
+        assertEquals(listOf(parent.id), store.trashedDocuments(WS).map { it.id })
+        assertEquals(setOf(parent.id, child.id), store.restoreDocument(parent.id).toSet())
+        assertEquals(2, store.documents(WS).size)
+        assertTrue(store.trashedDocuments(WS).isEmpty())
+        assertEquals(2, store.queuedOperations(0, 100).count { it.second.kind == "restore" })
     }
 
     private fun change(seq: Long, entity: String, id: String, kind: String, payload: JsonObject, device: String = OTHER_DEVICE, revision: Long = 1) =

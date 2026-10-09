@@ -267,7 +267,12 @@ fun PageScreen(
             }
             when {
                 document == null -> Notice("Diese Seite gibt es auf diesem Gerät nicht (mehr).")
-                document.deletedAt != null -> Notice("Diese Seite liegt im Papierkorb. Wiederherstellen kannst du sie in der Web-App.")
+                document.deletedAt != null -> Column {
+                    Notice("Diese Seite liegt im Papierkorb.")
+                    TextButton(onClick = { store.restoreDocument(documentId) }, modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Text("Wiederherstellen")
+                    }
+                }
                 !loaded && outcome == SyncEngine.OpenOutcome.OFFLINE ->
                     Notice("Der Inhalt dieser Seite ist noch nicht auf diesem Gerät. Sobald der Server erreichbar ist, wird er geladen.")
                 !loaded && outcome == SyncEngine.OpenOutcome.MISSING -> Notice("Der Server kennt diese Seite nicht.")

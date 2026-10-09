@@ -227,3 +227,6 @@ SELECT data FROM attachmentContent WHERE id = ?;
 
 putAttachmentData:
 INSERT OR REPLACE INTO attachmentContent (id, data) VALUES (?, ?);
+
+allDocumentsOfWorkspace:
+SELECT * FROM document WHERE workspaceId = ?;

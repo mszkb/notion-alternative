@@ -220,19 +220,47 @@ class LocalStore(
         })
     }
 
-    /** Moves the page and its subpages to the trash (tombstones, restorable on the web). */
+    /** Moves the page and its subpages to the trash (tombstones, parent first, as the web client). */
     fun deleteDocument(id: String): List<String> = write {
         val root = requireDocument(id)
         val all = documents(root.workspaceId)
-        val removed = mutableListOf<String>()
+        val subtree = mutableListOf<Document>()
         fun visit(document: Document) {
+            subtree += document
             for (child in all.filter { it.parentId == document.id }) visit(child)
-            q.putDocument(document.copy(deletedAt = now()).toRow())
-            enqueue(document.workspaceId, "document", document.id, "delete", document.revision, JsonObject(emptyMap()))
-            removed += document.id
         }
         visit(root)
-        removed
+        val deletedAt = now()
+        for (document in subtree) {
+            q.putDocument(document.copy(deletedAt = deletedAt).toRow())
+            enqueue(document.workspaceId, "document", document.id, "delete", document.revision, JsonObject(emptyMap()))
+        }
+        subtree.map { it.id }
+    }
+
+    /** Deleted pages to offer in the trash: those whose parent is not deleted too, newest first. */
+    fun trashedDocuments(workspaceId: String): List<Document> {
+        val all = q.allDocumentsOfWorkspace(workspaceId).executeAsList().map { it.toModel() }
+        val byId = all.associateBy { it.id }
+        return all.filter { d -> d.deletedAt != null && d.parentId?.let { byId[it]?.deletedAt } == null }
+            .sortedByDescending { it.deletedAt }
+    }
+
+    /** Restores a deleted page with its deleted subpages (trash, #66); blocks come back under the same ids. */
+    fun restoreDocument(id: String): List<String> = write {
+        val root = document(id)?.takeIf { it.deletedAt != null } ?: return@write emptyList()
+        val all = q.allDocumentsOfWorkspace(root.workspaceId).executeAsList().map { it.toModel() }
+        val restored = mutableListOf<Document>()
+        fun visit(document: Document) {
+            restored += document
+            for (child in all.filter { it.parentId == document.id && it.deletedAt != null }) visit(child)
+        }
+        visit(root)
+        for (document in restored) {
+            q.putDocument(document.copy(deletedAt = null).toRow())
+            enqueue(document.workspaceId, "document", document.id, "restore", document.revision, JsonObject(emptyMap()))
+        }
+        restored.map { it.id }
     }
 
     // ------------------------------------------------------------------ blocks

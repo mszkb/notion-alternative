@@ -81,6 +81,7 @@ fun HomeScreen(
     openPage: (String, String) -> Unit,
     openConflicts: (String) -> Unit,
     openSearch: (String) -> Unit,
+    openTrash: (String) -> Unit,
 ) {
     val store = context.store
     val version by store.version.collectAsState()
@@ -147,6 +148,12 @@ fun HomeScreen(
                                 menu = false
                                 controller.makeAllOffline()
                             })
+                            if (workspace != null) {
+                                DropdownMenuItem(text = { Text("Papierkorb") }, onClick = {
+                                    menu = false
+                                    openTrash(workspace.id)
+                                })
+                            }
                             DropdownMenuItem(text = { Text("Neu synchronisieren") }, onClick = {
                                 menu = false
                                 controller.requestSync(full = true)

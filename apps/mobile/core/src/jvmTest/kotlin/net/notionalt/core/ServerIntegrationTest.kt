@@ -108,5 +108,12 @@ class ServerIntegrationTest {
         b.sync.sync()
         assertTrue(b.store.documents(workspace).none { it.id == page.id })
         assertTrue(b.store.document(page.id)?.deletedAt != null)
+
+        // Restoring from the trash on B brings it back on A.
+        b.store.restoreDocument(page.id)
+        b.sync.sync()
+        assertEquals(0, b.store.pendingCount(), b.store.issues().toString())
+        a.sync.sync()
+        assertTrue(a.store.documents(workspace).any { it.id == page.id })
     }
 }
