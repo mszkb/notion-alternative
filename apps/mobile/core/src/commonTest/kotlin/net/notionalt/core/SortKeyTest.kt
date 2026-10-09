@@ -63,6 +63,12 @@ class SortKeyTest {
     }
 
     @Test
+    fun formatsLocalClock() {
+        assertEquals("14:05", localClock("2026-10-09T12:05:30.000Z", kotlinx.datetime.TimeZone.of("Europe/Berlin")))
+        assertEquals("kaputt", localClock("kaputt"))
+    }
+
+    @Test
     fun ordersByKeyThenId() {
         val items = listOf("a1" to "b", "a0" to "z", "a1" to "a")
         val sorted = items.sortedBySortKey({ it.first }, { it.second })

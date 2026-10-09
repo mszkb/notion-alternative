@@ -32,7 +32,6 @@ Bekannte Einschränkungen (Stand heute):
 - Keine Push-Benachrichtigungen (kein FCM), nur Sync-Trigger wie oben.
 - Keine Datei-Anhänge (nur Bilder anzeigen, kein Hochladen), Suche ohne Volltextindex, kein Export.
 - Das Session-Cookie liegt in der App-Datenbank (Keystore folgt mit #171), keine Token-Auth (#152).
-- Datum der letzten Synchronisierung in UTC.
 - Große Workspaces: Ab mehreren tausend Seiten dauert der erste Sync länger (gemessen: 10 000 Seiten in ca. 4 s auf einem PC, auf dem Telefon mehr), und einige Ansichten lesen noch auf dem Hauptthread.
 
 ## Wenn etwas nicht klappt

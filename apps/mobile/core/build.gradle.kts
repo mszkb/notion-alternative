@@ -21,6 +21,7 @@ kotlin {
             api(libs.kotlinx.serialization.json)
             api(libs.ktor.client.core)
             api(libs.sqldelight.runtime)
+            implementation(libs.kotlinx.datetime)
             implementation(libs.sqldelight.coroutines)
         }
         commonTest.dependencies {

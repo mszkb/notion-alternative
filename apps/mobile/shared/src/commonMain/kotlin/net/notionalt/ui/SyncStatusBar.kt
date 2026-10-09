@@ -42,7 +42,7 @@ fun SyncStatusBar(context: UserContext, relogin: (() -> Unit)? = null) {
         status.lastError != null -> "Fehler: ${status.lastError}" + (if (pending > 0) " · $pending ausstehend" else "") to tokens.error
         status.running -> "Synchronisiere …" to tokens.muted
         pending > 0 -> "$pending Änderung(en) ausstehend" to tokens.muted
-        status.lastSyncAt != null -> "Synchronisiert ${status.lastSyncAt!!.substring(11, 16)} UTC" to tokens.ok
+        status.lastSyncAt != null -> "Synchronisiert ${net.notionalt.core.localClock(status.lastSyncAt!!)}" to tokens.ok
         else -> "Noch nicht synchronisiert" to tokens.muted
     }
     Row(

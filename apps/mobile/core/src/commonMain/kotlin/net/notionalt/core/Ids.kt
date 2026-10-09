@@ -1,5 +1,7 @@
 package net.notionalt.core
 
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -17,3 +19,11 @@ fun newId(random: Random = Random.Default): String {
 /** ISO timestamp with milliseconds, like `new Date().toISOString()`. */
 @OptIn(ExperimentalTime::class)
 fun nowIso(): String = Instant.fromEpochMilliseconds(Clock.System.now().toEpochMilliseconds()).toString()
+
+/** "HH:mm" in the device's time zone for an ISO timestamp; the input unchanged if unreadable. */
+@OptIn(ExperimentalTime::class)
+fun localClock(iso: String, zone: TimeZone = TimeZone.currentSystemDefault()): String =
+    runCatching {
+        val local = Instant.parse(iso).toLocalDateTime(zone)
+        "${local.hour.toString().padStart(2, '0')}:${local.minute.toString().padStart(2, '0')}"
+    }.getOrDefault(iso)
