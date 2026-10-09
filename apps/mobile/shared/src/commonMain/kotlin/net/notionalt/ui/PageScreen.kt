@@ -700,7 +700,12 @@ private fun BlockEditor(
         flush()
     }
 
+    // Set once this editor handed over to another block (split) or became a divider: the text
+    // field may deliver the same change again, which must not split or convert a second time.
+    var retired by remember(block.id) { mutableStateOf(false) }
+
     fun onChange(next: TextFieldValue) {
+        if (retired) return
         // Markdown shortcuts at the start of a text block, as in the web editor.
         if (block.type == "paragraph" && next.text.length > value.text.length) {
             val shortcut = markdownShortcuts.firstOrNull { next.text.startsWith(it.first) && !value.text.startsWith(it.first) }
@@ -714,6 +719,7 @@ private fun BlockEditor(
                         store.updateBlock(block.id, type = "divider", content = "", attrs = JsonObject(emptyMap()))
                         saved = ""
                         value = TextFieldValue("")
+                        retired = true
                         done()
                     } else {
                         store.updateBlock(block.id, type = kind.type, content = rest, attrs = attrsFor(kind, block))
@@ -755,6 +761,7 @@ private fun BlockEditor(
                 // The tail lives on in the new block: this editor must not save it back on dispose.
                 saved = head
                 value = TextFieldValue(head, TextRange(head.length))
+                retired = true
                 startEditing(created.id)
             }
             return
