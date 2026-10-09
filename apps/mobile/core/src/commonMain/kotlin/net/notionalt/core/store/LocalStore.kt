@@ -38,6 +38,9 @@ class LocalStoreException(message: String) : Exception(message)
 /** A queued operation the server did not accept; it stays queued and is shown (principle 6). */
 data class OperationIssue(val seq: Long, val entity: String, val kind: String, val code: String, val message: String)
 
+/** A block's editable state, for undo (apps/web/src/local/store.ts `BlockState`). */
+data class BlockState(val id: String, val type: String, val content: String, val attrs: JsonObject)
+
 /** Position among siblings: `afterId == null` with [atStart] = first, nothing = append. */
 data class Position(val afterId: String? = null, val atStart: Boolean = false)
 
@@ -264,6 +267,43 @@ class LocalStore(
         enqueue(document.workspaceId, "block", id, "update", block.revision, payload)
         touch(document)
         next
+    }
+
+    fun blockStates(documentId: String): List<BlockState> =
+        blocks(documentId).map { BlockState(it.id, it.type, it.content, it.attrs) }
+
+    /**
+     * Brings a page's blocks to `target` (undo) with ordinary operations in one transaction.
+     * Blocks that no longer exist are recreated under a new id: tombstones stay final.
+     */
+    fun applyBlockState(documentId: String, target: List<BlockState>) = write {
+        val document = requireDocument(documentId)
+        val current = blocks(documentId)
+        val wanted = target.map { it.id }.toSet()
+        for (block in current) {
+            if (block.id !in wanted) {
+                q.putBlock(block.copy(deletedAt = now()).toRow())
+                enqueue(document.workspaceId, "block", block.id, "delete", block.revision, JsonObject(emptyMap()))
+            }
+        }
+        val existing = current.map { it.id }.toSet()
+        var previousId: String? = null
+        for (state in target) {
+            var id = state.id
+            if (id in existing) {
+                updateBlock(id, type = state.type, content = state.content, attrs = state.attrs)
+                val list = blocks(documentId)
+                val index = list.indexOfFirst { it.id == id }
+                val before = if (index > 0) list[index - 1].id else null
+                if (before != previousId) {
+                    moveBlock(id, if (previousId == null) Position(atStart = true) else Position(afterId = previousId))
+                }
+            } else {
+                val position = if (previousId == null) Position(atStart = true) else Position(afterId = previousId)
+                id = insertBlock(requireDocument(documentId), state.type, state.content, state.attrs, position).id
+            }
+            previousId = id
+        }
     }
 
     /** Moves a block among its page's blocks (`move` with the new sort key). */

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatIndentDecrease
 import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -55,6 +56,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -77,6 +79,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import net.notionalt.core.UserContext
 import net.notionalt.core.model.Block
+import net.notionalt.core.store.BlockState
 import net.notionalt.core.store.calloutIcon
 import net.notionalt.core.store.checked
 import net.notionalt.core.store.indent
@@ -181,6 +184,24 @@ fun PageScreen(
     }
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    // Undo of this page's edits since it was opened (ADR 0008: structural steps take a checkpoint).
+    val undoStack = remember(documentId) { mutableStateListOf<List<BlockState>>() }
+    var pendingUndo by remember { mutableStateOf(false) }
+    fun checkpoint() {
+        undoStack.add(store.blockStates(documentId))
+        if (undoStack.size > 50) undoStack.removeAt(0)
+    }
+    fun undo() {
+        val target = undoStack.removeLastOrNull() ?: return
+        runCatching { store.applyBlockState(documentId, target) }
+    }
+    LaunchedEffect(pendingUndo, editingId) {
+        if (pendingUndo && editingId == null) {
+            // The editor saved its text when it closed; undo afterwards.
+            undo()
+            pendingUndo = false
+        }
+    }
     val titles = remember(version) { store.documents(workspaceId).associate { it.id to it.title } }
 
     Scaffold(
@@ -192,6 +213,17 @@ fun PageScreen(
                 },
                 actions = {
                     if (document != null && document.deletedAt == null) {
+                        IconButton(
+                            onClick = {
+                                if (editingId != null) {
+                                    editingId = null
+                                    pendingUndo = true
+                                } else {
+                                    undo()
+                                }
+                            },
+                            enabled = undoStack.isNotEmpty(),
+                        ) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Rückgängig") }
                         IconButton(onClick = { store.setFavorite(documentId, !document.favorite) }) {
                             Icon(
                                 if (document.favorite) Icons.Filled.Star else Icons.Filled.StarBorder,
@@ -241,7 +273,11 @@ fun PageScreen(
                     title = document.title,
                     blocks = blocks,
                     editingId = editingId,
-                    setEditing = { editingId = it },
+                    setEditing = { id ->
+                        if (id != null && id != editingId) checkpoint()
+                        editingId = id
+                    },
+                    checkpoint = ::checkpoint,
                     collapsed = collapsed,
                     toggleCollapsed = { id ->
                         collapsed = if (id in collapsed) collapsed - id else collapsed + id
@@ -289,6 +325,7 @@ private fun PageEditor(
     blocks: List<Block>,
     editingId: String?,
     setEditing: (String?) -> Unit,
+    checkpoint: () -> Unit,
     collapsed: Set<String>,
     toggleCollapsed: (String) -> Unit,
     pageTitle: (String) -> String?,
@@ -309,6 +346,7 @@ private fun PageEditor(
                     block = block,
                     done = { setEditing(null) },
                     startEditing = setEditing,
+                    checkpoint = checkpoint,
                 )
             } else {
                 BlockView(
@@ -317,6 +355,7 @@ private fun PageEditor(
                     collapsed = block.id in collapsed,
                     toggleCollapsed = { toggleCollapsed(block.id) },
                     onCheck = { checked ->
+                        checkpoint()
                         store.updateBlock(block.id, attrs = JsonObject(block.attrs + ("checked" to JsonPrimitive(checked))))
                     },
                     edit = { setEditing(block.id) },
@@ -330,9 +369,9 @@ private fun PageEditor(
         item(key = "add") {
             TextButton(
                 onClick = {
-                    val last = blocks.lastOrNull()
+                    checkpoint()
                     val block = store.createBlock(documentId)
-                    if (last != null || block.id.isNotEmpty()) setEditing(block.id)
+                    setEditing(block.id)
                 },
                 modifier = Modifier.padding(horizontal = 8.dp),
             ) {
@@ -487,6 +526,7 @@ private fun BlockEditor(
     block: Block,
     done: () -> Unit,
     startEditing: (String) -> Unit,
+    checkpoint: () -> Unit,
 ) {
     val store = context.store
     val tokens = LocalTokens.current
@@ -513,6 +553,7 @@ private fun BlockEditor(
         if (block.type == "paragraph" && next.text.length > value.text.length) {
             val shortcut = markdownShortcuts.firstOrNull { next.text.startsWith(it.first) && !value.text.startsWith(it.first) }
             if (shortcut != null) {
+                checkpoint()
                 val kind = shortcut.second
                 val rest = next.text.removePrefix(shortcut.first)
                 runCatching {
@@ -535,6 +576,7 @@ private fun BlockEditor(
             val head = next.text.substring(0, newline)
             val tail = next.text.substring(newline + 1)
             val continues = block.type == "list_item" || block.type == "todo"
+            checkpoint()
             if (continues && head.isEmpty() && tail.isEmpty()) {
                 // Enter in an empty list item ends the list.
                 runCatching {
@@ -585,21 +627,24 @@ private fun BlockEditor(
             IconButton(onClick = done) { Icon(Icons.Filled.Check, contentDescription = "Fertig") }
             IconButton(onClick = {
                 if (current != saved) { store.updateBlock(block.id, content = current); saved = current }
+                checkpoint()
                 store.deleteBlock(block.id)
                 done()
             }) { Icon(Icons.Filled.Delete, contentDescription = "Block löschen", tint = tokens.error) }
-            IconButton(onClick = { runCatching { store.moveBlockBy(block.id, -1) } }) {
+            IconButton(onClick = { checkpoint(); runCatching { store.moveBlockBy(block.id, -1) } }) {
                 Icon(Icons.Filled.ArrowUpward, contentDescription = "Nach oben")
             }
-            IconButton(onClick = { runCatching { store.moveBlockBy(block.id, 1) } }) {
+            IconButton(onClick = { checkpoint(); runCatching { store.moveBlockBy(block.id, 1) } }) {
                 Icon(Icons.Filled.ArrowDownward, contentDescription = "Nach unten")
             }
             IconButton(onClick = {
+                checkpoint()
                 store.updateBlock(block.id, attrs = block.attrs.withIndent((block.indent - 1).coerceAtLeast(0)))
             }, enabled = block.indent > 0) {
                 Icon(Icons.AutoMirrored.Filled.FormatIndentDecrease, contentDescription = "Ausrücken")
             }
             IconButton(onClick = {
+                checkpoint()
                 store.updateBlock(block.id, attrs = block.attrs.withIndent((block.indent + 1).coerceAtMost(5)))
             }, enabled = block.indent < 5) {
                 Icon(Icons.AutoMirrored.Filled.FormatIndentIncrease, contentDescription = "Einrücken")
@@ -612,6 +657,7 @@ private fun BlockEditor(
                     selected = selected,
                     onClick = {
                         if (current != saved) { store.updateBlock(block.id, content = current); saved = current }
+                        checkpoint()
                         if (kind.type == "divider") {
                             store.updateBlock(block.id, type = "divider", content = "", attrs = JsonObject(emptyMap()))
                             done()

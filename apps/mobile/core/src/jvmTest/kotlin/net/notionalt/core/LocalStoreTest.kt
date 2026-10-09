@@ -93,6 +93,25 @@ class LocalStoreTest {
     }
 
     @Test
+    fun undoRestoresBlocksWithOrdinaryOperations() {
+        val store = memoryStore()
+        val doc = store.createDocument(WS)
+        val a = store.blocks(doc.id).single()
+        store.updateBlock(a.id, content = "a")
+        val b = store.createBlock(doc.id, content = "b")
+        val before = store.blockStates(doc.id)
+        store.deleteBlock(a.id)
+        store.updateBlock(b.id, content = "B!")
+        store.createBlock(doc.id, content = "neu")
+        store.applyBlockState(doc.id, before)
+        val after = store.blocks(doc.id)
+        assertEquals(listOf("a", "b"), after.map { it.content })
+        assertTrue(after[0].id != a.id, "a deleted block comes back under a new id")
+        assertEquals(b.id, after[1].id)
+        assertTrue(store.block(a.id)!!.deletedAt != null)
+    }
+
+    @Test
     fun acknowledgeKeepsRejectedOperationsVisible() {
         val store = memoryStore()
         store.createDocument(WS)
