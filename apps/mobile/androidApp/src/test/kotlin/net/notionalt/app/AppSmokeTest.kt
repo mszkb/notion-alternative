@@ -159,5 +159,12 @@ class AppSmokeTest {
         compose.waitUntilAtLeastOneExists(hasText("Personal"), 30_000)
         context().store.createDocument(context().store.workspaces().first().id, title = "Nach erneutem Login")
         compose.waitUntil(30_000) { context().store.pendingCount() == 0L }
+
+        // The background job (WorkManager) syncs a change made while the app is not looking.
+        context().store.createDocument(context().store.workspaces().first().id, title = "Aus dem Hintergrund")
+        val worker = androidx.work.testing.TestListenableWorkerBuilder<net.notionalt.ui.SyncWorker>(compose.activity).build()
+        val result = kotlinx.coroutines.runBlocking { worker.doWork() }
+        org.junit.Assert.assertEquals(androidx.work.ListenableWorker.Result.success(), result)
+        org.junit.Assert.assertEquals(0L, context().store.pendingCount())
     }
 }
