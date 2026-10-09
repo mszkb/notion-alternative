@@ -97,6 +97,7 @@ fun HomeScreen(
     var expanded by remember { mutableStateOf(setOf<String>()) }
     val rows = remember(documents, expanded) { visibleTree(documents, expanded) }
     val favorites = remember(documents) { documents.filter { it.favorite } }
+    val recent = remember(documents) { documents.sortedByDescending { it.updatedAt }.take(5) }
 
     var workspaceMenu by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -209,14 +210,21 @@ fun HomeScreen(
                             )
                         }
                     }
+                    if (documents.size > 8) {
+                        item { SectionHeader("Zuletzt bearbeitet") }
+                        items(recent, key = { "recent-" + it.id }) { d ->
+                            PageRow(displayTitle(d), depth = 0, hasChildren = false, expanded = false, favorite = false,
+                                onToggle = {}, onOpen = { openPage(d.workspaceId, d.id) }, onAddChild = null)
+                        }
+                    }
                     if (favorites.isNotEmpty()) {
                         item { SectionHeader("Favoriten") }
                         items(favorites, key = { "fav-" + it.id }) { d ->
                             PageRow(displayTitle(d), depth = 0, hasChildren = false, expanded = false, favorite = true,
                                 onToggle = {}, onOpen = { openPage(d.workspaceId, d.id) }, onAddChild = null)
                         }
-                        item { SectionHeader("Seiten") }
                     }
+                    if (favorites.isNotEmpty() || documents.size > 8) item { SectionHeader("Seiten") }
                     items(rows, key = { it.document.id }) { row ->
                         val d = row.document
                         PageRow(
