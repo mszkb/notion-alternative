@@ -9,7 +9,7 @@ Kotlin Multiplatform + Compose Multiplatform ([ADR 0020](../../docs/adr/0020-nat
 3. App „Notion Alt (Dev)“ öffnen und die **Server-Adresse** eintragen, so wie sie im Browser funktioniert:
    - Tailscale mit HTTPS (ADR 0011): `https://<rechner>.<tailnet>.ts.net`
    - Webhosting/Reverse Proxy: `https://notizen.example.org` (auch mit Unterpfad, z. B. `https://example.org/notizen`)
-   - Heimnetz ohne Zertifikat: `http://192.168.x.y:8080` – **nur in diesem Debug-Build** erlaubt.
+   - Heimnetz ohne Zertifikat: `http://192.168.x.y:8080` – **nur in diesem Debug-Build** erlaubt. Der Docker-Stack muss dafür im LAN lauschen (`BIND_ADDRESS=0.0.0.0`, Standard ist nur `127.0.0.1`).
    - `https://` wird ergänzt, wenn nichts angegeben ist; ein `/api` am Ende wird entfernt.
 4. Mit E-Mail und Passwort des bestehenden Kontos anmelden. Die App registriert sich als Gerät („Android-App auf …“, sichtbar in den Einstellungen der Web-App) und lädt Seitenbaum und Metadaten. Seiteninhalte kommen beim Öffnen einer Seite (ADR 0017).
 5. Updates: neue APK einfach über die alte installieren (fester Debug-Schlüssel, Daten bleiben erhalten).
@@ -39,7 +39,7 @@ Bekannte Einschränkungen (Stand heute):
 
 | Meldung / Verhalten | Ursache und Abhilfe |
 | --- | --- |
-| „Server … ist nicht erreichbar“ | Adresse im Browser des Telefons öffnen. Heimnetz: richtige IP und Port (Docker-Stack: `:8080`), Telefon im selben WLAN. Tailscale: Tailscale-App auf dem Telefon verbunden. |
+| „Server … ist nicht erreichbar“ | Adresse im Browser des Telefons öffnen. Der Docker-Stack lauscht standardmäßig nur auf `127.0.0.1` (ADR 0010): fürs Heimnetz `BIND_ADDRESS=0.0.0.0` in `.env` setzen (nur im vertrauenswürdigen Netz) oder `tailscale serve` nutzen. Heimnetz: richtige IP und Port (`:8080`), Telefon im selben WLAN. Tailscale: Tailscale-App auf dem Telefon verbunden. |
 | „Unverschlüsseltes HTTP ist … nicht erlaubt“ | Nur der Debug-Build erlaubt `http://`; die APK aus `android-dev` ist ein Debug-Build. Sonst `https://` verwenden. |
 | „Das Zertifikat … wird nicht akzeptiert“ | Selbst signierte Zertifikate werden nicht akzeptiert. Tailscale-HTTPS (`tailscale serve`) oder ein Reverse Proxy mit Let’s Encrypt nutzen (ADR 0011). |
 | „Unter … antwortet kein Notion-Alt-Server“ | Die Adresse zeigt auf etwas anderes (z. B. Router-Seite, falscher Unterpfad). Die Adresse eintragen, unter der die Web-App läuft, ohne `/api`. |
