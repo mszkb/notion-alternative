@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextInputSelection
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import net.notionalt.ui.AppGraph
 import org.junit.Rule
@@ -37,6 +39,16 @@ class AppSmokeTest {
 
     @Test
     fun onboardingLoginAndEditing() {
+        try {
+            walkThrough()
+        } catch (error: Throwable) {
+            // The semantics tree shows what was on screen when a step failed.
+            println(compose.onRoot(useUnmergedTree = true).printToString(maxDepth = 30))
+            throw error
+        }
+    }
+
+    private fun walkThrough() {
         compose.waitUntilAtLeastOneExists(hasText("Willkommen bei Notion Alt"), 10_000)
         val url = server ?: return
 

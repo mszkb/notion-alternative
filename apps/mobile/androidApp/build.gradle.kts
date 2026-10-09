@@ -56,7 +56,11 @@ android {
                 // UI smoke test against a running server (see apps/mobile/README.md).
                 System.getenv("NOTION_ALT_SERVER")?.let { test.environment("NOTION_ALT_SERVER", it) }
                 test.systemProperty("robolectric.logging", "stdout")
-                test.testLogging { events("passed", "skipped", "failed") }
+                test.testLogging {
+                    events("passed", "skipped", "failed")
+                    exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+                    showStandardStreams = true
+                }
             }
         }
     }
