@@ -63,10 +63,11 @@ class AppSession(
         override fun setCookie(value: String?) = putSetting(KEY_COOKIE, value)
     }
 
+    // Declared before `_state`: the initial state opens the last user's store.
+    private val stores = mutableMapOf<String, LocalStore>()
+
     private val _state = MutableStateFlow<SessionState>(initialState())
     val state: StateFlow<SessionState> = _state.asStateFlow()
-
-    private val stores = mutableMapOf<String, LocalStore>()
 
     val serverUrl: String? get() = setting(KEY_SERVER)
 

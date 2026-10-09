@@ -496,9 +496,11 @@ private fun BlockEditor(
                 block.indent > 0 -> JsonObject(mapOf("indent" to JsonPrimitive(block.indent)))
                 else -> JsonObject(emptyMap())
             }
-            saved = head
-            val created = store.splitBlock(block.id, head, tail, type, attrs)
-            startEditing(created.id)
+            val created = runCatching { store.splitBlock(block.id, head, tail, type, attrs) }.getOrNull()
+            if (created != null) {
+                saved = head
+                startEditing(created.id)
+            }
             return
         }
         value = next

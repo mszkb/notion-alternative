@@ -163,6 +163,46 @@ class ApiAndSyncTest {
     }
 
     @Test
+    fun sessionSurvivesARestartAndLogoutKeepsLocalData() = runTest {
+        val drivers = mutableMapOf<String, app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver>()
+        val factory = DriverFactory { name, schema ->
+            drivers.getOrPut(name) {
+                app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver(app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver.IN_MEMORY)
+                    .also { schema.create(it) }
+            }
+        }
+        val engine = MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/health" -> respond("""{"status":"ok"}""", HttpStatusCode.OK)
+                "/api/auth/status" -> respond("""{"registrationOpen":false}""", HttpStatusCode.OK)
+                "/api/auth/login" -> respond(
+                    """{"user":{"id":"$WS","email":"a@b.de","createdAt":"c"}}""",
+                    HttpStatusCode.OK,
+                    headersOf(HttpHeaders.SetCookie, "session=tok; Path=/api; HttpOnly"),
+                )
+                "/api/auth/logout" -> respond("", HttpStatusCode.NoContent)
+                else -> respond("""{"error":{"code":"x","message":"x"}}""", HttpStatusCode.InternalServerError)
+            }
+        }
+        val first = AppSession(factory, HttpClient(engine), "Test")
+        assertTrue(first.state.value is SessionState.NeedsServer)
+        assertNull(first.connect("x.example"))
+        assertNull(first.login("A@B.de ", "pw"))
+        val context = (first.state.value as SessionState.Ready).context
+        context.store.createDocument(WS, title = "lokal")
+
+        // App restart: offline start with the last user and their data.
+        val second = AppSession(factory, HttpClient(engine), "Test")
+        val restored = (second.state.value as SessionState.Ready).context
+        assertEquals("a@b.de", restored.user.email)
+        assertEquals("lokal", restored.store.documents(WS).single().title)
+        second.logout()
+        assertTrue(second.state.value is SessionState.NeedsLogin)
+        assertNull(second.login("a@b.de", "pw"))
+        assertEquals(2, (second.state.value as SessionState.Ready).context.store.pendingCount())
+    }
+
+    @Test
     fun parsesInlineMarkdown() {
         val spans = Inline.parse("a **b** _c_ `d` [e](https://x.de) [P](page:$WS) [bad](javascript:x)")
         assertTrue(spans.any { it.text == "b" && it.bold })
