@@ -1,11 +1,11 @@
-// Renders the PNG app icons from the SVG sources in public/icons with Chromium (Playwright).
+// Renders the PNG app icons from the SVG sources in public/app-icons with Chromium (Playwright).
 // Run after changing an SVG: `node scripts/generate-icons.mjs` (PW_CHROMIUM_PATH optional).
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from '@playwright/test'
 
-const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/icons')
+const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/app-icons')
 const targets = [
   ['icon.svg', 'icon-192.png', 192],
   ['icon.svg', 'icon-512.png', 512],

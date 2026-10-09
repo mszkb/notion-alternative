@@ -100,7 +100,7 @@ sw.addEventListener('push', (event) => {
       if (!windows.some((client) => client.visibilityState === 'visible')) {
         await sw.registration.showNotification('Neue Änderungen', {
           body: 'Auf einem anderen Gerät wurde etwas geändert.',
-          icon: '/icons/icon-192.png',
+          icon: '/app-icons/icon-192.png',
           tag: 'sync-available',
         })
       }

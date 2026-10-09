@@ -33,7 +33,7 @@ export function serviceWorker(): Plugin {
     async generateBundle(_options, bundle) {
       const built = Object.keys(bundle).filter((file) => !file.endsWith('.map'))
       const publicFiles = (await listFiles(publicDir)).filter(
-        (file) => !file.endsWith('.svg') || file.startsWith('icons/'),
+        (file) => !file.endsWith('.svg') || file.startsWith('app-icons/'),
       )
       // index.html is emitted by Vite after this hook; it is always part of the shell.
       const precache = [...new Set(['index.html', ...built, ...publicFiles])]

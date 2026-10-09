@@ -17,7 +17,9 @@ DirectoryIndex index.html
     <If "%{REQUEST_URI} =~ m#^/assets/#">
         Header set Cache-Control "public, max-age=31536000, immutable"
     </If>
-    <ElseIf "%{REQUEST_URI} =~ m#^/icons/#">
+    # App icons live in app-icons/, not icons/: Apache's default configuration (and that of many
+    # hosts) aliases /icons/ to its own directory listing icons, so ours would answer 404.
+    <ElseIf "%{REQUEST_URI} =~ m#^/app-icons/#">
         Header set Cache-Control "public, max-age=86400"
     </ElseIf>
     <ElseIf "%{REQUEST_URI} !~ m#^/api/#">

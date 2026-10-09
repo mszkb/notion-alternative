@@ -27,7 +27,7 @@ Umsetzung: `apps/web/src/sw/service-worker.ts`, gebaut von `apps/web/service-wor
 | `/sw.js` | `no-cache`; der Browser lädt Service Worker ohnehin am HTTP-Cache vorbei (`updateViaCache: 'imports'`) |
 | `/manifest.webmanifest` | `no-cache` |
 | `/assets/*` | `public, max-age=31536000, immutable` |
-| `/icons/*` | `public, max-age=86400` |
+| `/app-icons/*` | `public, max-age=86400` |
 | `/api/*` | vom Backend, kein Caching |
 
 Zusammen sorgt das dafür, dass Clients nach einem Deployment beim nächsten Laden bzw. Fokus die neue Version erkennen (E2E: `apps/web/e2e/pwa-offline.spec.ts`).
