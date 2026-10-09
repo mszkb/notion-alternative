@@ -292,3 +292,6 @@ backlinks:
 SELECT DISTINCT document.id FROM block
 JOIN document ON document.id = block.documentId
 WHERE block.deletedAt IS NULL AND document.deletedAt IS NULL AND block.content LIKE :pattern AND document.id != :target;
+
+blockRowsOfDocument:
+SELECT * FROM block WHERE documentId = ?;

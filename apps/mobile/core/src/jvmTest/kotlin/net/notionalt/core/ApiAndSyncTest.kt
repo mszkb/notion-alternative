@@ -121,14 +121,29 @@ class ApiAndSyncTest {
         var failPush = false
         val pushed = mutableListOf<List<String>>()
         override suspend fun registerDevice(id: String, name: String) {}
+        val documents = mutableListOf<net.notionalt.core.model.Document>()
+        val blocks = mutableListOf<net.notionalt.core.model.Block>()
         override suspend fun push(input: PushInput): PushResponse {
             pushed += input.operations.map { it.opId }
             if (failPush) throw UnreachableException(RuntimeException("offline"))
+            for (op in input.operations.filter { it.kind == "create" }) {
+                val p = op.payload
+                fun str(k: String) = (p[k] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+                when (op.entity) {
+                    "document" -> documents += net.notionalt.core.model.Document(
+                        op.entityId, op.workspaceId, null, str("title"), str("sortKey"), false, null, null, "c", "u", 1, null,
+                    )
+                    "block" -> blocks += net.notionalt.core.model.Block(
+                        op.entityId, str("documentId"), str("type"), str("content"), kotlinx.serialization.json.JsonObject(emptyMap()),
+                        str("sortKey"), 1, null,
+                    )
+                }
+            }
             return PushResponse(input.operations.map { PushResult(it.opId, "applied", revision = 1, seq = 1) })
         }
         override suspend fun pull(workspaceId: String, cursor: Long) = PullResponse(emptyList(), cursor, false)
         override suspend fun snapshot(workspaceId: String, after: String?, content: Boolean) =
-            SnapshotResponse(emptyList(), emptyList(), cursor = 3)
+            SnapshotResponse(documents.toList(), if (content) blocks.toList() else emptyList(), cursor = 3)
         override suspend fun document(workspaceId: String, documentId: String): DocumentResponse =
             throw ApiException(404, "not_found", "x")
         override suspend fun workspaces() = listOf(Workspace(WS, "Privat", WS, "c"))
@@ -211,6 +226,25 @@ class ApiAndSyncTest {
         assertTrue(second.state.value is SessionState.NeedsLogin)
         assertNull(second.login("a@b.de", "pw"))
         assertEquals(2, (second.state.value as SessionState.Ready).context.store.pendingCount())
+    }
+
+    @Test
+    fun contentTheServerLostIsSentAgain() = runTest {
+        // Server restored from an older backup (#75): its snapshot lacks a synced page.
+        val store = memoryStore()
+        val transport = FakeTransport()
+        val engine = SyncEngine(store, transport, "Test")
+        val doc = store.createDocument(WS, title = "nur hier")
+        engine.sync()
+        assertEquals(0, store.pendingCount())
+        transport.documents.clear()
+        transport.blocks.clear()
+        engine.sync(full = true)
+        assertEquals("nur hier", store.documents(WS).single().title, "never dropped")
+        assertEquals(2, store.pendingCount(), "queued for creation again (page and block)")
+        engine.sync()
+        assertEquals(0, store.pendingCount(), "re-created on the server")
+        assertEquals(listOf(doc.id), transport.documents.map { it.id })
     }
 
     @Test

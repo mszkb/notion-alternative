@@ -4,6 +4,7 @@ import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -64,7 +65,8 @@ class LocalStore(
     /** Bumped only after writes that queued operations (local edits): the sync trigger. */
     private val _localEdits = MutableStateFlow(0L)
     val localEdits: StateFlow<Long> = _localEdits.asStateFlow()
-    private var queuedInWrite = 0
+    /** Operations queued so far (all threads); `write` compares it before and after. */
+    private val queued = MutableStateFlow(0L)
 
     /** Stable id of this installation, created on first use. */
     var deviceId: String = q.transactionWithResult {
@@ -72,17 +74,15 @@ class LocalStore(
     }
         private set
 
-    private fun changed() {
-        _version.value += 1
-        if (queuedInWrite > 0) {
-            queuedInWrite = 0
-            _localEdits.value += 1
-        }
+    private fun changed(edited: Boolean) {
+        _version.update { it + 1 }
+        if (edited) _localEdits.update { it + 1 }
     }
 
     private fun <T> write(body: () -> T): T {
+        val before = queued.value
         val result = q.transactionWithResult { body() }
-        changed()
+        changed(edited = queued.value != before)
         return result
     }
 
@@ -94,7 +94,7 @@ class LocalStore(
         baseRevision: Long?,
         payload: JsonObject,
     ) {
-        queuedInWrite++
+        queued.update { it + 1 }
         q.insertOperation(
             opId = newId(),
             deviceId = deviceId,
@@ -733,7 +733,8 @@ class LocalStore(
         return when (conflict.entity) {
             "block" -> block(conflict.entityId)?.deletedAt == null && block(conflict.entityId) != null &&
                 conflict.local.kind in setOf("update", "delete", "move")
-            "document" -> document(conflict.entityId)?.let { it.deletedAt == null } == true && conflict.local.kind == "update"
+            "document" -> document(conflict.entityId)?.let { it.deletedAt == null } == true && conflict.local.kind == "update" &&
+                conflict.local.payload.keys.all { it in setOf("title", "favorite", "icon") }
             else -> false
         }
     }
@@ -771,6 +772,7 @@ class LocalStore(
                 "document" -> {
                     payload.str("title")?.let { renameDocument(conflict.entityId, it) }
                     payload.bool("favorite")?.let { setFavorite(conflict.entityId, it) }
+                    if (payload.containsKey("icon")) setIcon(conflict.entityId, payload.str("icon"))
                 }
             }
         }
@@ -791,60 +793,203 @@ class LocalStore(
 
     /**
      * Writes one snapshot page in one transaction. Entities with queued operations keep their
-     * local state, so nothing unsynced is lost. Without content (ADR 0017) pages new to this
-     * device are marked as not loaded.
+     * local state, so nothing unsynced is lost. Synced local states newer than the server's
+     * (server restored from an older backup, #75) are kept and sent again. Without content
+     * (ADR 0017) pages new to this device are marked as not loaded.
      */
     fun applySnapshotPage(workspaceId: String, page: SnapshotResponse, content: Boolean, seen: MutableSet<String>) = write {
+        val resent = resendNewer(workspaceId, page.documents, page.blocks, page.tags, page.documentTags)
+        fun keep(id: String) = !hasQueued(id) && id !in resent
         for (d in page.documents) {
             seen += d.id
-            if (hasQueued(d.id)) continue
+            if (!keep(d.id)) continue
             if (!content && document(d.id) == null) q.putUnloaded(d.id, workspaceId)
             q.putDocument(d.copy(workspaceId = workspaceId).toRow())
         }
         for (b in page.blocks) {
             seen += b.id
-            if (hasQueued(b.id)) continue
-            q.putBlock(b.toRow())
+            if (keep(b.id)) q.putBlock(b.toRow())
         }
         for (c in page.conflicts) {
-            c.str("id")?.let { seen += it }
-            putConflict(c)
+            val id = c.str("id") ?: continue
+            seen += id
+            // A resolution still queued here wins over the server's open state.
+            if (!hasQueued(id)) putConflict(c)
         }
         for (t in page.tags) {
             seen += t.id
-            if (!hasQueued(t.id)) q.putTag(net.notionalt.core.db.Tag(t.id, workspaceId, t.name, t.revision, t.deletedAt))
+            if (keep(t.id)) q.putTag(net.notionalt.core.db.Tag(t.id, workspaceId, t.name, t.revision, t.deletedAt))
         }
         for (a in page.documentTags) {
             seen += a.id
-            if (!hasQueued(a.id)) {
+            if (keep(a.id)) {
                 q.putDocumentTag(net.notionalt.core.db.DocumentTag(a.id, workspaceId, a.documentId, a.tagId, a.revision, a.deletedAt))
             }
         }
     }
 
-    /** Ends a re-sync: local entities the snapshot lacked are removed unless queued, then the cursor is stored. */
+    /**
+     * Ends a re-sync: local entities the snapshot lacked are removed unless queued, or recreated
+     * on the server if they are active content it lost (restore from an older backup, #75).
+     * Then the cursor is stored.
+     */
     fun finishResync(workspaceId: String, cursor: Long, content: Boolean, seen: Set<String>) = write {
-        for (id in q.allDocumentIdsOfWorkspace(workspaceId).executeAsList()) {
-            if (id !in seen && !hasQueued(id)) {
-                q.deleteDocument(id)
-                q.deleteUnloaded(id)
-            }
+        val documents = q.allDocumentsOfWorkspace(workspaceId).executeAsList().map { it.toModel() }
+            .filter { it.id !in seen && !hasQueued(it.id) }
+        // Without blocks in the snapshot only those of pages it lacked are unseen.
+        val owners = if (content) q.allDocumentIdsOfWorkspace(workspaceId).executeAsList() else documents.map { it.id }
+        val blocks = owners.flatMap { q.blockRowsOfDocument(it).executeAsList() }.map { it.toModel() }
+            .filter { it.id !in seen && !hasQueued(it.id) }
+        val tags = q.allTagIdsOfWorkspace(workspaceId).executeAsList()
+            .filter { it !in seen && !hasQueued(it) }.mapNotNull { q.tagById(it).executeAsOneOrNull() }
+        val assignments = q.allDocumentTagIdsOfWorkspace(workspaceId).executeAsList()
+            .filter { it !in seen && !hasQueued(it) }.mapNotNull { q.documentTagById(it).executeAsOneOrNull() }
+        val lost = recreateLost(workspaceId, documents, blocks, tags, assignments)
+        for (d in documents) if (d.id !in lost) {
+            q.deleteDocument(d.id)
+            q.deleteUnloaded(d.id)
         }
-        if (content) {
-            for (id in q.allBlockIdsOfWorkspace(workspaceId).executeAsList()) {
-                if (id !in seen && !hasQueued(id)) q.deleteBlock(id)
-            }
-        }
+        for (b in blocks) if (b.id !in lost) q.deleteBlock(b.id)
+        for (t in tags) if (t.id !in lost) q.deleteTagRow(t.id)
+        for (a in assignments) if (a.id !in lost) q.deleteDocumentTagRow(a.id)
         for (id in q.allConflictIdsOfWorkspace(workspaceId).executeAsList()) {
-            if (id !in seen) q.deleteConflict(id)
-        }
-        for (id in q.allTagIdsOfWorkspace(workspaceId).executeAsList()) {
-            if (id !in seen && !hasQueued(id)) q.deleteTagRow(id)
-        }
-        for (id in q.allDocumentTagIdsOfWorkspace(workspaceId).executeAsList()) {
-            if (id !in seen && !hasQueued(id)) q.deleteDocumentTagRow(id)
+            if (id !in seen && !hasQueued(id)) q.deleteConflict(id)
         }
         q.putMeta("syncCursor:$workspaceId", cursor.toString())
+    }
+
+    /**
+     * After a server restore from an older backup (#75): queues `create` operations for active
+     * local entities the server lacks (parents first) and marks them unsynced. Returns their ids.
+     */
+    private fun recreateLost(
+        workspaceId: String,
+        documents: List<Document>,
+        blocks: List<Block>,
+        tags: List<net.notionalt.core.db.Tag>,
+        assignments: List<net.notionalt.core.db.DocumentTag>,
+    ): Set<String> {
+        val recreated = mutableSetOf<String>()
+        val activeDocs = documents.filter { it.deletedAt == null }
+        val byId = activeDocs.associateBy { it.id }
+        fun depth(d: Document): Int = d.parentId?.let { byId[it] }?.let { depth(it) + 1 } ?: 0
+        for (d in activeDocs.sortedBy(::depth)) {
+            enqueue(workspaceId, "document", d.id, "create", null, buildJsonObject {
+                put("parentId", d.parentId)
+                put("title", d.title)
+                put("sortKey", d.sortKey)
+                put("favorite", d.favorite)
+                d.icon?.let { put("icon", it) }
+                d.cover?.let { put("cover", it) }
+                put("createdAt", d.createdAt)
+            })
+            q.putDocument(d.copy(revision = null).toRow())
+            recreated += d.id
+        }
+        for (t in tags.filter { it.deletedAt == null }) {
+            enqueue(workspaceId, "tag", t.id, "create", null, buildJsonObject { put("name", t.name) })
+            q.putTag(t.copy(revision = null))
+            recreated += t.id
+        }
+        for (b in blocks.filter { it.deletedAt == null }) {
+            enqueue(workspaceId, "block", b.id, "create", null, buildJsonObject {
+                put("documentId", b.documentId)
+                put("type", b.type)
+                put("content", b.content)
+                put("attrs", b.attrs)
+                put("sortKey", b.sortKey)
+            })
+            q.putBlock(b.copy(revision = null).toRow())
+            recreated += b.id
+        }
+        for (a in assignments.filter { it.deletedAt == null }) {
+            enqueue(workspaceId, "document_tag", a.id, "create", null, buildJsonObject {
+                put("documentId", a.documentId)
+                put("tagId", a.tagId)
+            })
+            q.putDocumentTag(a.copy(revision = null))
+            recreated += a.id
+        }
+        return recreated
+    }
+
+    /**
+     * Entities the restored server (#75) has in an older synced state than this device: sends the
+     * newer local state against the server's revision (merged there, or a visible conflict) and
+     * keeps it locally, never drops it. Returns the ids kept local.
+     */
+    private fun resendNewer(
+        workspaceId: String,
+        documents: List<Document>,
+        blocks: List<Block>,
+        tags: List<Tag>,
+        assignments: List<net.notionalt.core.model.DocumentTag>,
+    ): Set<String> {
+        val kept = mutableSetOf<String>()
+        fun newer(local: Long?, server: Long?) = server != null && local != null && local > server
+        fun resend(entity: String, id: String, base: Long, ops: List<Pair<String, JsonObject>>): Boolean {
+            if (ops.isEmpty()) return false
+            for ((kind, payload) in ops) enqueue(workspaceId, entity, id, kind, base, payload)
+            kept += id
+            return true
+        }
+        for (server in documents) {
+            if (hasQueued(server.id)) continue
+            val d = document(server.id) ?: continue
+            if (!newer(d.revision, server.revision)) continue
+            val ops = mutableListOf<Pair<String, JsonObject>>()
+            if (d.deletedAt != null) {
+                if (server.deletedAt == null) ops += "delete" to JsonObject(emptyMap())
+            } else if (server.deletedAt == null) {
+                val fields = buildJsonObject {
+                    if (d.title != server.title) put("title", d.title)
+                    if (d.favorite != server.favorite) put("favorite", d.favorite)
+                    if (d.icon != server.icon) put("icon", d.icon)
+                    if (d.cover != server.cover) put("cover", d.cover)
+                }
+                if (fields.isNotEmpty()) ops += "update" to fields
+                if (d.parentId != server.parentId || d.sortKey != server.sortKey) {
+                    ops += "move" to buildJsonObject {
+                        put("parentId", d.parentId)
+                        put("sortKey", d.sortKey)
+                    }
+                }
+            }
+            if (resend("document", d.id, server.revision!!, ops)) q.putDocument(d.copy(revision = server.revision).toRow())
+        }
+        for (server in blocks) {
+            if (hasQueued(server.id)) continue
+            val b = block(server.id) ?: continue
+            if (!newer(b.revision, server.revision)) continue
+            val ops = mutableListOf<Pair<String, JsonObject>>()
+            if (b.deletedAt != null) {
+                if (server.deletedAt == null) ops += "delete" to JsonObject(emptyMap())
+            } else if (server.deletedAt == null) {
+                val fields = buildJsonObject {
+                    if (b.type != server.type) put("type", b.type)
+                    if (b.content != server.content) put("content", b.content)
+                    if (b.attrs != server.attrs) put("attrs", b.attrs)
+                }
+                if (fields.isNotEmpty()) ops += "update" to fields
+                if (b.sortKey != server.sortKey) ops += "move" to buildJsonObject { put("sortKey", b.sortKey) }
+            }
+            if (resend("block", b.id, server.revision!!, ops)) q.putBlock(b.copy(revision = server.revision).toRow())
+        }
+        for (server in tags) {
+            if (hasQueued(server.id)) continue
+            val t = q.tagById(server.id).executeAsOneOrNull() ?: continue
+            if (!newer(t.revision, server.revision)) continue
+            val ops = if (t.deletedAt != null && server.deletedAt == null) listOf("delete" to JsonObject(emptyMap())) else emptyList()
+            if (resend("tag", t.id, server.revision!!, ops)) q.putTag(t.copy(revision = server.revision))
+        }
+        for (server in assignments) {
+            if (hasQueued(server.id)) continue
+            val a = q.documentTagById(server.id).executeAsOneOrNull() ?: continue
+            if (!newer(a.revision, server.revision)) continue
+            val ops = if (a.deletedAt != null && server.deletedAt == null) listOf("delete" to JsonObject(emptyMap())) else emptyList()
+            if (resend("document_tag", a.id, server.revision!!, ops)) q.putDocumentTag(a.copy(revision = server.revision))
+        }
+        return kept
     }
 
     // ------------------------------------------------------------------ content on demand
@@ -874,21 +1019,24 @@ class LocalStore(
     fun loadedDocumentIds(workspaceId: String): List<String> =
         documents(workspaceId).filter { it.revision != null && isDocumentLoaded(it.id) }.map { it.id }
 
-    /** Writes the content of one page as loaded from the server (ADR 0017) in one transaction. */
+    /**
+     * Writes the content of one page as loaded from the server (ADR 0017) in one transaction, like
+     * a snapshot of that page: queued blocks keep their local state, newer synced states and
+     * blocks the server lost (restored backup, #75) are sent again. The caller holds the sync
+     * lock, so no pull runs in between.
+     */
     fun applyDocumentContent(workspaceId: String, content: DocumentResponse) = write {
         val documentId = content.document.id
         val served = content.blocks.map { it.id }.toSet()
+        val resent = resendNewer(workspaceId, emptyList(), content.blocks, emptyList(), emptyList())
         for (b in content.blocks) {
-            if (hasQueued(b.id)) continue
-            val local = block(b.id)
-            // A pull may already have brought a newer state.
-            if (local != null && (local.revision ?: 0) > (b.revision ?: 0)) continue
-            q.putBlock(b.toRow())
+            if (!hasQueued(b.id) && b.id !in resent) q.putBlock(b.toRow())
         }
-        // Blocks the server does not know and that are not queued were removed meanwhile.
-        for (id in q.allBlockIdsOfDocument(documentId).executeAsList()) {
-            if (id !in served && !hasQueued(id)) q.deleteBlock(id)
-        }
+        // The server never forgets a block (tombstones stay); one it lacks was lost with a restore.
+        val missing = q.blockRowsOfDocument(documentId).executeAsList().map { it.toModel() }
+            .filter { it.id !in served && !hasQueued(it.id) }
+        val lost = recreateLost(workspaceId, emptyList(), missing, emptyList(), emptyList())
+        for (b in missing) if (b.id !in lost) q.deleteBlock(b.id)
         if (!hasQueued(documentId)) {
             val local = document(documentId)
             if (local == null || (local.revision ?: 0) <= (content.document.revision ?: 0)) {

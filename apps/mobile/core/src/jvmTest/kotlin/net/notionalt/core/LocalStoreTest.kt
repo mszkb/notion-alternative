@@ -219,11 +219,13 @@ class LocalStoreTest {
         driver.execute(null, "DROP TABLE attachmentContent", 0)
         driver.execute(null, "DROP TABLE documentTag", 0)
         driver.execute(null, "DROP TABLE tag", 0)
-        assertEquals(3, net.notionalt.core.db.UserDatabase.Schema.version)
-        net.notionalt.core.db.UserDatabase.Schema.migrate(driver, 1, 3)
+        driver.execute(null, "INSERT INTO meta (key, value) VALUES ('syncCursor:x', '5')", 0)
+        assertEquals(4, net.notionalt.core.db.UserDatabase.Schema.version)
+        net.notionalt.core.db.UserDatabase.Schema.migrate(driver, 1, 4)
         val store = net.notionalt.core.store.LocalStore(driver)
         store.cacheAttachment("a", byteArrayOf(1, 2))
         assertEquals(listOf<Byte>(1, 2), store.cachedAttachment("a")!!.toList())
+        assertEquals(0, store.syncCursor("x"), "3.sqm forces a full re-sync")
     }
 
     @Test
@@ -240,6 +242,32 @@ class LocalStoreTest {
         assertEquals(listOf("Rezept"), store.tagsForDocument(b.id).map { it.name })
         val kinds = store.queuedOperations(0, 100).map { "${it.second.entity}/${it.second.kind}" }.filter { !it.startsWith("document/") && !it.startsWith("block/") }
         assertEquals(listOf("tag/create", "document_tag/create", "document_tag/create", "document_tag/delete"), kinds)
+    }
+
+    @Test
+    fun newerSyncedStatesAreSentAgainAfterARestore() {
+        val store = memoryStore()
+        val doc = store.createDocument(WS, title = "neu")
+        val block = store.blocks(doc.id).single()
+        store.updateBlock(block.id, content = "Stand 5")
+        store.acknowledge(store.queuedOperations(0, 10).map { PushResult(it.second.opId, "applied", revision = 5, seq = 1) })
+        // The restored server only knows revision 2 with older text.
+        val serverDoc = store.document(doc.id)!!.copy(title = "alt", revision = 2)
+        val serverBlock = store.block(block.id)!!.copy(content = "Stand 2", revision = 2)
+        val seen = mutableSetOf<String>()
+        store.beginResync(WS)
+        store.applySnapshotPage(
+            WS,
+            net.notionalt.core.model.SnapshotResponse(listOf(serverDoc), listOf(serverBlock), cursor = 1),
+            content = true,
+            seen = seen,
+        )
+        store.finishResync(WS, 1, true, seen)
+        assertEquals("neu", store.document(doc.id)!!.title)
+        assertEquals("Stand 5", store.block(block.id)!!.content)
+        val ops = store.queuedOperations(0, 10).map { it.second }
+        assertEquals(listOf("document/update", "block/update"), ops.map { "${it.entity}/${it.kind}" })
+        assertTrue(ops.all { it.baseRevision == 2L })
     }
 
     @Test
