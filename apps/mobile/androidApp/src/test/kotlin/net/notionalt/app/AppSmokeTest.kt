@@ -99,8 +99,12 @@ class AppSmokeTest {
         compose.onNodeWithText("Block hinzufügen", substring = true).performClick()
         compose.waitUntilAtLeastOneExists(isFocused(), 5_000)
         compose.onNode(isFocused()).performTextInput("/zit")
-        compose.waitUntilAtLeastOneExists(hasText("Zitat"), 5_000)
-        compose.onNodeWithText("Zitat").performClick()
+        // The menu entry, not the type chip of the same name below the block.
+        val menuEntry = hasText("Zitat") and !androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(
+            androidx.compose.ui.semantics.SemanticsProperties.Role,
+        )
+        compose.waitUntilAtLeastOneExists(menuEntry, 5_000)
+        compose.onNode(menuEntry).performClick()
         compose.onNode(isFocused()).performTextInput("Weisheit")
         compose.onNodeWithContentDescription("Fertig").performClick()
         compose.waitUntilAtLeastOneExists(hasText("Weisheit"), 5_000)
