@@ -530,6 +530,9 @@ private fun TitleField(context: UserContext, documentId: String, title: String) 
         }
     }
     val tokens = LocalTokens.current
+    // A page without a title is usually new: start typing its title right away.
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(documentId) { if (title.isEmpty()) runCatching { focus.requestFocus() } }
     Box(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         if (value.isEmpty()) {
             Text("Ohne Titel", style = MaterialTheme.typography.headlineMedium, color = tokens.muted)
@@ -539,7 +542,7 @@ private fun TitleField(context: UserContext, documentId: String, title: String) 
             onValueChange = { value = it.replace("\n", " ") },
             textStyle = MaterialTheme.typography.headlineMedium.copy(color = tokens.text, fontWeight = FontWeight.Bold),
             cursorBrush = SolidColor(tokens.accent),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().focusRequester(focus),
         )
     }
 }
