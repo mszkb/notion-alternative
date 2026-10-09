@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
@@ -7,11 +9,12 @@ plugins {
 }
 
 kotlin {
-    androidTarget()
+    androidTarget {
+        compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+    }
     // Declared for the iOS app (ADR 0020); built on macOS only.
     iosArm64()
     iosSimulatorArm64()
-    jvmToolchain(17)
 
     sourceSets {
         commonMain.dependencies {

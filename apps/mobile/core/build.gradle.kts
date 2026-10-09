@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
@@ -7,10 +9,11 @@ plugins {
 kotlin {
     // Platform-independent client logic (API, local database, sync). The JVM target serves the
     // Android app (an Android consumer accepts JVM libraries) and the unit tests.
-    jvm()
+    jvm {
+        compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+    }
     iosArm64()
     iosSimulatorArm64()
-    jvmToolchain(17)
 
     sourceSets {
         commonMain.dependencies {
