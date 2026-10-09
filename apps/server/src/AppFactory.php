@@ -23,6 +23,7 @@ use NotionAlt\Metrics\MetricsRoutes;
 use NotionAlt\Push\PushRoutes;
 use NotionAlt\Search\SearchRoutes;
 use NotionAlt\Sync\SyncRoutes;
+use NotionAlt\Workspaces\MemberRoutes;
 use NotionAlt\Workspaces\WorkspaceRoutes;
 use Slim\App;
 use Slim\Interfaces\RouteCollectorProxyInterface;
@@ -63,6 +64,7 @@ final class AppFactory
             HealthRoutes::register($api, $db, $logger);
             AuthRoutes::register($api, $db, $config, $logger);
             WorkspaceRoutes::register($api, $db);
+            MemberRoutes::register($api, $db);
             DeviceRoutes::register($api, $db, $logger);
             if ($config->metricsEnabled) {
                 MetricsRoutes::register($api, $metrics);

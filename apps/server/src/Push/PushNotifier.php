@@ -28,7 +28,7 @@ final class PushNotifier
 
     /**
      * Changes in `$workspaceId` from `$originDeviceId`: schedule a hint for every other device
-     * of the owner. Returns the number of scheduled subscriptions.
+     * of its members (ADR 0014). Returns the number of scheduled subscriptions.
      */
     public static function notify(\PDO $db, string $workspaceId, string $originDeviceId, ?int $nowMs = null): int
     {
@@ -37,8 +37,12 @@ final class PushNotifier
             $db,
             'insert into push_hints (endpoint, workspace_id, due_at, sent_at)
              select push_subscriptions.endpoint, workspaces.id, ?, null
-             from push_subscriptions inner join workspaces on workspaces.owner_id = push_subscriptions.user_id
-             where workspaces.id = ? and push_subscriptions.device_id != ?
+             from push_subscriptions inner join workspaces on workspaces.id = ?
+             where push_subscriptions.device_id != ?
+               and (workspaces.owner_id = push_subscriptions.user_id
+                 or exists (select 1 from workspace_members
+                            where workspace_members.workspace_id = workspaces.id
+                              and workspace_members.user_id = push_subscriptions.user_id))
              on conflict (endpoint) do update set
                workspace_id = excluded.workspace_id,
                due_at = coalesce(push_hints.due_at, max(excluded.due_at, coalesce(push_hints.sent_at, 0) + ?))',

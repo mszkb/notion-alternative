@@ -38,7 +38,11 @@ final class MigratorTest extends TestCase
         '0013_auth_attempts',
         '0014_push_hints',
         '0015_metrics',
+        '0016_workspace_members',
     ];
+
+    /** Migrations already applied in the frozen fixture node-latest.sqlite. */
+    private const NODE_LATEST_MIGRATIONS = 15;
 
     public function testFreshDatabaseHasTheSchemaOfTheNodeServer(): void
     {
@@ -71,16 +75,22 @@ final class MigratorTest extends TestCase
         self::assertSame(self::nodeSchema(), self::schema($db));
     }
 
-    public function testOpensADatabaseOfTheNodeServerWithoutChange(): void
+    public function testOpensADatabaseOfTheNodeServerAndOnlyAddsNewerMigrations(): void
     {
         $file = $this->copyFixture('node-latest.sqlite');
         $before = self::snapshot(new \PDO('sqlite:' . $file));
 
         $db = Database::open($file);
-        self::assertSame([], (new Migrator($db))->pending());
-        self::assertSame([], (new Migrator($db))->migrateToLatest());
+        $newer = \array_slice(self::ALL, self::NODE_LATEST_MIGRATIONS);
+        self::assertSame($newer, (new Migrator($db))->pending());
+        self::assertSame($newer, (new Migrator($db))->migrateToLatest());
 
-        self::assertSame($before, self::snapshot($db));
+        $after = self::snapshot($db);
+        foreach ($before as $table => $content) {
+            if ($table !== 'schema' && $table !== Migrator::MIGRATION_TABLE) {
+                self::assertSame($content, $after[$table], $table);
+            }
+        }
         self::assertSame(self::nodeSchema(), self::schema($db));
     }
 

@@ -29,7 +29,10 @@ final class WorkspaceRoutes
         $api->get('/workspaces', static function (ServerRequestInterface $request, ResponseInterface $response) use ($db): ResponseInterface {
             $rows = Workspaces::listForUser($db(), AuthContext::of($request)->userId());
 
-            return Json::respond($response, ['workspaces' => array_map(Workspaces::toWorkspace(...), $rows)]);
+            return Json::respond($response, ['workspaces' => array_map(
+                static fn(array $found): array => Workspaces::toWorkspace($found['workspace'], $found['role']),
+                $rows,
+            )]);
         })->add($auth);
 
         $api->post('/workspaces', static function (ServerRequestInterface $request, ResponseInterface $response) use ($db): ResponseInterface {
@@ -37,19 +40,19 @@ final class WorkspaceRoutes
             $input = Validation::parseInput(WorkspaceSchemas::createInput(), JsonBodyMiddleware::body($request));
             $row = Workspaces::insert($db(), AuthContext::of($request)->userId(), $input['name']);
 
-            return Json::respond($response, ['workspace' => Workspaces::toWorkspace($row)], 201);
+            return Json::respond($response, ['workspace' => Workspaces::toWorkspace($row, 'owner')], 201);
         })->add($auth);
 
         $api->get('/workspaces/{id}', static function (ServerRequestInterface $request, ResponseInterface $response, array $args) use ($db): ResponseInterface {
             /** @var array{id: string} $params */
             $params = Validation::parseInput(WorkspaceSchemas::params(), $args);
-            $row = Workspaces::findForUser($db(), $params['id'], AuthContext::of($request)->userId());
+            $found = Workspaces::findWithRole($db(), $params['id'], AuthContext::of($request)->userId());
             // 404 instead of 403: do not reveal whether a foreign workspace exists.
-            if ($row === null) {
+            if ($found === null) {
                 throw new HttpError(404, 'not_found', 'Workspace not found');
             }
 
-            return Json::respond($response, ['workspace' => Workspaces::toWorkspace($row)]);
+            return Json::respond($response, ['workspace' => Workspaces::toWorkspace($found['workspace'], $found['role'])]);
         })->add($auth);
     }
 }

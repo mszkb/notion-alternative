@@ -67,7 +67,7 @@ Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-test
 | --- | --- | --- | --- | --- |
 | T-EXP-01 | Vollständiger Export (MD, JSON, ZIP) | Alle Dokumente, Tags, Links, Anhänge enthalten | AC-04 | ☑ ¹² |
 | T-EXP-02 | Export → Import in frische Installation | Round-Trip ohne Verlust | AC-05 | ☑ ¹³ |
-| T-EXP-03 | Import des Notion-Exports „Markdown & CSV“ | Seitenbaum, Bilder, Dateien, Links, To-dos, Toggles, Hinweise übernommen; Vereinfachtes im Bericht; fremde Datei mit Meldung abgelehnt | – | ☑ ²¹ |
+| T-EXP-03 | Import des Notion-Exports „Markdown & CSV“ | Seitenbaum, Bilder, Dateien, Links, To-dos, Toggles, Hinweise übernommen; Vereinfachtes im Bericht; fremde Datei mit Meldung abgelehnt | – | ☑ ²² |
 
 ## PWA / Push
 
@@ -92,6 +92,18 @@ Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-test
 | T-LOAD-01 | Großer Workspace (10 000 Seiten, 500 000 Blöcke): Seed, 10 Geräte parallel, Pull, Snapshot, Export-Log, Suche | Keine Fehler/`SQLITE_BUSY`, Zeiten und RAM innerhalb der Zielwerte | – | ☑ ¹⁷ |
 | T-LOAD-02 | Großer lokaler Bestand im Browser: Re-Sync, Seitenliste, Suchindex, Suche | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
 | T-LOAD-03 | Große Workspaces in der App: Erstsync, Kaltstart, Seite mit 2 000 Blöcken öffnen, Tippen | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
+
+## Teilen & Rechte
+
+Nach [ADR 0014](../adr/0014-sharing-and-permissions.md): Freigaben pro Workspace mit Rollen.
+
+| ID | Szenario | Erwartung | AC | Auto |
+| --- | --- | --- | --- | --- |
+| T-SHARE-01 | Jeder Endpunkt × jede Rolle × Konto außerhalb | Lesen ab `reader`, Inhalte ändern ab `editor`, Mitglieder verwalten nur `owner`; Konten außerhalb bekommen `404`, nie fremde Daten | – | ☑ ²² |
+| T-SHARE-02 | Rolle wird gesenkt, während ein Gerät offline Änderungen hat | Schon angewandte Operationen kommen als `duplicate` zurück, neue als `rejected` `forbidden`; lokal sichtbar und als Kopie rettbar, nichts verschwindet | – | ☐ |
+| T-SHARE-03 | Mitglied wird entfernt oder verlässt den Workspace | Server liefert nichts mehr (`404`), keine Push-Hinweise; das Gerät behält den Workspace schreibgeschützt („Zugriff entzogen“) | – | ☐ |
+| T-SHARE-04 | Ein Mitglied ändert eine Seite | Änderung kommt per Pull bei den anderen an; Push-Hinweis ohne Inhalt an deren Geräte | AC-07 | ☑ ²² |
+| T-SHARE-05 | Ersteller des Workspace | bleibt `owner`, lässt sich weder entfernen noch herabstufen; Anhänge zählen zu seinem Kontingent | – | ☑ ²² |
 
 ## Telemetrie
 
@@ -134,3 +146,5 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ²⁰ ADR 0017 (Inhalte bei Bedarf): `apps/web/src/sync/on-demand.test.ts` (Erstsync ohne Blöcke, Laden beim Öffnen mit späterem Pull, Seiten anderer Geräte, offline und Server nicht erreichbar, Re-Sync lädt geladene Seiten einzeln neu, verlorener Block nach Restore wird erneut gesendet, Abbruch und Fortsetzen, Netzverlust, Export online und offline, Upgrade von Dexie-Version 4), `packages/contract-tests/test/sync-snapshot.test.ts` (`content=false` ganz und seitenweise, Einzelabruf einer Seite mit `seq`, fremde Workspaces).
 
 ²¹ #137: `packages/shared/src/notion-import.test.ts` (anonymisiertes Beispiel im Aufbau des Exports: Titel ohne ID, Unterseiten aus Ordnern, Datenbank als Seite mit Zeilen und CSV, alle Blocktypen, Links, Bild, vereinfachte Teile, verschachtelte ZIPs, fremde Datei), `packages/shared/src/zip-compressed.test.ts` (Deflate, Größenlimit), `packages/contract-tests/test/import.test.ts` (Server nimmt das Ergebnis an, Anhang-Upload), `apps/web/e2e/notion-import.spec.ts`.
+
+²² `packages/contract-tests/test/sharing.test.ts` (Mitglieder-API, Matrix aller Endpunkte, gesenkte Rolle, Entfernen), `test/push.test.ts` (Hinweise an Geräte aller Mitglieder, nicht mehr nach dem Entfernen).

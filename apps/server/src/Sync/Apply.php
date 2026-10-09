@@ -154,7 +154,8 @@ final class Apply
     private function applyIn(string $userId, Operation $op): array
     {
         $db = $this->db;
-        if (Workspaces::findForUser($db, $op->workspaceId, $userId) === null) {
+        $member = Workspaces::findWithRole($db, $op->workspaceId, $userId);
+        if ($member === null) {
             self::reject('workspace_not_found', 'Workspace not found');
         }
         if (Devices::findActive($db, $userId, $op->deviceId) === null) {
@@ -186,6 +187,11 @@ final class Apply
                 'reason' => Row::string($known, 'reason'),
                 'conflictId' => Row::string($known, 'id'),
             ];
+        }
+        // After the duplicate checks: an operation applied before the role was lowered is still
+        // acknowledged, so the device can drop it from its queue (ADR 0014).
+        if (!Workspaces::atLeast($member['role'], 'editor')) {
+            self::reject('forbidden', 'Your role in this workspace does not allow changes');
         }
         if ($op->entity === 'conflict' && $op->kind !== 'update') {
             self::reject('invalid_payload', 'Conflicts are created by the server and can only be resolved');

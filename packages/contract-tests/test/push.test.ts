@@ -176,6 +176,33 @@ describe('push hints', () => {
     expect(await deliveries(laptop.key)).toEqual([])
   })
 
+  it('hints the devices of all members of a shared workspace, and only theirs (ADR 0014)', async () => {
+    const owner = await signUp({ device: false })
+    const writer = await device(owner, { subscribe: false })
+    const bob = await signUp({ device: false })
+    const stranger = await signUp({ device: false })
+    const bobPhone = await device(bob)
+    const strangerPhone = await device(stranger)
+    const members = `/api/workspaces/${owner.workspaceId}/members`
+    expect((await owner.client.post(members, { email: bob.email, role: 'reader' })).status).toBe(
+      201,
+    )
+
+    await push(owner, createDoc(owner, writer.id, 'Geteilt'))
+    const [delivery] = await waitForDeliveries(bobPhone.key)
+    const body = Buffer.from(delivery!.body, 'base64')
+    const hint = JSON.parse(decryptPushMessage(body, bobPhone.privateKey, bobPhone.auth))
+    expect(hint).toMatchObject({ type: 'sync_available', workspace: owner.workspaceId })
+
+    // Removed members get no further hints; outsiders never got any.
+    expect((await owner.client.delete(`${members}/${bob.user.id}`)).status).toBe(204)
+    await settle()
+    await push(owner, createDoc(owner, writer.id, 'Nicht mehr geteilt'))
+    await settle()
+    expect(await deliveries(bobPhone.key)).toHaveLength(1)
+    expect(await deliveries(strangerPhone.key)).toEqual([])
+  })
+
   it('drops subscriptions the push service reports as gone', async () => {
     const account = await signUp({ device: false })
     const writer = await device(account, { subscribe: false })

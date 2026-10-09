@@ -247,6 +247,12 @@
   },
   {
     "type": "index",
+    "name": "sqlite_autoindex_workspace_members_1",
+    "tbl_name": "workspace_members",
+    "sql": null
+  },
+  {
+    "type": "index",
     "name": "sqlite_autoindex_workspaces_1",
     "tbl_name": "workspaces",
     "sql": null
@@ -262,6 +268,12 @@
     "name": "tags_workspace_id_idx",
     "tbl_name": "tags",
     "sql": "CREATE INDEX \"tags_workspace_id_idx\" on \"tags\" (\"workspace_id\")"
+  },
+  {
+    "type": "index",
+    "name": "workspace_members_user_id_idx",
+    "tbl_name": "workspace_members",
+    "sql": "CREATE INDEX \"workspace_members_user_id_idx\" on \"workspace_members\" (\"user_id\")"
   },
   {
     "type": "index",
@@ -418,6 +430,12 @@
     "name": "users",
     "tbl_name": "users",
     "sql": "CREATE TABLE \"users\" (\"id\" text primary key, \"email\" text not null unique, \"password_hash\" text not null, \"created_at\" text not null)"
+  },
+  {
+    "type": "table",
+    "name": "workspace_members",
+    "tbl_name": "workspace_members",
+    "sql": "CREATE TABLE \"workspace_members\" (\"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"user_id\" text not null references \"users\" (\"id\") on delete cascade, \"role\" text not null, \"added_at\" text not null, constraint \"workspace_members_pk\" primary key (\"workspace_id\", \"user_id\"))"
   },
   {
     "type": "table",

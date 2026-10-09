@@ -58,7 +58,7 @@ final class CliTest extends TestCase
 
         ['dir' => $dir, 'manifest' => $manifest] = Backup::create($this->config, $this->tempDir() . '/backups', 1_700_000_000_123);
         self::assertStringEndsWith('/backup-2023-11-14T22-13-20-123Z', $dir);
-        self::assertSame('0015_metrics', $manifest['migration']);
+        self::assertSame(array_key_last(Migrator::all()), $manifest['migration']);
         self::assertSame([$lost], $manifest['missingAttachments']);
         self::assertSame(['app.sqlite', "attachments/{$this->ws}/{$stored}"], array_column($manifest['files'], 'path'));
         $json = (string) file_get_contents("{$dir}/manifest.json");
