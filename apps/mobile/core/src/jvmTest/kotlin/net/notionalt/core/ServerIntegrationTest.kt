@@ -50,6 +50,31 @@ class ServerIntegrationTest {
         a.sync.sync()
         assertEquals(0, a.store.pendingCount(), a.sync.status.value.lastError ?: "")
 
+        // An image attached on A (metadata as an operation, then the content) loads on B (ADR 0012).
+        val png = byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3)
+        val attachmentId = newId()
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(png).joinToString("") { "%02x".format(it) }
+        val pushed = a.api.push(
+            net.notionalt.core.model.PushInput(
+                listOf(
+                    net.notionalt.core.model.Operation(
+                        newId(), a.store.deviceId, workspace, "attachment", attachmentId, "create", null,
+                        kotlinx.serialization.json.buildJsonObject {
+                            put("documentId", kotlinx.serialization.json.JsonPrimitive(page.id))
+                            put("name", kotlinx.serialization.json.JsonPrimitive("bild.png"))
+                            put("mimeType", kotlinx.serialization.json.JsonPrimitive("image/png"))
+                            put("size", kotlinx.serialization.json.JsonPrimitive(png.size))
+                            put("sha256", kotlinx.serialization.json.JsonPrimitive(sha))
+                            put("createdAt", kotlinx.serialization.json.JsonPrimitive(nowIso()))
+                        },
+                        nowIso(),
+                    ),
+                ),
+            ),
+        )
+        assertEquals("applied", pushed.results.single().status, pushed.results.toString())
+        assertTrue(a.api.uploadAttachment(attachmentId, png))
+
         // Device B: snapshot without content, page loads on demand (ADR 0017).
         b.sync.sync()
         assertNull(b.sync.status.value.lastError)
@@ -57,6 +82,7 @@ class ServerIntegrationTest {
         assertFalse(b.store.isDocumentLoaded(page.id))
         assertEquals(SyncEngine.OpenOutcome.LOADED, b.sync.ensureDocumentLoaded(workspace, page.id))
         assertEquals(listOf("Hallo **Welt**", "Milch kaufen"), b.store.blocks(page.id).map { it.content })
+        assertEquals(png.toList(), b.api.attachmentContent(attachmentId)!!.toList())
 
         // B edits, A pulls the change (delta pull by cursor).
         b.store.updateBlock(first.id, content = "Hallo von B")

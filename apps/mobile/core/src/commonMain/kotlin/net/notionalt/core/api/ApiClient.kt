@@ -191,6 +191,26 @@ class ApiClient(
     suspend fun documents(workspaceId: String, ids: List<String>): DocumentsResponse =
         post("/sync/documents", DocumentsInput(workspaceId, ids), DocumentsInput.serializer(), DocumentsResponse.serializer())
 
+    /** Uploads an attachment's content once its metadata is synced (ADR 0012); false if deleted (410). */
+    suspend fun uploadAttachment(id: String, data: ByteArray): Boolean {
+        val response = try {
+            http.request("$baseUrl/api/attachments/${id.encodeURLParameter()}/content") {
+                method = HttpMethod.Put
+                cookies.cookie()?.let { header(HttpHeaders.Cookie, "$SESSION_COOKIE=$it") }
+                setBody(io.ktor.http.content.ByteArrayContent(data, ContentType.Application.OctetStream))
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            throw UnreachableException(error)
+        }
+        return when (response.status.value) {
+            204, 200 -> true
+            410 -> false
+            else -> throw ApiException(response.status.value, "upload_failed", "HTTP ${response.status.value}")
+        }
+    }
+
     /** Content of an attachment (ADR 0012); null if the server does not have it (404). */
     suspend fun attachmentContent(id: String): ByteArray? {
         val response = send(HttpMethod.Get, "/attachments/${id.encodeURLParameter()}/content", null)
