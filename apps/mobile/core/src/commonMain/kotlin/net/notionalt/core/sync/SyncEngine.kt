@@ -8,6 +8,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.notionalt.core.api.ApiClient
 import net.notionalt.core.api.ApiException
+import net.notionalt.core.api.ApiJson
 import net.notionalt.core.api.UnreachableException
 import net.notionalt.core.model.PushInput
 import net.notionalt.core.store.LocalStore
@@ -110,14 +111,25 @@ class SyncEngine(
         registered = true
     }
 
-    /** Sends the queue oldest first in batches; confirmed operations leave it, rejections stay marked. */
-    suspend fun pushQueue(maxOperations: Long = 200) {
+    /**
+     * Sends the queue oldest first in batches limited by count and size (nginx accepts 1 MiB
+     * bodies, apps/web/src/sync/push.ts); confirmed operations leave it, rejections stay marked.
+     */
+    suspend fun pushQueue(maxOperations: Long = 500, maxBytes: Int = PUSH_MAX_BYTES) {
         var afterSeq = 0L
         while (true) {
-            val batch = store.queuedOperations(afterSeq, maxOperations)
-            if (batch.isEmpty()) return
-            afterSeq = batch.last().first
-            val response = transport.push(PushInput(batch.map { it.second }))
+            val candidates = store.queuedOperations(afterSeq, maxOperations)
+            if (candidates.isEmpty()) return
+            val batch = mutableListOf<net.notionalt.core.model.Operation>()
+            var bytes = 0
+            for ((seq, op) in candidates) {
+                val size = ApiJson.encodeToString(net.notionalt.core.model.Operation.serializer(), op).encodeToByteArray().size + 1
+                if (batch.isNotEmpty() && bytes + size > maxBytes) break
+                batch += op
+                bytes += size
+                afterSeq = seq
+            }
+            val response = transport.push(PushInput(batch))
             store.acknowledge(response.results)
             // A removed device gets every operation rejected: register again on the next run.
             if (response.results.any { it.code == "device_not_active" }) {
@@ -216,6 +228,8 @@ class SyncEngine(
     }
 
     companion object {
+        const val PUSH_MAX_BYTES = 900_000
+
         fun describe(error: Throwable): String = when (error) {
             is UnreachableException -> "Server nicht erreichbar"
             is ApiException -> when (error.status) {

@@ -163,6 +163,17 @@ class ApiAndSyncTest {
     }
 
     @Test
+    fun pushBatchesStayBelowTheBodyLimit() = runTest {
+        val store = memoryStore()
+        val transport = FakeTransport()
+        val doc = store.createDocument(WS)
+        repeat(4) { store.createBlock(doc.id, content = "x".repeat(90_000)) }
+        SyncEngine(store, transport, "Test").pushQueue(maxBytes = 200_000)
+        assertEquals(listOf(4, 2), transport.pushed.map { it.size })
+        assertEquals(0, store.pendingCount())
+    }
+
+    @Test
     fun sessionSurvivesARestartAndLogoutKeepsLocalData() = runTest {
         val drivers = mutableMapOf<String, app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver>()
         val factory = DriverFactory { name, schema ->
