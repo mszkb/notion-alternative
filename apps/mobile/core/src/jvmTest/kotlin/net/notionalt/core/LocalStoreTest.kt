@@ -73,6 +73,26 @@ class LocalStoreTest {
     }
 
     @Test
+    fun movingBlocksQueuesMoveOperations() {
+        val store = memoryStore()
+        val doc = store.createDocument(WS)
+        val a = store.blocks(doc.id).single()
+        store.updateBlock(a.id, content = "a")
+        val b = store.createBlock(doc.id, content = "b")
+        store.createBlock(doc.id, content = "c")
+        store.moveBlockBy(a.id, 1)
+        assertEquals(listOf("b", "a", "c"), store.blocks(doc.id).map { it.content })
+        store.moveBlockBy(a.id, 1)
+        assertEquals(listOf("b", "c", "a"), store.blocks(doc.id).map { it.content })
+        store.moveBlockBy(b.id, -1)
+        assertEquals(listOf("b", "c", "a"), store.blocks(doc.id).map { it.content }, "first block cannot move up")
+        store.moveBlockBy(a.id, -2)
+        val move = store.queuedOperations(0, 100).map { it.second }.last()
+        assertEquals("move", move.kind)
+        assertEquals(setOf("sortKey"), move.payload.keys)
+    }
+
+    @Test
     fun acknowledgeKeepsRejectedOperationsVisible() {
         val store = memoryStore()
         store.createDocument(WS)

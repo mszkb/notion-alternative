@@ -266,6 +266,28 @@ class LocalStore(
         next
     }
 
+    /** Moves a block among its page's blocks (`move` with the new sort key). */
+    fun moveBlock(id: String, position: Position) = write {
+        val block = block(id)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $id not found")
+        val document = requireDocument(block.documentId)
+        val sortKey = sortKeyAt(blocks(document.id), position, { it.sortKey }, { it.id }, exclude = id)
+        if (sortKey == block.sortKey) return@write
+        q.putBlock(block.copy(sortKey = sortKey).toRow())
+        enqueue(document.workspaceId, "block", id, "move", block.revision, buildJsonObject { put("sortKey", sortKey) })
+        touch(document)
+    }
+
+    /** One step up (-1) or down (+1) in the page. */
+    fun moveBlockBy(id: String, step: Int) {
+        val list = blocks(block(id)?.documentId ?: return)
+        val index = list.indexOfFirst { it.id == id }
+        val target = index + step
+        if (index < 0 || target !in list.indices) return
+        val others = list.filter { it.id != id }
+        val position = if (target == 0) Position(atStart = true) else Position(afterId = others[target - 1].id)
+        moveBlock(id, position)
+    }
+
     /** Enter in the editor: the head stays in the block, the tail becomes a new block after it. */
     fun splitBlock(id: String, head: String, tail: String, type: String = "paragraph", attrs: JsonObject = JsonObject(emptyMap())): Block = write {
         val block = block(id)?.takeIf { it.deletedAt == null } ?: throw LocalStoreException("Block $id not found")

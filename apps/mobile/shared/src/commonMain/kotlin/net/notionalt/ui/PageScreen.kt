@@ -27,6 +27,8 @@ import androidx.compose.material.icons.automirrored.filled.FormatIndentDecrease
 import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
@@ -586,6 +588,12 @@ private fun BlockEditor(
                 store.deleteBlock(block.id)
                 done()
             }) { Icon(Icons.Filled.Delete, contentDescription = "Block löschen", tint = tokens.error) }
+            IconButton(onClick = { runCatching { store.moveBlockBy(block.id, -1) } }) {
+                Icon(Icons.Filled.ArrowUpward, contentDescription = "Nach oben")
+            }
+            IconButton(onClick = { runCatching { store.moveBlockBy(block.id, 1) } }) {
+                Icon(Icons.Filled.ArrowDownward, contentDescription = "Nach unten")
+            }
             IconButton(onClick = {
                 store.updateBlock(block.id, attrs = block.attrs.withIndent((block.indent - 1).coerceAtLeast(0)))
             }, enabled = block.indent > 0) {
