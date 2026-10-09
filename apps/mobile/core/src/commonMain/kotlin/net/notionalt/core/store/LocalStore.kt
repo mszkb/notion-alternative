@@ -190,6 +190,36 @@ class LocalStore(
         enqueue(document.workspaceId, "document", id, "update", document.revision, buildJsonObject { put("favorite", favorite) })
     }
 
+    /** The page and all its subpages (ids), e.g. to exclude them as move targets. */
+    fun subtree(id: String): Set<String> {
+        val document = document(id) ?: return emptySet()
+        val byParent = documents(document.workspaceId).groupBy { it.parentId }
+        val out = mutableSetOf<String>()
+        fun visit(current: String) {
+            out += current
+            for (child in byParent[current].orEmpty()) visit(child.id)
+        }
+        visit(id)
+        return out
+    }
+
+    /** Moves a page under another parent (null = top level), at the end of its new siblings. */
+    fun moveDocument(id: String, parentId: String?) = write {
+        val document = requireDocument(id)
+        if (parentId != null) {
+            val parent = requireDocument(parentId)
+            if (parent.workspaceId != document.workspaceId) throw LocalStoreException("Parent belongs to another workspace")
+            if (parentId in subtree(id)) throw LocalStoreException("A page cannot move into itself")
+        }
+        if (document.parentId == parentId) return@write
+        val sortKey = sortKeyAt(children(document.workspaceId, parentId), Position(), { it.sortKey }, { it.id }, exclude = id)
+        q.putDocument(document.copy(parentId = parentId, sortKey = sortKey, updatedAt = now()).toRow())
+        enqueue(document.workspaceId, "document", id, "move", document.revision, buildJsonObject {
+            put("parentId", parentId)
+            put("sortKey", sortKey)
+        })
+    }
+
     /** Moves the page and its subpages to the trash (tombstones, restorable on the web). */
     fun deleteDocument(id: String): List<String> = write {
         val root = requireDocument(id)

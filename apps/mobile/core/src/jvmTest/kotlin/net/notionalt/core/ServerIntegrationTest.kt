@@ -86,6 +86,14 @@ class ServerIntegrationTest {
             assertTrue(merged.contains("Version A") && merged.contains("Version B"), merged)
         }
 
+        // Moving a page under another one arrives on the other device.
+        val parent = a.store.createDocument(workspace, title = "Ordner")
+        a.store.moveDocument(page.id, parent.id)
+        a.sync.sync()
+        assertEquals(0, a.store.pendingCount(), a.store.issues().toString())
+        b.sync.sync()
+        assertEquals(parent.id, b.store.document(page.id)!!.parentId)
+
         // A third device makes everything available offline at once.
         val c = device().signIn()
         c.sync.sync()

@@ -128,6 +128,23 @@ class LocalStoreTest {
     }
 
     @Test
+    fun movingPagesKeepsTheTreeAcyclic() {
+        val store = memoryStore()
+        val a = store.createDocument(WS, title = "A")
+        val b = store.createDocument(WS, title = "B", parentId = a.id)
+        val c = store.createDocument(WS, title = "C")
+        assertFailsWith<Exception> { store.moveDocument(a.id, b.id) }
+        store.moveDocument(c.id, a.id)
+        assertEquals(a.id, store.document(c.id)!!.parentId)
+        assertTrue(store.document(c.id)!!.sortKey > store.document(b.id)!!.sortKey)
+        val move = store.queuedOperations(0, 100).map { it.second }.last()
+        assertEquals("move", move.kind)
+        assertEquals(setOf("parentId", "sortKey"), move.payload.keys)
+        store.moveDocument(b.id, null)
+        assertNull(store.document(b.id)!!.parentId)
+    }
+
+    @Test
     fun deleteDocumentCreatesTombstonesForSubpages() {
         val store = memoryStore()
         val parent = store.createDocument(WS)

@@ -184,6 +184,7 @@ fun PageScreen(
     }
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(false) }
     // Undo of this page's edits since it was opened (ADR 0008: structural steps take a checkpoint).
     val undoStack = remember(documentId) { mutableStateListOf<List<BlockState>>() }
     var pendingUndo by remember { mutableStateOf(false) }
@@ -238,6 +239,10 @@ fun PageScreen(
                                     menu = false
                                     openPage(store.createDocument(workspaceId, parentId = documentId).id)
                                 })
+                                DropdownMenuItem(text = { Text("Verschieben nach …") }, onClick = {
+                                    menu = false
+                                    moving = true
+                                })
                                 DropdownMenuItem(text = { Text("Seite löschen") }, onClick = {
                                     menu = false
                                     confirmDelete = true
@@ -290,6 +295,41 @@ fun PageScreen(
                 )
             }
         }
+    }
+
+    if (moving && document != null) {
+        val excluded = remember(documentId) { store.subtree(documentId) }
+        val targets = remember(version) { store.documents(workspaceId).filter { it.id !in excluded } }
+        AlertDialog(
+            onDismissRequest = { moving = false },
+            title = { Text("Verschieben nach") },
+            text = {
+                LazyColumn(Modifier.height(360.dp)) {
+                    item {
+                        Text(
+                            "Oberste Ebene",
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                runCatching { store.moveDocument(documentId, null) }
+                                moving = false
+                            }.padding(vertical = 12.dp),
+                            color = if (document.parentId == null) tokens.muted else tokens.text,
+                        )
+                    }
+                    items(targets, key = { it.id }) { target ->
+                        Text(
+                            displayTitle(target),
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                runCatching { store.moveDocument(documentId, target.id) }
+                                moving = false
+                            }.padding(vertical = 12.dp),
+                            color = if (document.parentId == target.id) tokens.muted else tokens.text,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { moving = false }) { Text("Abbrechen") } },
+        )
     }
 
     if (confirmDelete) {
