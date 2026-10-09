@@ -94,9 +94,17 @@ class ServerIntegrationTest {
         b.sync.sync()
         assertEquals(parent.id, b.store.document(page.id)!!.parentId)
 
+        // Tags travel via pull and snapshot.
+        a.store.addTag(page.id, "Telefon")
+        a.sync.sync()
+        assertEquals(0, a.store.pendingCount(), a.store.issues().toString())
+        b.sync.sync()
+        assertEquals(listOf("Telefon"), b.store.tagsForDocument(page.id).map { it.name })
+
         // A third device makes everything available offline at once.
         val c = device().signIn()
         c.sync.sync()
+        assertEquals(listOf("Telefon"), c.store.tagsForDocument(page.id).map { it.name })
         assertFalse(c.store.isDocumentLoaded(page.id))
         assertTrue(c.sync.loadAll() >= 1)
         assertTrue(c.store.isDocumentLoaded(page.id))

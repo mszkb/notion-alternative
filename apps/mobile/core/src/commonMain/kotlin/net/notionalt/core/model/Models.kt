@@ -75,6 +75,19 @@ data class Block(
     val deletedAt: String?,
 )
 
+@Serializable
+data class Tag(val id: String, val workspaceId: String, val name: String, val revision: Long?, val deletedAt: String?)
+
+@Serializable
+data class DocumentTag(
+    val id: String,
+    val workspaceId: String,
+    val documentId: String,
+    val tagId: String,
+    val revision: Long?,
+    val deletedAt: String?,
+)
+
 /** One local change, transferred idempotently by `opId` (ADR 0002). */
 @Serializable
 data class Operation(
@@ -133,8 +146,8 @@ data class PullResponse(val changes: List<Change>, val cursor: Long, val hasMore
 data class SnapshotResponse(
     val documents: List<Document>,
     val blocks: List<Block>,
-    val tags: List<JsonElement> = emptyList(),
-    val documentTags: List<JsonElement> = emptyList(),
+    val tags: List<Tag> = emptyList(),
+    val documentTags: List<DocumentTag> = emptyList(),
     val attachments: List<JsonElement> = emptyList(),
     val conflicts: List<JsonObject> = emptyList(),
     val cursor: Long,

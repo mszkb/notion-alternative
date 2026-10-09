@@ -25,6 +25,7 @@ import net.notionalt.core.model.DocumentResponse
 import net.notionalt.core.model.Operation
 import net.notionalt.core.model.PushResult
 import net.notionalt.core.model.SnapshotResponse
+import net.notionalt.core.model.Tag
 import net.notionalt.core.model.Workspace
 import net.notionalt.core.newId
 import net.notionalt.core.nowIso
@@ -263,6 +264,53 @@ class LocalStore(
         restored.map { it.id }
     }
 
+    // ------------------------------------------------------------------ tags
+
+    fun tags(workspaceId: String): List<Tag> = q.tagsOfWorkspace(workspaceId).executeAsList().map {
+        Tag(it.id, it.workspaceId, it.name, it.revision, it.deletedAt)
+    }
+
+    fun tagsForDocument(documentId: String): List<Tag> =
+        q.assignmentsOfDocument(documentId).executeAsList()
+            .mapNotNull { q.tagById(it.tagId).executeAsOneOrNull()?.takeIf { tag -> tag.deletedAt == null } }
+            .distinctBy { it.id }
+            .map { Tag(it.id, it.workspaceId, it.name, it.revision, it.deletedAt) }
+            .sortedBy { it.name.lowercase() }
+
+    /** Adds a tag to a page; reuses a tag of the same name (case-insensitive), as the web client. */
+    fun addTag(documentId: String, name: String): Tag = write {
+        val trimmed = name.trim()
+        require(trimmed.isNotEmpty() && trimmed.length <= 50) { "Tag name must have 1–50 characters" }
+        val document = requireDocument(documentId)
+        val tag = tags(document.workspaceId).firstOrNull { it.name.lowercase() == trimmed.lowercase() }
+            ?: Tag(newId(), document.workspaceId, trimmed, null, null).also {
+                q.putTag(net.notionalt.core.db.Tag(it.id, it.workspaceId, it.name, null, null))
+                enqueue(it.workspaceId, "tag", it.id, "create", null, buildJsonObject { put("name", it.name) })
+            }
+        val assigned = q.assignmentsOfDocument(documentId).executeAsList().any { it.tagId == tag.id }
+        if (!assigned) {
+            val id = newId()
+            q.putDocumentTag(net.notionalt.core.db.DocumentTag(id, document.workspaceId, documentId, tag.id, null, null))
+            enqueue(document.workspaceId, "document_tag", id, "create", null, buildJsonObject {
+                put("documentId", documentId)
+                put("tagId", tag.id)
+            })
+            touch(document)
+        }
+        tag
+    }
+
+    fun removeTag(documentId: String, tagId: String) = write {
+        val document = requireDocument(documentId)
+        val deletedAt = now()
+        for (assignment in q.assignmentsOfDocument(documentId).executeAsList()) {
+            if (assignment.tagId != tagId) continue
+            q.putDocumentTag(assignment.copy(deletedAt = deletedAt))
+            enqueue(document.workspaceId, "document_tag", assignment.id, "delete", assignment.revision, JsonObject(emptyMap()))
+            touch(document)
+        }
+    }
+
     // ------------------------------------------------------------------ blocks
 
     fun blocks(documentId: String): List<Block> =
@@ -437,10 +485,7 @@ class LocalStore(
                 result.confirmed -> {
                     q.deleteOperation(op.seq)
                     val revision = result.revision ?: continue
-                    when (op.entity) {
-                        "document" -> q.setDocumentRevision(revision, op.entityId)
-                        "block" -> q.setBlockRevision(revision, op.entityId)
-                    }
+                    setRevision(op.entity, op.entityId, revision)
                 }
                 else -> q.markOperation(result.code ?: result.status, result.message ?: "", op.seq)
             }
@@ -474,6 +519,15 @@ class LocalStore(
         q.putMeta("syncCursor:$workspaceId", cursor.toString())
     }
 
+    private fun setRevision(entity: String, id: String, revision: Long) {
+        when (entity) {
+            "document" -> q.setDocumentRevision(revision, id)
+            "block" -> q.setBlockRevision(revision, id)
+            "tag" -> q.setTagRevision(revision, id)
+            "document_tag" -> q.setDocumentTagRevision(revision, id)
+        }
+    }
+
     private fun hasQueued(entityId: String) = q.operationCountForEntity(entityId).executeAsOne() > 0
 
     private fun applyRemoteChange(workspaceId: String, change: Change) {
@@ -484,10 +538,7 @@ class LocalStore(
         val queued = q.operationByOpId(change.opId).executeAsOneOrNull()
         if (queued != null) q.deleteOperation(queued.seq)
         if (queued != null || change.deviceId == deviceId) {
-            when (change.entity) {
-                "document" -> q.setDocumentRevision(change.revision, change.entityId)
-                "block" -> q.setBlockRevision(change.revision, change.entityId)
-            }
+            setRevision(change.entity, change.entityId, change.revision)
             return
         }
         if (hasQueued(change.entityId)) return
@@ -568,7 +619,30 @@ class LocalStore(
                 }
                 q.putBlock(next.toRow())
             }
-            // Tags, page tags and attachments are not shown by the app yet; the server keeps them.
+            "tag" -> {
+                val local = q.tagById(change.entityId).executeAsOneOrNull()
+                when {
+                    change.kind == "create" -> q.putTag(
+                        net.notionalt.core.db.Tag(change.entityId, workspaceId, p.str("name") ?: "", change.revision, null),
+                    )
+                    local == null -> {}
+                    change.kind == "delete" -> q.putTag(local.copy(deletedAt = change.appliedAt, revision = change.revision))
+                    else -> q.putTag(local.copy(name = p.str("name") ?: local.name, revision = change.revision))
+                }
+            }
+            "document_tag" -> {
+                val local = q.documentTagById(change.entityId).executeAsOneOrNull()
+                when {
+                    change.kind == "create" -> q.putDocumentTag(
+                        net.notionalt.core.db.DocumentTag(
+                            change.entityId, workspaceId, p.str("documentId") ?: return, p.str("tagId") ?: return, change.revision, null,
+                        ),
+                    )
+                    local != null && change.kind == "delete" ->
+                        q.putDocumentTag(local.copy(deletedAt = change.appliedAt, revision = change.revision))
+                }
+            }
+            // Attachment metadata is not kept by the app yet; image blocks load contents by id.
         }
     }
 
@@ -721,6 +795,16 @@ class LocalStore(
             c.str("id")?.let { seen += it }
             putConflict(c)
         }
+        for (t in page.tags) {
+            seen += t.id
+            if (!hasQueued(t.id)) q.putTag(net.notionalt.core.db.Tag(t.id, workspaceId, t.name, t.revision, t.deletedAt))
+        }
+        for (a in page.documentTags) {
+            seen += a.id
+            if (!hasQueued(a.id)) {
+                q.putDocumentTag(net.notionalt.core.db.DocumentTag(a.id, workspaceId, a.documentId, a.tagId, a.revision, a.deletedAt))
+            }
+        }
     }
 
     /** Ends a re-sync: local entities the snapshot lacked are removed unless queued, then the cursor is stored. */
@@ -738,6 +822,12 @@ class LocalStore(
         }
         for (id in q.allConflictIdsOfWorkspace(workspaceId).executeAsList()) {
             if (id !in seen) q.deleteConflict(id)
+        }
+        for (id in q.allTagIdsOfWorkspace(workspaceId).executeAsList()) {
+            if (id !in seen && !hasQueued(id)) q.deleteTagRow(id)
+        }
+        for (id in q.allDocumentTagIdsOfWorkspace(workspaceId).executeAsList()) {
+            if (id !in seen && !hasQueued(id)) q.deleteDocumentTagRow(id)
         }
         q.putMeta("syncCursor:$workspaceId", cursor.toString())
     }

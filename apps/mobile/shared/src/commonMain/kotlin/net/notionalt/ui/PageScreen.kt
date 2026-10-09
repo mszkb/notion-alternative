@@ -383,6 +383,12 @@ private fun PageEditor(
     val listState = rememberLazyListState()
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 200.dp)) {
         item(key = "title") { TitleField(context, documentId, title) }
+        item(key = "tags") {
+            val version by store.version.collectAsState()
+            val workspaceId = remember(documentId) { store.document(documentId)?.workspaceId ?: "" }
+            val tags = remember(version) { store.tagsForDocument(documentId) }
+            TagRow(context, documentId, workspaceId, tags)
+        }
         items(visible, key = { it.id }) { block ->
             val number = remember(blocks, block.id) { orderedNumber(blocks, block) }
             if (block.type == "image" && block.id != editingId) {

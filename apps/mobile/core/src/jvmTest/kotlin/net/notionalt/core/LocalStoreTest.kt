@@ -217,11 +217,29 @@ class LocalStoreTest {
         val driver = app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver(app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver.IN_MEMORY)
         net.notionalt.core.db.UserDatabase.Schema.create(driver)
         driver.execute(null, "DROP TABLE attachmentContent", 0)
-        assertEquals(2, net.notionalt.core.db.UserDatabase.Schema.version)
-        net.notionalt.core.db.UserDatabase.Schema.migrate(driver, 1, 2)
+        driver.execute(null, "DROP TABLE documentTag", 0)
+        driver.execute(null, "DROP TABLE tag", 0)
+        assertEquals(3, net.notionalt.core.db.UserDatabase.Schema.version)
+        net.notionalt.core.db.UserDatabase.Schema.migrate(driver, 1, 3)
         val store = net.notionalt.core.store.LocalStore(driver)
         store.cacheAttachment("a", byteArrayOf(1, 2))
         assertEquals(listOf<Byte>(1, 2), store.cachedAttachment("a")!!.toList())
+    }
+
+    @Test
+    fun tagsAreReusedByNameAndRemovedWithTombstones() {
+        val store = memoryStore()
+        val a = store.createDocument(WS)
+        val b = store.createDocument(WS)
+        val tag = store.addTag(a.id, "Rezept")
+        assertEquals(tag.id, store.addTag(b.id, "rezept").id)
+        store.addTag(a.id, "Rezept")
+        assertEquals(listOf("Rezept"), store.tagsForDocument(a.id).map { it.name })
+        store.removeTag(a.id, tag.id)
+        assertTrue(store.tagsForDocument(a.id).isEmpty())
+        assertEquals(listOf("Rezept"), store.tagsForDocument(b.id).map { it.name })
+        val kinds = store.queuedOperations(0, 100).map { "${it.second.entity}/${it.second.kind}" }.filter { !it.startsWith("document/") && !it.startsWith("block/") }
+        assertEquals(listOf("tag/create", "document_tag/create", "document_tag/create", "document_tag/delete"), kinds)
     }
 
     @Test

@@ -230,3 +230,59 @@ INSERT OR REPLACE INTO attachmentContent (id, data) VALUES (?, ?);
 
 allDocumentsOfWorkspace:
 SELECT * FROM document WHERE workspaceId = ?;
+
+-- Tags (added by migration 2.sqm).
+CREATE TABLE tag (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    revision INTEGER,
+    deletedAt TEXT
+);
+
+CREATE TABLE documentTag (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    documentId TEXT NOT NULL,
+    tagId TEXT NOT NULL,
+    revision INTEGER,
+    deletedAt TEXT
+);
+
+CREATE INDEX documentTag_document ON documentTag (documentId);
+
+tagsOfWorkspace:
+SELECT * FROM tag WHERE workspaceId = ? AND deletedAt IS NULL ORDER BY name;
+
+tagById:
+SELECT * FROM tag WHERE id = ?;
+
+putTag:
+INSERT OR REPLACE INTO tag VALUES ?;
+
+deleteTagRow:
+DELETE FROM tag WHERE id = ?;
+
+allTagIdsOfWorkspace:
+SELECT id FROM tag WHERE workspaceId = ?;
+
+setTagRevision:
+UPDATE tag SET revision = :revision WHERE id = :id AND (revision IS NULL OR revision < :revision);
+
+assignmentsOfDocument:
+SELECT * FROM documentTag WHERE documentId = ? AND deletedAt IS NULL;
+
+documentTagById:
+SELECT * FROM documentTag WHERE id = ?;
+
+putDocumentTag:
+INSERT OR REPLACE INTO documentTag VALUES ?;
+
+deleteDocumentTagRow:
+DELETE FROM documentTag WHERE id = ?;
+
+allDocumentTagIdsOfWorkspace:
+SELECT id FROM documentTag WHERE workspaceId = ?;
+
+setDocumentTagRevision:
+UPDATE documentTag SET revision = :revision WHERE id = :id AND (revision IS NULL OR revision < :revision);
