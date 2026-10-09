@@ -10,7 +10,7 @@ Für gewöhnliches Webhosting mit PHP, HTTPS und Cron, ohne Docker ([ADR 0018](.
 - ein Cron-Eintrag (beim Hoster meist „Cronjobs“ oder „Geplante Aufgaben“)
 - eine eigene (Sub-)Domain: Die App muss im Wurzelverzeichnis der Domain liegen, z. B. `https://notizen.example.de/`, nicht in `https://example.de/notizen/`.
 
-Getestet wird das Paket mit Apache 2.4 und PHP als Apache-Modul (`scripts/webspace-test.sh`). LiteSpeed und andere PHP-Anbindungen (FastCGI, PHP-FPM) sind noch nicht auf einem echten Webspace erprobt; Rückmeldungen dazu bitte als Issue.
+Getestet ist das Paket mit Apache 2.4, PHP als Apache-Modul (`scripts/webspace-test.sh`) und über PHP-FPM. Auf einem echten Webspace und mit LiteSpeed ist es noch nicht erprobt; Rückmeldungen dazu bitte als Issue.
 
 ## Installation
 
