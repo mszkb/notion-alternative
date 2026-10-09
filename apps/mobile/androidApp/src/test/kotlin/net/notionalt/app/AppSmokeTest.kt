@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextInputSelection
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import net.notionalt.ui.AppGraph
 import org.junit.Rule
@@ -59,6 +60,17 @@ class AppSmokeTest {
         compose.onNode(isFocused()).performTextInput("Hallo vom Smoketest")
         compose.onNodeWithContentDescription("Fertig").performClick()
         compose.waitUntilAtLeastOneExists(hasText("Hallo vom Smoketest"), 5_000)
+
+        // Enter in the middle of a block splits it without duplicating the tail.
+        compose.onNodeWithText("Block hinzufügen", substring = true).performClick()
+        compose.waitUntilAtLeastOneExists(isFocused(), 5_000)
+        compose.onNode(isFocused()).performTextInput("KopfSchwanz")
+        compose.onNode(isFocused()).performTextInputSelection(androidx.compose.ui.text.TextRange(4))
+        compose.onNode(isFocused()).performTextInput("\n")
+        compose.onNodeWithContentDescription("Fertig").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Kopf"), 5_000)
+        compose.onNodeWithText("Schwanz").assertExists()
+        compose.onNodeWithText("KopfSchwanz").assertDoesNotExist()
 
         // Markdown shortcut, to-do, undo and the move dialog on the same page.
         compose.onNodeWithText("Block hinzufügen", substring = true).performClick()

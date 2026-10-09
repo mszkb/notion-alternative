@@ -66,7 +66,12 @@ private fun visibleTree(documents: List<Document>, expanded: Set<String>): List<
     }
     visit(null, 0)
     // Pages whose parent is not here (deleted elsewhere, not synced yet) stay reachable.
-    for (d in documents) if (d.parentId != null && d.parentId !in ids) rows += TreeRow(d, 0, byParent[d.id] != null)
+    for (d in documents) {
+        if (d.parentId != null && d.parentId !in ids) {
+            rows += TreeRow(d, 0, byParent[d.id] != null)
+            if (d.id in expanded) visit(d.id, 1)
+        }
+    }
     return rows
 }
 
@@ -236,9 +241,10 @@ fun HomeScreen(
                             onToggle = { expanded = if (d.id in expanded) expanded - d.id else expanded + d.id },
                             onOpen = { openPage(d.workspaceId, d.id) },
                             onAddChild = {
-                                val child = store.createDocument(d.workspaceId, parentId = d.id)
-                                expanded = expanded + d.id
-                                openPage(d.workspaceId, child.id)
+                                runCatching { store.createDocument(d.workspaceId, parentId = d.id) }.getOrNull()?.let { child ->
+                                    expanded = expanded + d.id
+                                    openPage(d.workspaceId, child.id)
+                                }
                             },
                         )
                     }

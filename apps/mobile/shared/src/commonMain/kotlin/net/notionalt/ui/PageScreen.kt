@@ -167,19 +167,22 @@ fun PageScreen(
     val tokens = LocalTokens.current
     val uriHandler = LocalUriHandler.current
     val document = remember(version) { store.document(documentId) }
-    var loaded by remember { mutableStateOf(store.isDocumentLoaded(documentId)) }
+    val loaded = remember(version) { store.isDocumentLoaded(documentId) }
     var outcome by remember { mutableStateOf<SyncEngine.OpenOutcome?>(null) }
+    val syncStatus by context.sync.status.collectAsState()
 
-    LaunchedEffect(documentId) {
-        if (!loaded) {
+    // Load the content when the page is opened, and again once the server is back (ADR 0017).
+    LaunchedEffect(documentId, syncStatus.lastSyncAt, syncStatus.online) {
+        if (!store.isDocumentLoaded(documentId)) {
             outcome = context.sync.ensureDocumentLoaded(workspaceId, documentId)
-            loaded = store.isDocumentLoaded(documentId)
         }
     }
 
     val blocks = remember(version, loaded) { if (loaded) store.blocks(documentId) else emptyList() }
     val conflicts = remember(version) { store.openConflicts(workspaceId).filter { it.documentId == documentId } }
     var editingId by remember { mutableStateOf<String?>(null) }
+    // The open block editor's "save what was typed now", so a checkpoint never misses text.
+    val editorFlush = remember { EditorFlush() }
     // Collapsed toggles are a per-device state (ADR 0019), not synced.
     var collapsed by remember(documentId) {
         mutableStateOf(store.preference("collapsed:$documentId")?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet())
@@ -228,7 +231,7 @@ fun PageScreen(
                             },
                             enabled = undoStack.isNotEmpty(),
                         ) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Rückgängig") }
-                        IconButton(onClick = { store.setFavorite(documentId, !document.favorite) }) {
+                        IconButton(onClick = { runCatching { store.setFavorite(documentId, !document.favorite) } }) {
                             Icon(
                                 if (document.favorite) Icons.Filled.Star else Icons.Filled.StarBorder,
                                 contentDescription = if (document.favorite) "Aus Favoriten entfernen" else "Zu Favoriten",
@@ -283,6 +286,8 @@ fun PageScreen(
                 !loaded && outcome == SyncEngine.OpenOutcome.OFFLINE ->
                     Notice("Der Inhalt dieser Seite ist noch nicht auf diesem Gerät. Sobald der Server erreichbar ist, wird er geladen.")
                 !loaded && outcome == SyncEngine.OpenOutcome.MISSING -> Notice("Der Server kennt diese Seite nicht.")
+                !loaded && outcome == SyncEngine.OpenOutcome.ERROR ->
+                    Notice("Der Inhalt dieser Seite konnte nicht geladen werden. Bitte später erneut öffnen.")
                 !loaded -> Notice("Lade Seite …")
                 else -> PageEditor(
                     context = context,
@@ -291,9 +296,13 @@ fun PageScreen(
                     blocks = blocks,
                     editingId = editingId,
                     setEditing = { id ->
-                        if (id != null && id != editingId) checkpoint()
+                        if (id != null && id != editingId) {
+                            editorFlush.flush?.invoke()
+                            checkpoint()
+                        }
                         editingId = id
                     },
+                    editorFlush = editorFlush,
                     checkpoint = ::checkpoint,
                     collapsed = collapsed,
                     toggleCollapsed = { id ->
@@ -388,7 +397,7 @@ fun PageScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
-                    store.deleteDocument(documentId)
+                    runCatching { store.deleteDocument(documentId) }
                     back()
                 }) { Text("Löschen") }
             },
@@ -413,6 +422,7 @@ private fun PageEditor(
     blocks: List<Block>,
     editingId: String?,
     setEditing: (String?) -> Unit,
+    editorFlush: EditorFlush,
     checkpoint: () -> Unit,
     collapsed: Set<String>,
     toggleCollapsed: (String) -> Unit,
@@ -443,6 +453,7 @@ private fun PageEditor(
                     done = { setEditing(null) },
                     startEditing = setEditing,
                     checkpoint = checkpoint,
+                    editorFlush = editorFlush,
                 )
             } else {
                 BlockView(
@@ -452,7 +463,7 @@ private fun PageEditor(
                     toggleCollapsed = { toggleCollapsed(block.id) },
                     onCheck = { checked ->
                         checkpoint()
-                        store.updateBlock(block.id, attrs = JsonObject(block.attrs + ("checked" to JsonPrimitive(checked))))
+                        runCatching { store.updateBlock(block.id, attrs = JsonObject(block.attrs + ("checked" to JsonPrimitive(checked)))) }
                     },
                     edit = { setEditing(block.id) },
                     pageTitle = pageTitle,
@@ -466,8 +477,7 @@ private fun PageEditor(
             TextButton(
                 onClick = {
                     checkpoint()
-                    val block = store.createBlock(documentId)
-                    setEditing(block.id)
+                    runCatching { store.createBlock(documentId) }.getOrNull()?.let { setEditing(it.id) }
                 },
                 modifier = Modifier.padding(horizontal = 8.dp),
             ) {
@@ -522,7 +532,7 @@ private fun TitleField(context: UserContext, documentId: String, title: String) 
     LaunchedEffect(value) {
         delay(600)
         if (value != saved) {
-            context.store.renameDocument(documentId, value.take(500))
+            runCatching { context.store.renameDocument(documentId, value.take(500)) }
             saved = value
         }
     }
@@ -649,6 +659,7 @@ private fun BlockEditor(
     done: () -> Unit,
     startEditing: (String) -> Unit,
     checkpoint: () -> Unit,
+    editorFlush: EditorFlush,
 ) {
     val store = context.store
     val tokens = LocalTokens.current
@@ -664,8 +675,25 @@ private fun BlockEditor(
             saved = value.text
         }
     }
+    fun flush() {
+        if (value.text != saved) {
+            runCatching { store.updateBlock(block.id, content = value.text) }
+            saved = value.text
+        }
+    }
+    // A pull changed the block while it is open and nothing was typed: show the new text instead
+    // of saving the old one over it (principle 6).
+    LaunchedEffect(block.content) {
+        if (value.text == saved && block.content != saved) {
+            value = TextFieldValue(block.content, TextRange(block.content.length))
+            saved = block.content
+        }
+    }
     DisposableEffect(block.id) {
+        val own: () -> Unit = ::flush
+        editorFlush.flush = own
         onDispose {
+            if (editorFlush.flush === own) editorFlush.flush = null
             if (current != saved) runCatching { store.updateBlock(block.id, content = current) }
         }
     }
@@ -681,6 +709,7 @@ private fun BlockEditor(
         if (block.type == "paragraph" && next.text.length > value.text.length) {
             val shortcut = markdownShortcuts.firstOrNull { next.text.startsWith(it.first) && !value.text.startsWith(it.first) }
             if (shortcut != null) {
+                flush()
                 checkpoint()
                 val kind = shortcut.second
                 val rest = next.text.removePrefix(shortcut.first)
@@ -688,6 +717,7 @@ private fun BlockEditor(
                     if (kind.type == "divider") {
                         store.updateBlock(block.id, type = "divider", content = "", attrs = JsonObject(emptyMap()))
                         saved = ""
+                        value = TextFieldValue("")
                         done()
                     } else {
                         store.updateBlock(block.id, type = kind.type, content = rest, attrs = attrsFor(kind, block))
@@ -704,6 +734,7 @@ private fun BlockEditor(
             val head = next.text.substring(0, newline)
             val tail = next.text.substring(newline + 1)
             val continues = block.type == "list_item" || block.type == "todo"
+            flush()
             checkpoint()
             if (continues && head.isEmpty() && tail.isEmpty()) {
                 // Enter in an empty list item ends the list.
@@ -725,7 +756,9 @@ private fun BlockEditor(
             }
             val created = runCatching { store.splitBlock(block.id, head, tail, type, attrs) }.getOrNull()
             if (created != null) {
+                // The tail lives on in the new block: this editor must not save it back on dispose.
                 saved = head
+                value = TextFieldValue(head, TextRange(head.length))
                 startEditing(created.id)
             }
             return
@@ -754,26 +787,28 @@ private fun BlockEditor(
         ) {
             IconButton(onClick = done) { Icon(Icons.Filled.Check, contentDescription = "Fertig") }
             IconButton(onClick = {
-                if (current != saved) { store.updateBlock(block.id, content = current); saved = current }
+                flush()
                 checkpoint()
-                store.deleteBlock(block.id)
+                runCatching { store.deleteBlock(block.id) }
                 done()
             }) { Icon(Icons.Filled.Delete, contentDescription = "Block löschen", tint = tokens.error) }
-            IconButton(onClick = { checkpoint(); runCatching { store.moveBlockBy(block.id, -1) } }) {
+            IconButton(onClick = { flush(); checkpoint(); runCatching { store.moveBlockBy(block.id, -1) } }) {
                 Icon(Icons.Filled.ArrowUpward, contentDescription = "Nach oben")
             }
-            IconButton(onClick = { checkpoint(); runCatching { store.moveBlockBy(block.id, 1) } }) {
+            IconButton(onClick = { flush(); checkpoint(); runCatching { store.moveBlockBy(block.id, 1) } }) {
                 Icon(Icons.Filled.ArrowDownward, contentDescription = "Nach unten")
             }
             IconButton(onClick = {
+                flush()
                 checkpoint()
-                store.updateBlock(block.id, attrs = block.attrs.withIndent((block.indent - 1).coerceAtLeast(0)))
+                runCatching { store.updateBlock(block.id, attrs = block.attrs.withIndent((block.indent - 1).coerceAtLeast(0))) }
             }, enabled = block.indent > 0) {
                 Icon(Icons.AutoMirrored.Filled.FormatIndentDecrease, contentDescription = "Ausrücken")
             }
             IconButton(onClick = {
+                flush()
                 checkpoint()
-                store.updateBlock(block.id, attrs = block.attrs.withIndent((block.indent + 1).coerceAtMost(5)))
+                runCatching { store.updateBlock(block.id, attrs = block.attrs.withIndent((block.indent + 1).coerceAtMost(5))) }
             }, enabled = block.indent < 5) {
                 Icon(Icons.AutoMirrored.Filled.FormatIndentIncrease, contentDescription = "Einrücken")
             }
@@ -785,13 +820,15 @@ private fun BlockEditor(
                 FilterChip(
                     selected = selected,
                     onClick = {
-                        if (current != saved) { store.updateBlock(block.id, content = current); saved = current }
+                        flush()
                         checkpoint()
                         if (kind.type == "divider") {
-                            store.updateBlock(block.id, type = "divider", content = "", attrs = JsonObject(emptyMap()))
+                            runCatching { store.updateBlock(block.id, type = "divider", content = "", attrs = JsonObject(emptyMap())) }
+                            saved = ""
+                            value = TextFieldValue("")
                             done()
                         } else {
-                            store.updateBlock(block.id, type = kind.type, attrs = attrsFor(kind, block))
+                            runCatching { store.updateBlock(block.id, type = kind.type, attrs = attrsFor(kind, block)) }
                         }
                     },
                     label = { Text(kind.label) },
@@ -799,4 +836,9 @@ private fun BlockEditor(
             }
         }
     }
+}
+
+/** Lets the page save the open block editor's text before taking an undo checkpoint. */
+class EditorFlush {
+    var flush: (() -> Unit)? = null
 }

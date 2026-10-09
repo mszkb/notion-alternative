@@ -207,7 +207,7 @@ class SyncEngine(
         return loaded
     }
 
-    enum class OpenOutcome { LOADED, OFFLINE, MISSING }
+    enum class OpenOutcome { LOADED, OFFLINE, MISSING, ERROR }
 
     /** Makes sure a page's content is on this device before it is shown (ADR 0017). */
     suspend fun ensureDocumentLoaded(workspaceId: String, documentId: String): OpenOutcome {
@@ -220,10 +220,15 @@ class SyncEngine(
                     OpenOutcome.MISSING
                 }
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: UnreachableException) {
             OpenOutcome.OFFLINE
         } catch (error: ApiException) {
-            if (error.status >= 500 || error.status == 401) OpenOutcome.OFFLINE else throw error
+            if (error.status >= 500 || error.status == 401) OpenOutcome.OFFLINE else OpenOutcome.ERROR
+        } catch (error: Exception) {
+            // HTML from a captive portal or proxy, unexpected data: show a notice, never crash.
+            OpenOutcome.ERROR
         }
     }
 
