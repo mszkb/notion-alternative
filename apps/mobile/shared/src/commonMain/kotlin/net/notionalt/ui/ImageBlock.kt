@@ -40,13 +40,7 @@ fun ImageBlock(context: UserContext, block: Block, edit: () -> Unit) {
             return@LaunchedEffect
         }
         val bytes = withContext(Dispatchers.Default) {
-            context.store.cachedAttachment(attachmentId) ?: try {
-                context.api.attachmentContent(attachmentId)?.also { context.store.cacheAttachment(attachmentId, it) }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                null
-            }
+            loadImageBytes(context, attachmentId)
         }
         image = bytes?.let(::decodeImage)
         if (image == null) state = if (bytes == null) "Bild offline nicht verfügbar" else "Bildformat wird nicht unterstützt"
@@ -66,5 +60,31 @@ fun ImageBlock(context: UserContext, block: Block, edit: () -> Unit) {
         if (block.content.isNotBlank()) {
             Text(block.content, color = tokens.muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
         }
+    }
+}
+
+/**
+ * Image bytes from the offline cache, else from the server (then a smaller copy is cached).
+ * Never throws: a broken cache entry or network error just shows the placeholder.
+ */
+suspend fun loadImageBytes(context: UserContext, attachmentId: String): ByteArray? {
+    val cached = try {
+        context.store.cachedAttachment(attachmentId)
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        null
+    }
+    if (cached != null) return cached
+    return try {
+        context.api.attachmentContent(attachmentId)?.also { bytes ->
+            shrinkForCache(bytes)?.takeIf { it.size <= MAX_CACHED_IMAGE_BYTES }?.let {
+                runCatching { context.store.cacheAttachment(attachmentId, it) }
+            }
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        null
     }
 }

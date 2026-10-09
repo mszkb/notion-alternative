@@ -128,6 +128,9 @@ class ApiClient(
             } catch (_: IllegalArgumentException) {
                 null
             }
+            if (status in 300..399) {
+                throw ApiException(status, "redirect", response.headers[HttpHeaders.Location] ?: "")
+            }
             if (detail == null && status != 401 && status < 500) {
                 throw NotOurServerException("HTTP $status")
             }
@@ -150,6 +153,16 @@ class ApiClient(
         call(HttpMethod.Post, path, ApiJson.encodeToString(inputSerializer, input), result)!!
 
     suspend fun health(): Health = get("/health", Health.serializer())
+
+    /**
+     * Base URL the server really answers under: GET follows redirects (www., https), POST does
+     * not, so the address is taken from where `/api/health` ended up.
+     */
+    suspend fun resolvedBaseUrl(): String {
+        val response = send(HttpMethod.Get, "/health", null)
+        val url = response.call.request.url.toString().substringBefore('?')
+        return url.removeSuffix("/api/health").takeIf { it != url } ?: baseUrl
+    }
     suspend fun authStatus(): AuthStatus = get("/auth/status", AuthStatus.serializer())
     suspend fun login(email: String, password: String): UserResponse =
         post("/auth/login", LoginInput(email, password), LoginInput.serializer(), UserResponse.serializer())

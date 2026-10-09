@@ -114,21 +114,25 @@ class AppSession(
             is ServerUrl.Result.Ok -> result.url
         }
         // No cookie goes to an address that was not checked yet.
-        val api = ApiClient(http, url, InMemoryCookieStore())
+        val probe = ApiClient(http, url, InMemoryCookieStore())
+        var api = probe
         try {
-            if (api.health().status != "ok") return "Der Server meldet ein Problem. Bitte später erneut versuchen."
+            if (probe.health().status != "ok") return "Der Server meldet ein Problem. Bitte später erneut versuchen."
+            // Redirected (www., https): continue with the address the server really answers under.
+            api = ApiClient(http, probe.resolvedBaseUrl(), InMemoryCookieStore())
             api.authStatus()
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             return describeConnectError(url, error)
         }
-        if (url != setting(KEY_SERVER)) {
+        val resolved = api.baseUrl
+        if (resolved != setting(KEY_SERVER)) {
             putSetting(KEY_COOKIE, null)
             putSetting(KEY_COOKIE_OWNER, null)
         }
-        putSetting(KEY_SERVER, url)
-        _state.value = SessionState.NeedsLogin(url)
+        putSetting(KEY_SERVER, resolved)
+        _state.value = SessionState.NeedsLogin(resolved)
         return null
     }
 
@@ -223,7 +227,11 @@ class AppSession(
                 }
             }
             is NotOurServerException -> "Unter $url antwortet kein Notion-Alt-Server. Bitte die Adresse prüfen (ohne /api am Ende)."
-            is ApiException -> "Der Server antwortet mit einem Fehler (${error.status}: ${error.message})."
+            is ApiException -> if (error.code == "redirect") {
+                "Der Server leitet weiter${error.message?.takeIf { it.isNotEmpty() }?.let { " nach $it" } ?: ""}. Bitte diese Adresse direkt eintragen."
+            } else {
+                "Der Server antwortet mit einem Fehler (${error.status}: ${error.message})."
+            }
             else -> "Unerwarteter Fehler: ${error.message ?: error}"
         }
     }

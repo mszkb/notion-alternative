@@ -47,13 +47,7 @@ fun PageCover(context: UserContext, cover: String?) {
     var image by remember(attachmentId) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(attachmentId) {
         val bytes = withContext(Dispatchers.Default) {
-            context.store.cachedAttachment(attachmentId) ?: try {
-                context.api.attachmentContent(attachmentId)?.also { context.store.cacheAttachment(attachmentId, it) }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                null
-            }
+            loadImageBytes(context, attachmentId)
         }
         image = bytes?.let(::decodeImage)
     }

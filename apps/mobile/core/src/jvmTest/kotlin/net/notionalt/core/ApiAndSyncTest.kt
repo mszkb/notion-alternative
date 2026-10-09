@@ -256,6 +256,30 @@ class ApiAndSyncTest {
     }
 
     @Test
+    fun followsRedirectsWhenCheckingTheServer() = runTest {
+        val engine = MockEngine { request ->
+            when {
+                request.url.host == "a.example" ->
+                    respond("", HttpStatusCode.MovedPermanently, headersOf(HttpHeaders.Location, "https://www.a.example${request.url.encodedPath}"))
+                request.url.encodedPath == "/api/health" -> respond("""{"status":"ok"}""", HttpStatusCode.OK)
+                request.url.encodedPath == "/api/auth/status" -> respond("""{"registrationOpen":false}""", HttpStatusCode.OK)
+                else -> respond("""{"error":{"code":"x","message":"x"}}""", HttpStatusCode.NotFound)
+            }
+        }
+        val drivers = DriverFactory { _, schema ->
+            app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver(app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver.IN_MEMORY)
+                .also { schema.create(it) }
+        }
+        val session = AppSession(drivers, HttpClient(engine), "Test")
+        assertNull(session.connect("a.example"))
+        assertEquals("https://www.a.example", session.serverUrl)
+        // A POST that meets a redirect explains it instead of "not our server".
+        val api = ApiClient(HttpClient(engine), "https://a.example", InMemoryCookieStore())
+        val error = assertFailsWith<ApiException> { api.login("a@b.de", "pw") }
+        assertEquals("redirect", error.code)
+    }
+
+    @Test
     fun parsesInlineMarkdown() {
         val spans = Inline.parse("a **b** _c_ `d` [e](https://x.de) [P](page:$WS) [bad](javascript:x)")
         assertTrue(spans.any { it.text == "b" && it.bold })

@@ -23,7 +23,10 @@ class AndroidPlatform(private val context: Context) : Platform {
         "${info.versionName} (${info.versionCode})"
     }.getOrDefault("?")
 
-    override val drivers = DriverFactory { name, schema -> AndroidSqliteDriver(schema, context, name) }
+    override val drivers = DriverFactory { name, schema ->
+        // Larger cursor window: cached images and long pages must never hit the 2 MB default.
+        AndroidSqliteDriver(schema, context, name, windowSizeBytes = 8L * 1024 * 1024)
+    }
 
     override fun httpClient(): HttpClient = platformHttpClient()
 
