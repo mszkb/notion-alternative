@@ -1,7 +1,7 @@
 # 0022 – Lese-Links für Externe
 
-- **Status:** Proposed
-- **Datum:** 2026-10-10
+- **Status:** Accepted
+- **Datum:** 2026-10-10, angenommen 2026-10-10
 
 ## Kontext
 
@@ -46,7 +46,7 @@ Anforderungen:
 
 ## Entscheidung
 
-Empfehlung (zur Rücksprache): **Einzelne Seite, SPA im Gastmodus, Token nur als Hash.** Teilbäume können später dazukommen, wenn sich zeigt, dass sie gebraucht werden.
+**Einzelne Seite, SPA im Gastmodus, Token nur als Hash** (vom Maintainer angenommen, 2026-10-10). Teilbäume können später dazukommen, wenn sich zeigt, dass sie gebraucht werden.
 
 **Datenmodell:** neue Tabelle `share_links(id, token_hash, workspace_id, document_id, created_by, created_at, expires_at)`. `token_hash` ist eindeutig. `workspace_id` und `created_by` haben `on delete cascade`: Wird der Workspace oder das Konto des Erstellers gelöscht, verschwinden seine Links. Widerrufen löscht die Zeile.
 

@@ -33,7 +33,7 @@ Beim späteren Anmelden werden die bereits lokal erstellten Seiten **intelligent
 | Host hat schon Workspaces bzw. Seiten | Die App fragt, wohin die lokal erstellten Seiten kommen: in einen bestehenden Workspace (als eigener Bereich im Seitenbaum) oder in einen neuen Workspace. |
 | Sofort an einem bestehenden Host angemeldet, lokal noch nichts erstellt | Kein Zusammenführen nötig: anmelden und wie gewohnt synchronisieren. |
 
-Das ändert die lokale Datenschicht (heute eine Dexie-Datenbank pro Benutzerkonto, [ADR 0009](../adr/0009-local-data-layer.md)) und braucht vor der Umsetzung einen eigenen ADR ([ADR 0023](../adr/0023-local-area-without-account.md), `Proposed`).
+Das ändert die lokale Datenschicht (heute eine Dexie-Datenbank pro Benutzerkonto, [ADR 0009](../adr/0009-local-data-layer.md)) und braucht vor der Umsetzung einen eigenen ADR ([ADR 0023](../adr/0023-local-area-without-account.md)).
 
 ## Zielgruppen
 

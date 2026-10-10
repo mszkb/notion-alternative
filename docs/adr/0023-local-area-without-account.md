@@ -1,7 +1,7 @@
 # 0023 – Lokaler Bereich ohne Konto und Übernahme beim Login
 
-- **Status:** Proposed
-- **Datum:** 2026-10-10
+- **Status:** Accepted
+- **Datum:** 2026-10-10, angenommen 2026-10-10
 
 ## Kontext
 
@@ -52,7 +52,7 @@ Prinzipien, die betroffen sind:
 
 ## Entscheidung
 
-Empfehlung (zur Rücksprache): **A1 und B3.**
+**A1 und B3** (vom Maintainer angenommen, 2026-10-10).
 
 ### Ohne Konto
 
@@ -70,7 +70,7 @@ Empfehlung (zur Rücksprache): **A1 und B3.**
 | Konto hat keine Seiten (z. B. frisch registriert: leerer „Personal“) | dieser Workspace, Seiten auf oberster Ebene | keine |
 | Konto hat Seiten | Auswahl: bestehender Workspace (ab `editor`) oder neuer Workspace | „Wohin mit deinen Seiten?“ |
 
-- **In einen bestehenden Workspace** kommen die Seiten unter eine neue Elternseite „Von diesem Gerät“ am Ende der obersten Ebene. In einen neuen Workspace kommen sie auf die oberste Ebene.
+- **In einen bestehenden Workspace** kommen die Seiten unter eine neue Elternseite „Von diesem Gerät (TT.MM.JJJJ)“ am Ende der obersten Ebene; das Datum hält mehrere Übernahmen auseinander. In einen neuen Workspace kommen sie auf die oberste Ebene.
 - **IDs:** Seiten, Blöcke, Tags, Zuordnungen und Anhänge behalten ihre UUIDs. Damit ist die Übernahme idempotent: Was es in der Konto-DB schon gibt, wird übersprungen. Kollisionen sind bei UUIDs nicht zu erwarten. Gibt es die ID trotzdem schon (z. B. weil eine Kopie dieser Daten früher importiert wurde), bekommt die Entität eine neue ID, und Seitenlinks werden mitgezogen, wie beim Import als Kopie.
 - **Tags mit gleichem Namen** (ohne Groß-/Kleinschreibung) werden im Ziel-Workspace wiederverwendet statt doppelt angelegt.
 - **Papierkorb:** Gelöschte Seiten des lokalen Bereichs werden nicht übernommen; sie bleiben bis zum Aufräumen im lokalen Bereich und gehen mit dessen Export mit.
@@ -86,7 +86,8 @@ Empfehlung (zur Rücksprache): **A1 und B3.**
 ### Mehrere Konten, Abmelden
 
 - Der lokale Bereich gehört keinem Konto. Das erste Konto, das sich anmeldet und die Übernahme abschließt, bekommt die Seiten.
-- Nach dem Abmelden startet die App wieder ohne Konto mit einem neuen, leeren lokalen Bereich. Die Konto-DB bleibt wie heute im Browser (ADR 0009).
+- Nach dem Abmelden erscheint wie heute die Anmeldung. Sie bietet zusätzlich **„Ohne Konto weiterarbeiten“**: Das öffnet den lokalen Bereich (nach einer abgeschlossenen Übernahme einen neuen, leeren), später lässt sich wieder anmelden. Die Konto-DB bleibt wie heute im Browser (ADR 0009).
+- Der Dialog „Wohin mit deinen Seiten?“ bietet kein „Später“: „Neuer Workspace“ ist immer eine sichere Wahl, und so ist nie mehr als eine lokale Datenbank offen.
 - Ein zwischengespeicherter Benutzer hat Vorrang: Wer angemeldet ist, sieht seine Workspaces, nicht den lokalen Bereich.
 
 ### Server
@@ -100,8 +101,9 @@ Keine neuen Endpunkte: `POST /api/workspaces`, `POST /api/devices` und `POST /ap
 - Der Verlauf auf dem Server beginnt bei der Übernahme; der lokale Verlauf davor geht in die Seiten ein, nicht als einzelne Versionen.
 - Kein neues Exportformat und keine neue Dexie-Version: Die lokale DB hat dasselbe Schema.
 
-### Offen für die Rücksprache
+### Entschieden vom Maintainer (2026-10-10)
 
-1. Soll der Dialog auch „Später“ erlauben? Dann müsste der lokale Bereich neben den Workspaces des Kontos sichtbar bleiben (zwei Datenbanken gleichzeitig offen). Die Empfehlung ist: nein, „Neuer Workspace“ ist immer eine sichere Wahl.
-2. Nach dem Abmelden: wieder ohne Konto starten (Empfehlung) oder zum Login?
-3. Name der Elternseite: „Von diesem Gerät“ mit Datum?
+- Kein „Später“ im Dialog „Wohin mit deinen Seiten?“.
+- Nach dem Abmelden die Anmeldung wie heute, mit „Ohne Konto weiterarbeiten“.
+- Der lokale Verlauf vor dem Login muss nicht auf den Server; die Inhalte werden vollständig übernommen.
+- Elternseite „Von diesem Gerät“ mit Datum.
