@@ -327,6 +327,29 @@ describe('authorization matrix (T-SHARE-01)', () => {
     expect(usage.usedBytes).toBe(content.length + data.length)
   })
 
+  it('read links (ADR 0022): editors and owners manage them, readers and commenters get 403', async () => {
+    const expected: Record<Who, number> = {
+      reader: 403,
+      commenter: 403,
+      editor: 201,
+      owner: 201,
+      stranger: 404,
+    }
+    for (const [who, status] of Object.entries(expected) as [Who, number][]) {
+      const client = accounts[who].client
+      const created = await client.post(`/api/workspaces/${ws()}/share-links`, {
+        documentId,
+        expiresAt: null,
+      })
+      expect([who, created.status]).toEqual([who, status])
+      const listed = await client.get(`/api/workspaces/${ws()}/share-links`)
+      expect([who, listed.status]).toEqual([who, status === 201 ? 200 : status])
+      const linkId = status === 201 ? created.json().link.id : randomUUID()
+      const revoked = await client.delete(`/api/workspaces/${ws()}/share-links/${linkId}`)
+      expect([who, revoked.status]).toEqual([who, status === 201 ? 204 : status])
+    }
+  })
+
   it('changes of one member reach the others; private workspaces stay private', async () => {
     const editor = as(accounts.editor, ws())
     const pageId = randomUUID()

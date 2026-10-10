@@ -26,6 +26,28 @@ test('the service worker controls the app and makes it installable', async ({ si
   expect(errors.filter((id) => id !== 'in-incognito')).toEqual([])
 })
 
+test('without an account the installed app starts offline with its pages (ADR 0023)', async ({
+  page,
+  context,
+}) => {
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/w\/[0-9a-f-]+$/)
+  await newPage(page, 'Ohne Konto offline')
+  await page.keyboard.type('Bleibt da')
+  await waitForSaved(page)
+  await controlled(page)
+
+  await context.setOffline(true)
+  try {
+    await page.reload()
+    await expect(page.getByLabel('Titel')).toHaveValue('Ohne Konto offline')
+    await expect(blockInput(page, 0)).toHaveText('Bleibt da')
+    await expect(page.getByTestId('connection')).toHaveText(/Nur auf diesem Gerät/)
+  } finally {
+    await context.setOffline(false)
+  }
+})
+
 test('T-OFF-01/02/03 with the network really offline: reload works, edits survive and sync', async ({
   signedIn: page,
   context,

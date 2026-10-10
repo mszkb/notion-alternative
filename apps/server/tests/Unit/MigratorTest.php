@@ -39,6 +39,7 @@ final class MigratorTest extends TestCase
         '0014_push_hints',
         '0015_metrics',
         '0016_workspace_members',
+        '0017_share_links',
     ];
 
     /** Migrations already applied in the frozen fixture node-latest.sqlite. */

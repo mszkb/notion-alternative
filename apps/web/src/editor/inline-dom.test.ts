@@ -44,6 +44,17 @@ describe('renderInline / serializeDom', () => {
     expect(el.textContent).toBe('Weg')
   })
 
+  it('shows page links as plain text for guests', () => {
+    const el = document.createElement('div')
+    renderInline(el, `Siehe [Plan](page:${PAGE}) und **mehr**`, {
+      ...options,
+      plainPageLinks: true,
+    })
+    expect(el.innerHTML).toBe(
+      'Siehe <span class="page-link-text">Plan</span> und <strong>mehr</strong>',
+    )
+  })
+
   it('never creates elements from text that looks like HTML', () => {
     const el = element()
     renderInline(el, '<img src=x onerror=alert(1)>', options)

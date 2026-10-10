@@ -106,6 +106,9 @@ interface WriteContext {
   onDemand?: boolean
 }
 
+/** Name of the workspace in the local area without an account (ADR 0023). */
+export const LOCAL_WORKSPACE_NAME = 'Auf diesem Gerät'
+
 const CONTENT_TABLES = [
   'documents',
   'blocks',
@@ -2061,6 +2064,30 @@ export class LocalStore {
       },
     )
     await this.cachedWorkspaces()
+  }
+
+  /**
+   * The one workspace of the local area without an account (ADR 0023), created on first use with
+   * a client-side id. Only for the database `notion-alt-local`; no server knows it.
+   */
+  async ensureLocalWorkspace(name = LOCAL_WORKSPACE_NAME): Promise<CachedWorkspace> {
+    const workspace = await this.db.transaction('rw', this.db.workspaces, async () => {
+      const existing = (await this.db.workspaces.toArray()).find((w) => w.local)
+      if (existing) return existing
+      const id = newId()
+      const created: CachedWorkspace = {
+        id,
+        name,
+        ownerId: id,
+        createdAt: this.now(),
+        role: 'owner',
+        local: true,
+      }
+      await this.db.workspaces.put(created)
+      return created
+    })
+    await this.cachedWorkspaces()
+    return workspace
   }
 
   /** The server answered 404 for the workspace: access was revoked (ADR 0014). */

@@ -477,3 +477,23 @@ describe('page icon and cover (#136)', () => {
     }
   })
 })
+
+describe('local area without an account (ADR 0023)', () => {
+  it('creates its one workspace once, as owner, and keeps it across reopen', async () => {
+    const created = await store.ensureLocalWorkspace()
+    expect(created).toMatchObject({ name: 'Auf diesem Gerät', role: 'owner', local: true })
+    expect(await store.ensureLocalWorkspace()).toEqual(created)
+    expect(await store.cachedWorkspaces()).toEqual([created])
+    expect(store.isReadOnly(created.id)).toBe(false)
+
+    const page = await store.createDocument({ workspaceId: created.id, title: 'Ohne Konto' })
+    // Changes are queued as usual and wait for the takeover on login.
+    const queued = await ops()
+    expect(queued.length).toBeGreaterThan(0)
+    expect(queued.every((o) => o.workspaceId === created.id)).toBe(true)
+
+    const reopened = await LocalStore.open(db)
+    expect(await reopened.ensureLocalWorkspace()).toEqual(created)
+    expect((await reopened.getDocument(page.id))?.title).toBe('Ohne Konto')
+  })
+})

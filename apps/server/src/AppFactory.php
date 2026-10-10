@@ -22,6 +22,7 @@ use NotionAlt\Metrics\MetricsMiddleware;
 use NotionAlt\Metrics\MetricsRoutes;
 use NotionAlt\Push\PushRoutes;
 use NotionAlt\Search\SearchRoutes;
+use NotionAlt\Sharing\ShareLinkRoutes;
 use NotionAlt\Sync\SyncRoutes;
 use NotionAlt\Workspaces\MemberRoutes;
 use NotionAlt\Workspaces\WorkspaceRoutes;
@@ -75,6 +76,7 @@ final class AppFactory
             HistoryRoutes::register($api, $db);
             PushRoutes::register($api, $db, $config->push);
             ImportRoutes::register($api, $db, $config, $logger);
+            ShareLinkRoutes::register($api, $db, $config, $store);
         });
 
         return $app;

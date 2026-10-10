@@ -122,6 +122,16 @@ final class HttpTest extends TestCase
         self::assertStringNotContainsString('secret', Json::encode($line));
     }
 
+    public function testRequestLogMasksReadLinkTokens(): void
+    {
+        $token = str_repeat('Ab3_', 10) . 'xyz';
+        $this->request('GET', "/api/public/shares/{$token}/attachments/0b5c8f43-1f3e-4b8e-9d6a-2c4f7e9a1b3d");
+
+        self::assertCount(1, $this->logs);
+        self::assertSame(['method' => 'GET', 'url' => '/api/public/shares/:token/attachments/0b5c8f43-1f3e-4b8e-9d6a-2c4f7e9a1b3d'], $this->logs[0]['req']);
+        self::assertStringNotContainsString($token, Json::encode($this->logs[0]));
+    }
+
     public function testBodyParsingErrors(): void
     {
         $json = ['Content-Type' => 'application/json'];

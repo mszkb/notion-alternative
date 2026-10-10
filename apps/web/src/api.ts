@@ -2,6 +2,7 @@ import type {
   AddMemberInput,
   AttachmentUsage,
   ChangePasswordInput,
+  CreateShareLinkInput,
   CreateWorkspaceInput,
   Device,
   DocumentVersion,
@@ -13,6 +14,8 @@ import type {
   RegisterDeviceInput,
   RegisterInput,
   ServerSearchHit,
+  ShareLink,
+  SharedPage,
   SyncLogQuery,
   SyncLogResponse,
   SyncPullQuery,
@@ -152,6 +155,21 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
       ),
     removeMember: (workspaceId: string, userId: string) =>
       request<void>('DELETE', `/workspaces/${workspaceId}/members/${userId}`),
+    listShareLinks: (workspaceId: string, documentId: string) =>
+      request<{ links: ShareLink[] }>(
+        'GET',
+        `/workspaces/${workspaceId}/share-links?documentId=${encodeURIComponent(documentId)}`,
+      ),
+    createShareLink: (workspaceId: string, input: CreateShareLinkInput) =>
+      request<{ link: ShareLink; token: string }>(
+        'POST',
+        `/workspaces/${workspaceId}/share-links`,
+        input,
+      ),
+    revokeShareLink: (workspaceId: string, linkId: string) =>
+      request<void>('DELETE', `/workspaces/${workspaceId}/share-links/${linkId}`),
+    sharedPage: (token: string) =>
+      request<SharedPage>('GET', `/public/shares/${encodeURIComponent(token)}`),
   }
 }
 

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import WorkspaceLayout from './layouts/WorkspaceLayout.vue'
 import { lastWorkspaceId, openLocalStore, refreshWorkspaces, workspaces } from './local/context'
+import { LOCAL_AREA } from './local/db'
 import { connection, loadCurrentUser } from './session'
 import AccountView from './views/AccountView.vue'
 import ConflictsView from './views/ConflictsView.vue'
@@ -11,6 +12,7 @@ import LoginView from './views/LoginView.vue'
 import MembersView from './views/MembersView.vue'
 import PageView from './views/PageView.vue'
 import RejectedView from './views/RejectedView.vue'
+import SharedPageView from './views/SharedPageView.vue'
 import TagView from './views/TagView.vue'
 import TrashView from './views/TrashView.vue'
 import WorkspaceHome from './views/WorkspaceHome.vue'
@@ -22,6 +24,8 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { requiresAuth: true } },
     { path: '/login', name: 'login', component: LoginView },
+    // Read links for guests (ADR 0022): no session, no local database.
+    { path: '/share/:token', name: 'shared', component: SharedPageView, meta: { guest: true } },
     { path: '/account', name: 'account', component: AccountView, meta: { requiresAuth: true } },
     {
       path: '/w/:workspaceId',
@@ -44,16 +48,29 @@ export const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  if (to.meta.guest) return true
   let user
   try {
     user = await loadCurrentUser()
   } catch {
-    // Server unreachable and nobody signed in on this device before: only login is possible.
+    // Server unreachable, nobody signed in before and the login was asked for (after signing
+    // out): the login page offers to continue without an account.
     return to.name === 'login' ? true : { name: 'login' }
   }
-  // With an expired session the login page stays reachable to sign in again.
-  if (to.name === 'login') return user && connection.value !== 'expired' ? { name: 'home' } : true
+  const withoutAccount = connection.value === 'local'
+  // With an expired session or without an account the login page stays reachable to sign in.
+  if (to.name === 'login') {
+    return user && !withoutAccount && connection.value !== 'expired' ? { name: 'home' } : true
+  }
   if (!to.meta.requiresAuth) return true
+  if (withoutAccount) {
+    // The local area without an account (ADR 0023): one workspace, no server.
+    if (to.name === 'account') return { name: 'login' }
+    const store = await openLocalStore(LOCAL_AREA)
+    const local = await store.ensureLocalWorkspace()
+    workspaces.value = await store.cachedWorkspaces()
+    return to.name === 'home' ? { name: 'workspace', params: { workspaceId: local.id } } : true
+  }
   if (!user) return { name: 'login' }
 
   const store = await openLocalStore(user.id)

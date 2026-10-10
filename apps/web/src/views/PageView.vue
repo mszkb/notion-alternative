@@ -7,6 +7,7 @@ import {
 } from '@notion-alt/shared'
 import IconPicker from '../components/IconPicker.vue'
 import PageCover from '../components/PageCover.vue'
+import ShareLinksDialog from '../components/ShareLinksDialog.vue'
 import { sha256Hex } from '../local/store'
 import { maxFileBytes } from '../limits'
 import { formatBytes } from '../local/persistence'
@@ -194,6 +195,7 @@ const edited = computed(() =>
 )
 
 const menuOpen = ref(false)
+const shareOpen = ref(false)
 const menuRoot = ref<HTMLElement | null>(null)
 
 function closeMenuOutside(event: PointerEvent) {
@@ -286,6 +288,14 @@ async function deletePage() {
           </button>
           <div v-if="menuOpen" class="block-menu page-menu-list" @click="menuOpen = false">
             <button v-if="!readOnly" type="button" @click="addChild">Unterseite anlegen</button>
+            <button
+              v-if="!readOnly"
+              type="button"
+              data-testid="share-open"
+              @click="shareOpen = true"
+            >
+              Lese-Link teilen
+            </button>
             <RouterLink :to="{ name: 'history', params: { workspaceId, documentId } }">
               Verlauf
             </RouterLink>
@@ -300,6 +310,12 @@ async function deletePage() {
         </div>
       </div>
     </header>
+    <ShareLinksDialog
+      v-if="shareOpen"
+      :workspace-id="workspaceId"
+      :document-id="documentId"
+      @close="shareOpen = false"
+    />
 
     <div v-if="document.cover" class="page-cover-wrap">
       <PageCover :cover="document.cover" />

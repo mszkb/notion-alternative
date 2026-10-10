@@ -115,6 +115,18 @@
   },
   {
     "type": "index",
+    "name": "share_links_created_by_idx",
+    "tbl_name": "share_links",
+    "sql": "CREATE INDEX \"share_links_created_by_idx\" on \"share_links\" (\"created_by\")"
+  },
+  {
+    "type": "index",
+    "name": "share_links_workspace_id_document_id_idx",
+    "tbl_name": "share_links",
+    "sql": "CREATE INDEX \"share_links_workspace_id_document_id_idx\" on \"share_links\" (\"workspace_id\", \"document_id\")"
+  },
+  {
+    "type": "index",
     "name": "sqlite_autoindex_attachments_1",
     "tbl_name": "attachments",
     "sql": null
@@ -225,6 +237,18 @@
     "type": "index",
     "name": "sqlite_autoindex_settings_1",
     "tbl_name": "settings",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_share_links_1",
+    "tbl_name": "share_links",
+    "sql": null
+  },
+  {
+    "type": "index",
+    "name": "sqlite_autoindex_share_links_2",
+    "tbl_name": "share_links",
     "sql": null
   },
   {
@@ -418,6 +442,12 @@
     "name": "settings",
     "tbl_name": "settings",
     "sql": "CREATE TABLE \"settings\" (\"key\" text primary key, \"value\" text not null)"
+  },
+  {
+    "type": "table",
+    "name": "share_links",
+    "tbl_name": "share_links",
+    "sql": "CREATE TABLE \"share_links\" (\"id\" text primary key, \"token_hash\" text not null unique, \"workspace_id\" text not null references \"workspaces\" (\"id\") on delete cascade, \"document_id\" text not null, \"created_by\" text not null references \"users\" (\"id\") on delete cascade, \"created_at\" text not null, \"expires_at\" text)"
   },
   {
     "type": "table",

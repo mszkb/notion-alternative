@@ -93,9 +93,21 @@ Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-test
 | T-LOAD-02 | Großer lokaler Bestand im Browser: Re-Sync, Seitenliste, Suchindex, Suche | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
 | T-LOAD-03 | Große Workspaces in der App: Erstsync, Kaltstart, Seite mit 2 000 Blöcken öffnen, Tippen | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
 
+## Ohne Konto
+
+Nach [ADR 0023](../adr/0023-local-area-without-account.md): lokaler Bereich ohne Konto, Übernahme beim Login.
+
+| ID | Szenario | Erwartung | AC | Auto |
+| --- | --- | --- | --- | --- |
+| T-LOCAL-01 | Frischer Browser öffnet die App | Lokaler Workspace ohne Formular; Seite anlegen und tippen; nach Neuladen da; außer `GET /api/auth/me` beim Start keine Anfrage an den Server | – | ☑ ²⁵ |
+| T-LOCAL-02 | Kein Server erreichbar, auch als installierte App offline | Start im lokalen Bereich, Inhalte nach Neuladen da, Hinweis „Nur auf diesem Gerät“ mit „Anmelden“ | – | ☑ ²⁵ |
+| T-LOCAL-03 | Abmelden | Anmeldung erscheint, auch nach Neuladen; „Ohne Konto weiterarbeiten“ öffnet den lokalen Bereich | – | ☑ ²⁵ |
+| T-LOCAL-04 | Export ohne Konto | Markdown, JSON und ZIP aus dem lokalen Bereich | – | ☑ ²⁵ |
+| T-LOCAL-05 | Login mit lokalen Seiten (neues Konto, bestehendes Konto mit Seiten, Abbruch mittendrin) | Übernahme ohne Verlust und ohne Doppel, Dialog „Wohin mit deinen Seiten?“ nur bei vorhandenen Seiten | – | ☐ (#182) |
+
 ## Teilen & Rechte
 
-Nach [ADR 0014](../adr/0014-sharing-and-permissions.md): Freigaben pro Workspace mit Rollen.
+Nach [ADR 0014](../adr/0014-sharing-and-permissions.md): Freigaben pro Workspace mit Rollen. Lese-Links für Externe nach [ADR 0022](../adr/0022-read-links.md).
 
 | ID | Szenario | Erwartung | AC | Auto |
 | --- | --- | --- | --- | --- |
@@ -104,6 +116,9 @@ Nach [ADR 0014](../adr/0014-sharing-and-permissions.md): Freigaben pro Workspace
 | T-SHARE-03 | Mitglied wird entfernt oder verlässt den Workspace | Server liefert nichts mehr (`404`), keine Push-Hinweise; das Gerät behält den Workspace schreibgeschützt („Zugriff entzogen“) | – | ☑ ²³ |
 | T-SHARE-04 | Ein Mitglied ändert eine Seite | Änderung kommt per Pull bei den anderen an; Push-Hinweis ohne Inhalt an deren Geräte | AC-07 | ☑ ²² |
 | T-SHARE-05 | Ersteller des Workspace | bleibt `owner`, lässt sich weder entfernen noch herabstufen; Anhänge zählen zu seinem Kontingent | – | ☑ ²² |
+| T-SHARE-06 | Gast öffnet einen Lese-Link ([ADR 0022](../adr/0022-read-links.md)) | Sieht nur diese Seite, schreibgeschützt, ohne Konto; keine Workspace-, Block- oder Konto-IDs, keine E-Mail-Adressen; `no-store`, `noindex` | – | ☑ ²⁴ |
+| T-SHARE-07 | Link widerrufen, abgelaufen, Seite gelöscht, Ersteller herabgestuft oder entfernt | Jeweils dasselbe `404`; wiederhergestellte Seite bzw. wieder erteiltes Recht macht den Link wieder gültig; Fehlversuche pro Adresse begrenzt (`429`) | – | ☑ ²⁴ |
+| T-SHARE-08 | Bilder einer geteilten Seite | Nur Rasterbilder aus Bildblöcken oder Titelbild dieser Seite; Dateien, ungenutzte Bilder und Bilder anderer Seiten `404` | – | ☑ ²⁴ |
 
 ## Telemetrie
 
@@ -150,3 +165,7 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ²² `packages/contract-tests/test/sharing.test.ts` (Mitglieder-API, Matrix aller Endpunkte, gesenkte Rolle, Entfernen), `test/push.test.ts` (Hinweise an Geräte aller Mitglieder, nicht mehr nach dem Entfernen).
 
 ²³ Server: `packages/contract-tests/test/sharing.test.ts`. Client: `apps/web/src/local/sharing.test.ts` (Lesemodus im Store, letzte Rolle offline, Zugriff entzogen beim Abgleich und bei `404`, Warteschlange entzogener Workspaces bleibt lokal, Kopie mit neuen IDs, Verwerfen nur auf Wunsch). E2E: `apps/web/e2e/sharing.spec.ts` (Lesen → Bearbeiten → Entfernen mit zwei Konten).
+
+²⁴ Server: `packages/contract-tests/test/share-links.test.ts`, Link-Verwaltung in der Rollenmatrix von `test/sharing.test.ts`. Client: `apps/web/e2e/share-links.spec.ts` (Link anlegen, als Gast ohne Konto öffnen, widerrufen), `apps/web/src/editor/inline-dom.test.ts` (Seitenlinks als Text).
+
+²⁵ `apps/web/e2e/without-account.spec.ts`, Offline-Start der installierten App in `e2e/pwa-offline.spec.ts`; Startmodus in `src/session.test.ts`, lokaler Workspace in `src/local/store.test.ts`.
