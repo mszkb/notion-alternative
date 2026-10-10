@@ -25,3 +25,4 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0017](0017-content-on-demand.md) | Seiteninhalte bei Bedarf laden | Accepted |
 | [0018](0018-php-backend.md) | PHP-Backend mit Slim 4 für Shared Hosting | Accepted |
 | [0019](0019-block-types.md) | Blocktypen To-do, Toggle, Hinweis, Trenner | Accepted |
+| [0022](0022-read-links.md) | Lese-Links für Externe | Proposed |
