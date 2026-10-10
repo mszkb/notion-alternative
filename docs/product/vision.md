@@ -9,6 +9,17 @@ Notion nervt mit seinem „always on“. Die Offline-Funktion existiert, ist abe
 - Eine lokale, exportierbare und self-hostbare Wissens- und Dokumentenplattform mit moderner Web-App und installierbarer PWA.
 - Daten bleiben auf dem Gerät nutzbar, wenn der eigene Server oder das Internet ausfällt.
 - Der MVP fokussiert auf Dokumente, Seiten, Suche, Tags, Anhänge und **zuverlässige Synchronisierung** – nicht auf vollständige Notion-Feature-Parität.
+- **Super einfach, minimales Setup.** Die App soll sich so einfach einrichten und benutzen lassen wie möglich (siehe [Einfachheit und minimales Setup](#einfachheit-und-minimales-setup)).
+
+## Einfachheit und minimales Setup
+
+Die App wird so gebaut, dass sie **super einfach** ist – beim Einrichten, im Betrieb und in der Bedienung. Wer die App ausprobieren will, soll nicht erst eine Anleitung durcharbeiten müssen.
+
+- **Minimalster Setup.** Hochladen bzw. starten, Adresse öffnen, Konto anlegen – fertig. Keine Pflicht-Konfiguration, keine zusätzlichen Dienste (keine externe Datenbank, kein Redis, kein eigener Mailserver), keine Kommandozeile für den Normalfall.
+- **Sinnvolle Voreinstellungen.** Alles, was eingestellt werden kann, funktioniert ohne Einstellung. Optionen sind die Ausnahme und nie Voraussetzung für die Grundfunktionen.
+- **Wenige bewegliche Teile.** Eine SQLite-Datei, Dateien im Volume, ein Release-ZIP für Webhosting oder zwei Container mit Docker Compose. Jede neue Abhängigkeit oder jeder neue Dienst muss diesen Aufwand rechtfertigen.
+- **Updates, Backup und Restore ohne Fachwissen.** Ein Update ist das Austauschen von Dateien bzw. Images; Migrationen laufen von selbst.
+- **Im Zweifel weglassen.** Ein Feature, das den Setup oder die Bedienung spürbar komplizierter macht, wird vereinfacht, verschoben oder nicht gebaut.
 
 ## Zielgruppen
 
@@ -60,6 +71,7 @@ Sharing, Kommentare und Berechtigungen kommen erst in Phase 8. Bis dahin ist die
 | Export first | Markdown, JSON und ZIP müssen verlässlich funktionieren. |
 | Push = Hinweis | Push ist nur ein Sync-Hinweis und darf keine Datenintegrität voraussetzen. |
 | Keine Feature-Sperren | Self-hosted Einzelanwender erhalten die Kernfunktionen ohne künstliche Sperren. |
+| Einfachheit | Minimales Setup ohne Pflicht-Konfiguration; sinnvolle Voreinstellungen statt Optionen. |
 | Transparente Konflikte | Konflikte werden sichtbar und nachvollziehbar behandelt, nicht still überschrieben. |
 
 ## MVP-Funktionsumfang
