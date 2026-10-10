@@ -95,7 +95,7 @@ Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-test
 
 ## Teilen & Rechte
 
-Nach [ADR 0014](../adr/0014-sharing-and-permissions.md): Freigaben pro Workspace mit Rollen.
+Nach [ADR 0014](../adr/0014-sharing-and-permissions.md): Freigaben pro Workspace mit Rollen. Lese-Links für Externe nach [ADR 0022](../adr/0022-read-links.md).
 
 | ID | Szenario | Erwartung | AC | Auto |
 | --- | --- | --- | --- | --- |
@@ -104,6 +104,9 @@ Nach [ADR 0014](../adr/0014-sharing-and-permissions.md): Freigaben pro Workspace
 | T-SHARE-03 | Mitglied wird entfernt oder verlässt den Workspace | Server liefert nichts mehr (`404`), keine Push-Hinweise; das Gerät behält den Workspace schreibgeschützt („Zugriff entzogen“) | – | ☑ ²³ |
 | T-SHARE-04 | Ein Mitglied ändert eine Seite | Änderung kommt per Pull bei den anderen an; Push-Hinweis ohne Inhalt an deren Geräte | AC-07 | ☑ ²² |
 | T-SHARE-05 | Ersteller des Workspace | bleibt `owner`, lässt sich weder entfernen noch herabstufen; Anhänge zählen zu seinem Kontingent | – | ☑ ²² |
+| T-SHARE-06 | Gast öffnet einen Lese-Link ([ADR 0022](../adr/0022-read-links.md)) | Sieht nur diese Seite, schreibgeschützt, ohne Konto; keine Workspace-, Block- oder Konto-IDs, keine E-Mail-Adressen; `no-store`, `noindex` | – | ☑ ²⁴ |
+| T-SHARE-07 | Link widerrufen, abgelaufen, Seite gelöscht, Ersteller herabgestuft oder entfernt | Jeweils dasselbe `404`; wiederhergestellte Seite bzw. wieder erteiltes Recht macht den Link wieder gültig; Fehlversuche pro Adresse begrenzt (`429`) | – | ☑ ²⁴ |
+| T-SHARE-08 | Bilder einer geteilten Seite | Nur Rasterbilder aus Bildblöcken oder Titelbild dieser Seite; Dateien, ungenutzte Bilder und Bilder anderer Seiten `404` | – | ☑ ²⁴ |
 
 ## Telemetrie
 
@@ -150,3 +153,5 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ²² `packages/contract-tests/test/sharing.test.ts` (Mitglieder-API, Matrix aller Endpunkte, gesenkte Rolle, Entfernen), `test/push.test.ts` (Hinweise an Geräte aller Mitglieder, nicht mehr nach dem Entfernen).
 
 ²³ Server: `packages/contract-tests/test/sharing.test.ts`. Client: `apps/web/src/local/sharing.test.ts` (Lesemodus im Store, letzte Rolle offline, Zugriff entzogen beim Abgleich und bei `404`, Warteschlange entzogener Workspaces bleibt lokal, Kopie mit neuen IDs, Verwerfen nur auf Wunsch). E2E: `apps/web/e2e/sharing.spec.ts` (Lesen → Bearbeiten → Entfernen mit zwei Konten).
+
+²⁴ Server: `packages/contract-tests/test/share-links.test.ts`, Link-Verwaltung in der Rollenmatrix von `test/sharing.test.ts`. Client: `apps/web/e2e/share-links.spec.ts` (Link anlegen, als Gast ohne Konto öffnen, widerrufen), `apps/web/src/editor/inline-dom.test.ts` (Seitenlinks als Text).

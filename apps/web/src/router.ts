@@ -11,6 +11,7 @@ import LoginView from './views/LoginView.vue'
 import MembersView from './views/MembersView.vue'
 import PageView from './views/PageView.vue'
 import RejectedView from './views/RejectedView.vue'
+import SharedPageView from './views/SharedPageView.vue'
 import TagView from './views/TagView.vue'
 import TrashView from './views/TrashView.vue'
 import WorkspaceHome from './views/WorkspaceHome.vue'
@@ -22,6 +23,8 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { requiresAuth: true } },
     { path: '/login', name: 'login', component: LoginView },
+    // Read links for guests (ADR 0022): no session, no local database.
+    { path: '/share/:token', name: 'shared', component: SharedPageView, meta: { guest: true } },
     { path: '/account', name: 'account', component: AccountView, meta: { requiresAuth: true } },
     {
       path: '/w/:workspaceId',
@@ -44,6 +47,7 @@ export const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  if (to.meta.guest) return true
   let user
   try {
     user = await loadCurrentUser()

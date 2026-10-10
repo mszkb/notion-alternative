@@ -5,9 +5,10 @@ Options -Indexes -MultiViews
 DirectoryIndex index.html
 
 <IfModule mod_headers.c>
-    # Attachment content brings its own X-Content-Type-Options and sandbox CSP (ADR 0012). Matched
-    # on the original request line: the API's rewrite turns the URI into index.php.
-    <If "%{THE_REQUEST} !~ m#^[A-Z]+ /api/attachments/[^/?]+/content[? ]#">
+    # Attachment content brings its own X-Content-Type-Options and sandbox CSP (ADR 0012), also
+    # images of read links (ADR 0022). Matched on the original request line: the API's rewrite
+    # turns the URI into index.php.
+    <If "%{THE_REQUEST} !~ m#^[A-Z]+ /api/(attachments/[^/?]+/content|public/shares/[^/?]+/attachments/[^/?]+)[? ]#">
         Header always set X-Content-Type-Options "nosniff"
         Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     </If>

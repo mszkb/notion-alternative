@@ -1,6 +1,6 @@
 # Workspaces teilen
 
-Ein Workspace lässt sich mit anderen Konten auf demselben Server teilen ([ADR 0014](../adr/0014-sharing-and-permissions.md)). Wer Mitglied ist, sieht alle Seiten des Workspace. Einzelne Seiten lassen sich nicht teilen: Dafür einen eigenen Workspace anlegen (Startseite → „Neuer Workspace“) und die Seiten dorthin übernehmen.
+Ein Workspace lässt sich mit anderen Konten auf demselben Server teilen ([ADR 0014](../adr/0014-sharing-and-permissions.md)). Wer Mitglied ist, sieht alle Seiten des Workspace. Einzelne Seiten lassen sich nicht mit Konten teilen: Dafür einen eigenen Workspace anlegen (Startseite → „Neuer Workspace“) und die Seiten dorthin übernehmen. Wer nur lesen soll und kein Konto hat, bekommt einen [Lese-Link](#lese-links-für-personen-ohne-konto).
 
 ## Mitglieder einladen
 
@@ -36,3 +36,22 @@ Hat jemand offline geschrieben, während die eigene Rolle auf „Lesen“ gesenk
 
 1. **In eigenen Workspace kopieren** legt eine Kopie des Workspace mit allen Änderungen auf diesem Gerät als eigenen Workspace an.
 2. Danach **Abgelehnte Änderungen verwerfen**: Im geteilten Workspace gilt wieder der Stand vom Server.
+
+## Lese-Links für Personen ohne Konto
+
+Mit einem Lese-Link kann jemand eine einzelne Seite lesen, ohne ein Konto auf dem Server zu haben ([ADR 0022](../adr/0022-read-links.md)). Er sieht nur diese Seite: keine anderen Seiten, keine Mitglieder, keinen Verlauf.
+
+1. Seite öffnen, oben rechts **⋯** → **Lese-Link teilen**.
+2. Gültigkeit wählen (1 Tag bis 1 Jahr oder unbefristet) und **Link erstellen**.
+3. Den Link **kopieren** und weitergeben.
+
+Der Link wird **nur einmal angezeigt**: Der Server speichert ihn nicht lesbar, damit auch ein Backup keine gültigen Links verrät. Link verloren? Einen neuen erstellen und den alten widerrufen.
+
+Gut zu wissen:
+
+- Lese-Links anlegen und widerrufen dürfen alle mit der Rolle **Bearbeiten** oder **Besitzer**. Dafür braucht es eine Verbindung zum Server, und die Seite muss schon synchronisiert sein.
+- Der Link zeigt immer den aktuellen Stand der Seite auf dem Server.
+- Bilder der Seite und ihr Titelbild sind sichtbar. Dateianhänge zeigen nur ihren Namen, herunterladen können sie nur Mitglieder. Links auf andere Seiten erscheinen als normaler Text.
+- Der Link gilt nicht mehr, sobald er **widerrufen** wird, abläuft, die Seite gelöscht wird (auch im Papierkorb) oder die Person, die ihn erstellt hat, nicht mehr bearbeiten darf oder den Workspace verlässt. Der Gast sieht dann „Link nicht verfügbar“.
+- Wer den Link hat, kann die Seite lesen. Nur an Personen schicken, die sie sehen dürfen. Suchmaschinen werden gebeten, solche Seiten nicht aufzunehmen (`noindex`).
+- Gäste brauchen eine Internetverbindung; offline und Export gibt es nur für Mitglieder.
