@@ -224,7 +224,7 @@ async function recheck() {
       void refreshAttachmentUsage(workspaceId.value)
     }
   } catch {
-    connection.value = 'offline'
+    if (connection.value !== 'local') connection.value = 'offline'
   }
 }
 
@@ -266,7 +266,8 @@ const syncLabel = computed(() => {
 })
 
 function markOffline() {
-  connection.value = 'offline'
+  // Without an account there is no server to lose.
+  if (connection.value !== 'local') connection.value = 'offline'
 }
 
 const connectionLabel = computed(
@@ -275,6 +276,7 @@ const connectionLabel = computed(
       online: 'Server verbunden',
       offline: 'Offline – lokale Daten',
       expired: 'Sitzung abgelaufen',
+      local: 'Nur auf diesem Gerät',
     })[connection.value],
 )
 
@@ -525,7 +527,12 @@ const shellStyle = computed(() => ({
       <footer class="sidebar-footer">
         <p class="status" :class="`status-${connection}`" data-testid="connection">
           <span class="dot" aria-hidden="true"></span>{{ connectionLabel }}
-          <RouterLink v-if="connection === 'expired'" :to="{ name: 'login' }">Anmelden</RouterLink>
+          <RouterLink
+            v-if="connection === 'expired' || connection === 'local'"
+            :to="{ name: 'login' }"
+            data-testid="sign-in"
+            >Anmelden</RouterLink
+          >
         </p>
         <p class="status" :class="`status-${persistence}`" data-testid="persistence">
           {{ persistenceLabel }}
@@ -578,7 +585,9 @@ const shellStyle = computed(() => ({
           </button>
         </p>
         <p class="muted">
-          {{ currentUser?.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
+          <template v-if="currentUser">
+            {{ currentUser.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
+          </template>
           <RouterLink :to="{ name: 'members', params: { workspaceId } }">Mitglieder</RouterLink> ·
           <RouterLink :to="{ name: 'trash', params: { workspaceId } }">Papierkorb</RouterLink> ·
           <RouterLink :to="{ name: 'export', params: { workspaceId } }">Export & Import</RouterLink>

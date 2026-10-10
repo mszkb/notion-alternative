@@ -58,6 +58,8 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Backlinks & Seitenverlinkung
 - [x] Lokale Volltextsuche
 - [x] App startet ohne Server aus lokalen Daten (T-OFF-01, T-OFF-02 automatisiert)
+- [x] Ohne Konto loslegen: lokaler Bereich ohne Login, „Ohne Konto weiterarbeiten“ nach dem Abmelden ([ADR 0023](docs/adr/0023-local-area-without-account.md), [#181](https://github.com/mszkb/notion-alternative/issues/181), [Anleitung](docs/user/without-account.md))
+- [ ] Übernahme der lokalen Seiten beim Login und Import ohne Konto ([#182](https://github.com/mszkb/notion-alternative/issues/182), [#183](https://github.com/mszkb/notion-alternative/issues/183))
 
 - [x] Blockübergreifendes Undo/Redo und Markieren ganzer Blöcke (Kopieren als Markdown, Löschen) – [ADR 0008](docs/adr/0008-block-editor.md)
 

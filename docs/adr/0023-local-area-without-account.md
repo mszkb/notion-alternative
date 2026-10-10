@@ -58,7 +58,8 @@ Prinzipien, die betroffen sind:
 
 - Beim ersten Öffnen ohne zwischengespeicherten Benutzer öffnet der Router `notion-alt-local` und den lokalen Workspace. Er ist eine leere Seite bzw. eine Willkommensseite, kein Login-Bildschirm.
 - Die Geräte-ID entsteht wie heute in `meta` und wird erst nach dem Login mit `POST /api/devices` registriert (gleiche ID).
-- Kein Netzwerkverkehr zum Server, solange niemand anmelden will. Erst der Dialog „Anmelden“ fragt `GET /api/auth/status`.
+- Kein Netzwerkverkehr zum Server, solange niemand anmelden will. Ausnahme: Beim Start fragt die App einmal `GET /api/auth/me`, ob schon eine Sitzung besteht (z. B. wenn der zwischengespeicherte Benutzer gelöscht wurde). Erst der Dialog „Anmelden“ fragt `GET /api/auth/status`.
+- Nach dem Abmelden merkt sich die App die Anmeldung als Startseite (`notion-alt.start = login` im `localStorage`); „Ohne Konto weiterarbeiten“ setzt das zurück.
 - Sync, Geräte, Mitglieder, Lese-Links, serverseitige Suche und Push zeigen „Anmelden, um … zu nutzen“ statt eines Fehlers.
 - Anhänge liegen nur lokal (IndexedDB, wie offline angelegte Anhänge heute) und werden nach der Übernahme vom normalen Sync hochgeladen.
 

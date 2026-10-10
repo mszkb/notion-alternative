@@ -85,6 +85,8 @@ export type OfflineMode = 'all' | 'onDemand'
  */
 export interface CachedWorkspace extends Workspace {
   revoked?: boolean
+  /** The workspace of the local area without an account; unknown to any server (ADR 0023). */
+  local?: boolean
 }
 
 /** Local database of one user account (ADR 0009). */
@@ -154,3 +156,6 @@ export class LocalDb extends Dexie {
 export function localDbName(userId: string): string {
   return `notion-alt-${userId}`
 }
+
+/** Stands in for the user id of the local area without an account: `notion-alt-local` (ADR 0023). */
+export const LOCAL_AREA = 'local'

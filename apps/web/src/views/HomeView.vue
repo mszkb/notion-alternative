@@ -9,7 +9,7 @@ import {
   requireStore,
   workspaces,
 } from '../local/context'
-import { connection, currentUser, setCurrentUser } from '../session'
+import { connection, currentUser, signedOut } from '../session'
 import { ROLE_LABELS } from '../sharing'
 import { requestSync } from '../sync/engine'
 
@@ -90,7 +90,7 @@ async function logout() {
   // is removed. Deleting it is an explicit choice for shared devices.
   if (wipeLocal.value && userId) await deleteLocalData(userId)
   else closeLocalStore()
-  setCurrentUser(null)
+  signedOut()
   await router.push({ name: 'login' })
 }
 </script>
