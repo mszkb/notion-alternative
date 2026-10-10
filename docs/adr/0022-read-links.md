@@ -80,6 +80,7 @@ Empfehlung (zur Rücksprache): **Einzelne Seite, SPA im Gastmodus, Token nur als
 
 - Öffentliche Antworten tragen `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow` und `Referrer-Policy: no-referrer`. Die Gast-Ansicht setzt zusätzlich `<meta name="robots" content="noindex">`.
 - Rate-Limit: Fehlgeschlagene Abrufe zählen pro Client-Adresse, mit Grenze und Fenster der Login-Fehlversuche (`LOGIN_MAX_FAILURES_PER_IP`, `AttemptLimiter`, Tabelle `auth_attempts`). Bei 256 Bit Zufall ist Raten aussichtslos, das Limit hält nur Lasten von Scannern fern.
+- Das Request-Log ersetzt den Token durch `:token`: Wer das Log lesen kann, soll die Seiten nicht öffnen können.
 - Anhänge kommen mit denselben Headern wie für Mitglieder (`nosniff`, `sandbox`-CSP).
 - Die Gast-Ansicht öffnet keine lokale Datenbank, registriert keinen Service Worker und sendet keine Sitzungsanfrage.
 
