@@ -620,6 +620,15 @@ const shellStyle = computed(() => ({
           >Vom Gerät entfernen</RouterLink
         >
       </p>
+      <p
+        v-else-if="workspace?.local && readOnly"
+        class="notice"
+        role="status"
+        data-testid="taken-over"
+      >
+        <strong>Schon in deinem Konto.</strong> Diese Seiten wurden beim Anmelden übernommen. Bis
+        der Server alles bestätigt hat, bleiben sie hier als Sicherung zum Lesen und Exportieren.
+      </p>
       <p v-else-if="workspace && readOnly" class="notice" role="status" data-testid="read-only">
         <strong>Nur lesen.</strong> Deine Rolle in diesem Workspace: {{ ROLE_LABELS[role] }}.
         Änderungen kann ein Besitzer freigeben.
