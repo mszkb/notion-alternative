@@ -7,6 +7,7 @@ namespace NotionAlt\Search;
 use NotionAlt\Database\Sql;
 use NotionAlt\Database\Transaction;
 use NotionAlt\Text\InlineText;
+use NotionAlt\Workspaces\Workspaces;
 
 /**
  * Server-side full-text search (FTS5) over the title and
@@ -164,9 +165,7 @@ final class SearchIndex
         string $input,
         int $limit = self::LIMIT,
     ): ?array {
-        // Same restriction as findWorkspaceForUser: only workspaces the user owns.
-        $owned = Sql::run($db, 'select 1 from "workspaces" where "id" = ? and "owner_id" = ?', [$workspaceId, $userId])->fetchColumn();
-        if ($owned === false) {
+        if (Workspaces::findForUser($db, $workspaceId, $userId) === null) {
             return null;
         }
         self::reindexMarked($db);

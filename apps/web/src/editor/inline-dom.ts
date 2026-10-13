@@ -13,6 +13,8 @@ export type PageResolver = (documentId: string) => { title: string } | undefined
 export interface RenderOptions {
   resolvePage: PageResolver
   pageHref: (documentId: string) => string
+  /** Page links as plain text without a target (read links for guests, ADR 0022). */
+  plainPageLinks?: boolean
 }
 
 /**
@@ -51,6 +53,12 @@ function nodesToDom(doc: Document, nodes: InlineNode[], options: RenderOptions):
         return el
       }
       case 'page': {
+        if (options.plainPageLinks) {
+          const span = doc.createElement('span')
+          span.className = 'page-link-text'
+          span.textContent = node.title || 'Seite'
+          return span
+        }
         const el = doc.createElement('a')
         const target = options.resolvePage(node.documentId)
         el.className = target ? 'page-link' : 'page-link broken'

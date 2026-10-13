@@ -8,7 +8,7 @@ import { displayTitle, useWorkspace } from '../composables/workspace'
 import { diffBlocks } from '../editor/version-diff'
 import { connection } from '../session'
 
-const { store, workspaceId, documentsById } = useWorkspace()
+const { store, workspaceId, documentsById, readOnly } = useWorkspace()
 const route = useRoute()
 const router = useRouter()
 const documentId = String(route.params.documentId)
@@ -136,7 +136,7 @@ const titleChanged = computed(
               : `Unterschiede zum aktuellen Stand: ${changedCount} Block${changedCount === 1 ? '' : 'e'}${titleChanged ? ', Titel' : ''}.`
           }}
         </p>
-        <p v-if="changedCount > 0 || titleChanged">
+        <p v-if="!readOnly && (changedCount > 0 || titleChanged)">
           <button type="button" @click="restoreVersion">Diese Version wiederherstellen</button>
         </p>
         <ul class="diff">
@@ -154,7 +154,7 @@ const titleChanged = computed(
             <ins v-else-if="entry.status === 'added'">{{ entry.after }}</ins>
             <span v-else>{{ entry.before }}</span>
             <button
-              v-if="entry.status === 'changed' || entry.status === 'removed'"
+              v-if="!readOnly && (entry.status === 'changed' || entry.status === 'removed')"
               type="button"
               class="link take"
               @click="takeBlock(entry.id)"

@@ -5,7 +5,7 @@ import { useLiveQuery } from '../composables/live-query'
 import { useWorkspace } from '../composables/workspace'
 
 const props = defineProps<{ documentId: string }>()
-const { store, workspaceId } = useWorkspace()
+const { store, workspaceId, readOnly } = useWorkspace()
 
 const tags = useLiveQuery(
   () => store.tagsForDocument(props.documentId),
@@ -36,6 +36,7 @@ async function add() {
         >#{{ tag.name }}</RouterLink
       >
       <button
+        v-if="!readOnly"
         type="button"
         class="icon"
         :aria-label="`Tag ${tag.name} entfernen`"
@@ -44,7 +45,7 @@ async function add() {
         ×
       </button>
     </span>
-    <form class="tag-form" @submit.prevent="add">
+    <form v-if="!readOnly" class="tag-form" @submit.prevent="add">
       <input
         v-model="name"
         :list="listId"

@@ -9,7 +9,8 @@ import {
   requireStore,
   workspaces,
 } from '../local/context'
-import { connection, currentUser, setCurrentUser } from '../session'
+import { connection, currentUser, signedOut } from '../session'
+import { ROLE_LABELS } from '../sharing'
 import { requestSync } from '../sync/engine'
 
 const router = useRouter()
@@ -89,7 +90,7 @@ async function logout() {
   // is removed. Deleting it is an explicit choice for shared devices.
   if (wipeLocal.value && userId) await deleteLocalData(userId)
   else closeLocalStore()
-  setCurrentUser(null)
+  signedOut()
   await router.push({ name: 'login' })
 }
 </script>
@@ -109,6 +110,16 @@ async function logout() {
         <RouterLink :to="{ name: 'workspace', params: { workspaceId: workspace.id } }">
           {{ workspace.name }}
         </RouterLink>
+        <small v-if="workspace.revoked" class="muted" data-testid="workspace-revoked">
+          Zugriff entzogen
+        </small>
+        <small
+          v-else-if="workspace.role && workspace.ownerId !== currentUser?.id"
+          class="muted"
+          data-testid="workspace-shared"
+        >
+          geteilt · {{ ROLE_LABELS[workspace.role] }}
+        </small>
       </li>
     </ul>
     <p v-if="workspaces.length === 0" class="muted">

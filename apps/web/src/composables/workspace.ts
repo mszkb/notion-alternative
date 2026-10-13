@@ -1,4 +1,4 @@
-import type { Document } from '@notion-alt/shared'
+import type { Document, WorkspaceRole } from '@notion-alt/shared'
 import { inject, type InjectionKey, type Ref } from 'vue'
 import type { LocalStore } from '../local/store'
 
@@ -14,6 +14,10 @@ export interface WorkspaceContext {
   activeDocumentId: Readonly<Ref<string | null>>
   /** Link to a page of this workspace, without resolving a route per tree node (#102). */
   pageHref: (documentId: string) => string
+  /** The user's role; the last known one offline (ADR 0014). */
+  role: Readonly<Ref<WorkspaceRole>>
+  /** No changes possible here: role below `editor` or access revoked. */
+  readOnly: Readonly<Ref<boolean>>
 }
 
 /** Shared empty child list: a leaf's computed stays the same value across updates. */

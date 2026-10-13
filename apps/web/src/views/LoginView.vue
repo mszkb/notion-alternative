@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { PASSWORD_MIN_LENGTH } from '@notion-alt/shared'
 import { ApiError, api } from '../api'
-import { setCurrentUser } from '../session'
+import { continueWithoutAccount, setCurrentUser } from '../session'
 
 const router = useRouter()
 const mode = ref<'login' | 'register'>('login')
@@ -12,6 +12,12 @@ const email = ref('')
 const password = ref('')
 const error = ref<string | null>(null)
 const busy = ref(false)
+
+/** Works on this device only; signing in later takes the pages along (ADR 0023). */
+async function withoutAccount() {
+  continueWithoutAccount()
+  await router.push({ name: 'home' })
+}
 
 onMounted(async () => {
   try {
@@ -72,6 +78,13 @@ async function submit() {
       <button type="button" class="link" @click="mode = mode === 'login' ? 'register' : 'login'">
         {{ mode === 'login' ? 'Neues Konto erstellen' : 'Bereits registriert? Anmelden' }}
       </button>
+    </p>
+    <p class="switch">
+      <button type="button" class="link" data-testid="without-account" @click="withoutAccount">
+        Ohne Konto weiterarbeiten
+      </button>
+      <br />
+      <small class="muted">Seiten bleiben auf diesem Gerät; anmelden kannst du dich später.</small>
     </p>
   </main>
 </template>

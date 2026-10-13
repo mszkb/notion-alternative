@@ -1,11 +1,10 @@
-import type { Workspace } from '@notion-alt/shared'
 import { Dexie } from 'dexie'
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, watch } from 'vue'
 import { api } from '../api'
 import { deviceStatus, registerDevice } from '../device'
 import { connection } from '../session'
-import { stopSync } from '../sync/engine'
-import { LocalDb, localDbName } from './db'
+import { stopSync, workspaceAccessChanged } from '../sync/engine'
+import { type CachedWorkspace, LocalDb, localDbName } from './db'
 import { ensurePersistentStorage, type PersistenceStatus } from './persistence'
 import { WorkspaceSearch } from './search'
 import { LocalStore } from './store'
@@ -13,7 +12,13 @@ import { LocalStore } from './store'
 /** App-wide handle to the signed-in user's local database. */
 export const localStore = shallowRef<LocalStore | null>(null)
 export const persistence = ref<PersistenceStatus | 'unknown'>('unknown')
-export const workspaces = ref<Workspace[]>([])
+export const workspaces = ref<CachedWorkspace[]>([])
+
+// The sync found a workspace revoked (ADR 0014): show it read-only right away.
+watch(workspaceAccessChanged, async () => {
+  const store = localStore.value
+  if (store) workspaces.value = await store.cachedWorkspaces()
+})
 
 let openUserId: string | null = null
 let opening: Promise<LocalStore> | null = null
@@ -83,7 +88,7 @@ export async function requestPersistence(): Promise<void> {
  * Online refresh: registers this device (idempotent, also after an offline start) and refreshes
  * the workspace cache; keeps the cached list when offline.
  */
-export async function refreshWorkspaces(store: LocalStore): Promise<Workspace[]> {
+export async function refreshWorkspaces(store: LocalStore): Promise<CachedWorkspace[]> {
   if (connection.value === 'online') {
     await registerDevice(store)
     try {

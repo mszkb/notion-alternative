@@ -42,6 +42,11 @@ export async function pushQueue(
     const batch: Operation[] = []
     let bytes = 0
     for (const queued of candidates) {
+      // Access revoked (ADR 0014): the server would refuse it; it stays queued and visible.
+      if (store.isRevoked(queued.workspaceId)) {
+        afterSeq = queued.seq!
+        continue
+      }
       const op = toWire(queued)
       const size = encoder.encode(JSON.stringify(op)).length + 1
       if (batch.length > 0 && bytes + size > limits.maxBytes) break
@@ -49,6 +54,7 @@ export async function pushQueue(
       bytes += size
       afterSeq = queued.seq!
     }
+    if (batch.length === 0) continue
     const { results } = await send({ operations: batch })
     await store.acknowledge(results)
     for (const result of results) {

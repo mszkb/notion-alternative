@@ -93,7 +93,7 @@ final class AttachmentRoutes
     {
         $id = self::id($args);
         $db = ($this->db)();
-        $row = $this->findOwn($db, $id, AuthContext::of($request)->userId());
+        $row = $this->findOwn($db, $id, AuthContext::of($request)->userId(), 'editor');
         if ($row['deleted_at'] !== null) {
             throw new HttpError(410, 'deleted', 'Attachment was deleted');
         }
@@ -160,21 +160,20 @@ final class AttachmentRoutes
     }
 
     /**
-     * 404 for foreign attachments too: never reveal they exist.
+     * The attachment if the user is a member of its workspace with at least `$minimum`. 404 for
+     * foreign attachments too: never reveal they exist; 403 for members with a lower role.
      *
      * @return array<string, mixed>
      */
-    private function findOwn(\PDO $db, string $id, string $userId): array
+    private function findOwn(\PDO $db, string $id, string $userId, string $minimum = 'reader'): array
     {
-        $rows = Sql::rows(
-            $db,
-            'select attachments.* from attachments
-             inner join workspaces on workspaces.id = attachments.workspace_id
-             where attachments.id = ? and workspaces.owner_id = ?',
-            [$id, $userId],
-        );
-        if ($rows === []) {
+        $rows = Sql::rows($db, 'select * from attachments where id = ?', [$id]);
+        $member = $rows === [] ? null : Workspaces::findWithRole($db, Row::string($rows[0], 'workspace_id'), $userId);
+        if ($member === null) {
             throw new HttpError(404, 'not_found', 'Attachment not found');
+        }
+        if (!Workspaces::atLeast($member['role'], $minimum)) {
+            throw new HttpError(403, 'forbidden', 'Your role in this workspace does not allow changes');
         }
 
         return $rows[0];

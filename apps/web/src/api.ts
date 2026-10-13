@@ -1,6 +1,8 @@
 import type {
+  AddMemberInput,
   AttachmentUsage,
   ChangePasswordInput,
+  CreateShareLinkInput,
   CreateWorkspaceInput,
   Device,
   DocumentVersion,
@@ -12,6 +14,8 @@ import type {
   RegisterDeviceInput,
   RegisterInput,
   ServerSearchHit,
+  ShareLink,
+  SharedPage,
   SyncLogQuery,
   SyncLogResponse,
   SyncPullQuery,
@@ -23,6 +27,8 @@ import type {
   SyncSnapshotResponse,
   User,
   Workspace,
+  WorkspaceMember,
+  WorkspaceRole,
 } from '@notion-alt/shared'
 import { SNAPSHOT_PAGE_SIZE } from '@notion-alt/shared'
 
@@ -137,6 +143,33 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
     listWorkspaces: () => request<{ workspaces: Workspace[] }>('GET', '/workspaces'),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<{ workspace: Workspace }>('POST', '/workspaces', input),
+    listMembers: (workspaceId: string) =>
+      request<{ members: WorkspaceMember[] }>('GET', `/workspaces/${workspaceId}/members`),
+    addMember: (workspaceId: string, input: AddMemberInput) =>
+      request<{ member: WorkspaceMember }>('POST', `/workspaces/${workspaceId}/members`, input),
+    setMemberRole: (workspaceId: string, userId: string, role: WorkspaceRole) =>
+      request<{ member: WorkspaceMember }>(
+        'PATCH',
+        `/workspaces/${workspaceId}/members/${userId}`,
+        { role },
+      ),
+    removeMember: (workspaceId: string, userId: string) =>
+      request<void>('DELETE', `/workspaces/${workspaceId}/members/${userId}`),
+    listShareLinks: (workspaceId: string, documentId: string) =>
+      request<{ links: ShareLink[] }>(
+        'GET',
+        `/workspaces/${workspaceId}/share-links?documentId=${encodeURIComponent(documentId)}`,
+      ),
+    createShareLink: (workspaceId: string, input: CreateShareLinkInput) =>
+      request<{ link: ShareLink; token: string }>(
+        'POST',
+        `/workspaces/${workspaceId}/share-links`,
+        input,
+      ),
+    revokeShareLink: (workspaceId: string, linkId: string) =>
+      request<void>('DELETE', `/workspaces/${workspaceId}/share-links/${linkId}`),
+    sharedPage: (token: string) =>
+      request<SharedPage>('GET', `/public/shares/${encodeURIComponent(token)}`),
   }
 }
 

@@ -7,6 +7,7 @@ import {
 } from '@notion-alt/shared'
 import IconPicker from '../components/IconPicker.vue'
 import PageCover from '../components/PageCover.vue'
+import ShareLinksDialog from '../components/ShareLinksDialog.vue'
 import { sha256Hex } from '../local/store'
 import { maxFileBytes } from '../limits'
 import { formatBytes } from '../local/persistence'
@@ -20,7 +21,7 @@ import { registerPendingEdits } from '../pending-edits'
 import { connection } from '../session'
 import { ensureDocumentLoaded, type OpenOutcome } from '../sync/offline'
 
-const { store, workspaceId, documentsById, childrenByParent } = useWorkspace()
+const { store, workspaceId, documentsById, childrenByParent, readOnly } = useWorkspace()
 const route = useRoute()
 const router = useRouter()
 
@@ -52,6 +53,8 @@ const children = computed(() => childrenByParent.value.get(documentId) ?? NO_CHI
 
 /** Whether the page's content is on this device; `loading` while it is fetched. */
 const content = ref<OpenOutcome | 'loading' | 'error'>('loading')
+/** Content here and the user may change it (ADR 0014). */
+const editable = computed(() => content.value === 'loaded' && !readOnly.value)
 let loading = false
 
 async function loadContent() {
@@ -102,7 +105,7 @@ watch(
 function saveTitle(): Promise<void> {
   if (titleTimer) clearTimeout(titleTimer)
   titleTimer = null
-  if (document.value && title.value !== document.value.title) {
+  if (document.value && !readOnly.value && title.value !== document.value.title) {
     return store.renameDocument(documentId, title.value)
   }
   return Promise.resolve()
@@ -192,6 +195,7 @@ const edited = computed(() =>
 )
 
 const menuOpen = ref(false)
+const shareOpen = ref(false)
 const menuRoot = ref<HTMLElement | null>(null)
 
 function closeMenuOutside(event: PointerEvent) {
@@ -259,6 +263,7 @@ async function deletePage() {
       <div class="page-actions">
         <span class="muted edited" data-testid="page-edited">Bearbeitet {{ edited }}</span>
         <button
+          v-if="!readOnly"
           type="button"
           class="icon"
           :aria-pressed="document.favorite"
@@ -282,19 +287,35 @@ async function deletePage() {
             ⋯
           </button>
           <div v-if="menuOpen" class="block-menu page-menu-list" @click="menuOpen = false">
-            <button type="button" @click="addChild">Unterseite anlegen</button>
+            <button v-if="!readOnly" type="button" @click="addChild">Unterseite anlegen</button>
+            <button
+              v-if="!readOnly"
+              type="button"
+              data-testid="share-open"
+              @click="shareOpen = true"
+            >
+              Lese-Link teilen
+            </button>
             <RouterLink :to="{ name: 'history', params: { workspaceId, documentId } }">
               Verlauf
             </RouterLink>
             <RouterLink :to="{ name: 'export', params: { workspaceId } }">
               Export & Import
             </RouterLink>
-            <div class="separator" role="separator"></div>
-            <button type="button" class="danger" @click="deletePage">Löschen</button>
+            <template v-if="!readOnly">
+              <div class="separator" role="separator"></div>
+              <button type="button" class="danger" @click="deletePage">Löschen</button>
+            </template>
           </div>
         </div>
       </div>
     </header>
+    <ShareLinksDialog
+      v-if="shareOpen"
+      :workspace-id="workspaceId"
+      :document-id="documentId"
+      @close="shareOpen = false"
+    />
 
     <div v-if="document.cover" class="page-cover-wrap">
       <PageCover :cover="document.cover" />
@@ -305,13 +326,13 @@ async function deletePage() {
         type="button"
         class="page-icon"
         aria-label="Icon ändern"
-        :disabled="content !== 'loaded'"
+        :disabled="!editable"
         data-testid="page-icon"
         @click="iconPickerOpen = !iconPickerOpen"
       >
         {{ document.icon }}
       </button>
-      <div v-if="content === 'loaded'" class="page-look-controls">
+      <div v-if="editable" class="page-look-controls">
         <button
           v-if="!document.icon"
           type="button"
@@ -366,7 +387,7 @@ async function deletePage() {
       class="page-title"
       placeholder="Unbenannt"
       aria-label="Titel"
-      :readonly="content !== 'loaded'"
+      :readonly="!editable"
       :maxlength="DOCUMENT_TITLE_MAX_LENGTH"
       @input="onTitleInput"
       @blur="saveTitle"

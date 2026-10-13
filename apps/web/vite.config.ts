@@ -3,11 +3,21 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
 import { serviceWorker } from './service-worker.plugin.ts'
 
-/** `add_header Name "value" always;` lines of the nginx snippet, for `vite preview`. */
-function securityHeaders(): Record<string, string> {
-  const conf = readFileSync(new URL('./security-headers.conf', import.meta.url), 'utf8')
-  return Object.fromEntries(
-    [...conf.matchAll(/^add_header\s+(\S+)\s+"([^"]*)"\s+always;$/gm)].map((m) => [m[1]!, m[2]!]),
+/**
+ * `add_header Name "value" always;` lines of the nginx snippet and the snippets it includes
+ * (same folder here), for `vite preview`.
+ */
+function securityHeaders(file = 'security-headers.conf'): Record<string, string> {
+  const conf = readFileSync(new URL(`./${file}`, import.meta.url), 'utf8')
+  const included = [...conf.matchAll(/^include\s+\S*\/([\w.-]+);$/gm)].map((m) =>
+    securityHeaders(m[1]!),
+  )
+  return Object.assign(
+    {},
+    ...included,
+    Object.fromEntries(
+      [...conf.matchAll(/^add_header\s+(\S+)\s+"([^"]*)"\s+always;$/gm)].map((m) => [m[1]!, m[2]!]),
+    ),
   )
 }
 

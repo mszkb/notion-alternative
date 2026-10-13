@@ -19,10 +19,12 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0011](0011-https-for-mobile-devices.md) | HTTPS für Smartphones und weitere Geräte | Accepted |
 | [0012](0012-attachments.md) | Dateianhänge | Accepted |
 | [0013](0013-version-history.md) | Versionsverlauf | Accepted |
-| [0014](0014-sharing-and-permissions.md) | Sharing, Berechtigungen und Kommentare | Proposed |
+| [0014](0014-sharing-and-permissions.md) | Sharing, Berechtigungen und Kommentare | Accepted |
 | [0015](0015-realtime.md) | Echtzeit-Verteilung von Änderungen | Proposed |
 | [0016](0016-opt-in-telemetry.md) | Opt-in-Telemetrie | Proposed |
 | [0017](0017-content-on-demand.md) | Seiteninhalte bei Bedarf laden | Accepted |
 | [0018](0018-php-backend.md) | PHP-Backend mit Slim 4 für Shared Hosting | Accepted |
 | [0019](0019-block-types.md) | Blocktypen To-do, Toggle, Hinweis, Trenner | Accepted |
 | [0020](0020-native-apps-kmp.md) | Native Apps mit Kotlin Multiplatform und Compose Multiplatform | Accepted |
+| [0022](0022-read-links.md) | Lese-Links für Externe | Accepted |
+| [0023](0023-local-area-without-account.md) | Lokaler Bereich ohne Konto und Übernahme beim Login | Accepted |

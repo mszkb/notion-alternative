@@ -58,6 +58,8 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Backlinks & Seitenverlinkung
 - [x] Lokale Volltextsuche
 - [x] App startet ohne Server aus lokalen Daten (T-OFF-01, T-OFF-02 automatisiert)
+- [x] Ohne Konto loslegen: lokaler Bereich ohne Login, „Ohne Konto weiterarbeiten“ nach dem Abmelden ([ADR 0023](docs/adr/0023-local-area-without-account.md), [#181](https://github.com/mszkb/notion-alternative/issues/181), [Anleitung](docs/user/without-account.md))
+- [ ] Übernahme der lokalen Seiten beim Login und Import ohne Konto ([#182](https://github.com/mszkb/notion-alternative/issues/182), [#183](https://github.com/mszkb/notion-alternative/issues/183))
 
 - [x] Blockübergreifendes Undo/Redo und Markieren ganzer Blöcke (Kopieren als Markdown, Löschen) – [ADR 0008](docs/adr/0008-block-editor.md)
 
@@ -152,14 +154,15 @@ Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/no
 - [x] Web Push ([#125](https://github.com/mszkb/notion-alternative/issues/125); Bündeln über `push_hints`, Versand nach der Antwort, Rest per Cron #127)
 - [x] Versionsverlauf und Import ([#126](https://github.com/mszkb/notion-alternative/issues/126); Sperre per `flock`)
 - [x] CLI, Cron, Metriken ([#127](https://github.com/mszkb/notion-alternative/issues/127); `bin/console`, `bin/cron.php`, Tabelle `metrics`)
-- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128); ZIP, `.htaccess`, Einrichtungs-Check und PHP-FPM-Image gebaut, offen: echter Webspace-Test und Gitea-Nightly gegen PHP)
+- [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128); ZIP, `.htaccess`, Einrichtungs-Check und PHP-FPM-Image gebaut; Images auf amd64 und arm64 (QEMU) gebaut und mit den Contract-Tests geprüft; ZIP unter Apache mit `mod_php` per `scripts/webspace-test.sh` geprüft; offen: echter Webspace-Test und Gitea-Nightly gegen PHP)
 - [x] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129); Contract-Tests sind die Spezifikation, Fixtures eingefroren)
 
 ## Phase 8 – Collaboration
 
-- [ ] Sharing
-- [ ] Kommentare
-- [ ] Berechtigungen
+- [x] Sharing: Workspace mit Mitgliedern, Einladen per E-Mail-Adresse, Verlassen und Entfernen, Zugriff entzogen auf dem Gerät ([ADR 0014](docs/adr/0014-sharing-and-permissions.md), [#78](https://github.com/mszkb/notion-alternative/issues/78), [Anleitung](docs/user/sharing.md))
+- [x] Lese-Links für Externe: eine Seite, widerrufbar, mit Ablaufdatum, ohne Konto lesbar ([ADR 0022](docs/adr/0022-read-links.md), [#178](https://github.com/mszkb/notion-alternative/issues/178))
+- [ ] Kommentare ([#79](https://github.com/mszkb/notion-alternative/issues/79))
+- [x] Berechtigungen: Rollen Lesen/Kommentieren/Bearbeiten/Besitzer serverseitig durchgesetzt, Lesemodus im Client, abgelehnte Offline-Änderungen als Kopie rettbar ([#80](https://github.com/mszkb/notion-alternative/issues/80))
 - [ ] Echtzeitfunktionen (ggf. CRDT / operation-based Sync)
 
 ## Phase 9 – Paid services

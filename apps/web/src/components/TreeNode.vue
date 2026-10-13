@@ -7,7 +7,7 @@ import { NO_CHILDREN, pageLabel, useWorkspace } from '../composables/workspace'
 
 const props = defineProps<{ document: Document; depth: number }>()
 
-const { store, workspaceId, documents, childrenByParent, activeDocumentId, pageHref } =
+const { store, workspaceId, documents, childrenByParent, activeDocumentId, pageHref, readOnly } =
   useWorkspace()
 const router = useRouter()
 
@@ -52,7 +52,7 @@ function onDragStart(event: DragEvent) {
 }
 
 function onDragOver(event: DragEvent) {
-  if (!event.dataTransfer?.types.includes(DRAG_TYPE)) return
+  if (readOnly.value || !event.dataTransfer?.types.includes(DRAG_TYPE)) return
   event.preventDefault()
   const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const y = (event.clientY - box.top) / box.height
@@ -60,6 +60,7 @@ function onDragOver(event: DragEvent) {
 }
 
 async function onDrop(event: DragEvent) {
+  if (readOnly.value) return
   const zone = dropZone.value
   dropZone.value = null
   const id = event.dataTransfer?.getData(DRAG_TYPE)
@@ -90,7 +91,7 @@ async function onDrop(event: DragEvent) {
       class="tree-row"
       :class="{ active: isActive, [`drop-${dropZone}`]: dropZone }"
       :style="{ paddingLeft: `${depth * 0.9 + 0.25}rem` }"
-      draggable="true"
+      :draggable="!readOnly"
       @dragstart="onDragStart"
       @dragover="onDragOver"
       @dragleave="dropZone = null"
@@ -114,6 +115,7 @@ async function onDrop(event: DragEvent) {
         {{ pageLabel(document) }}
       </a>
       <button
+        v-if="!readOnly"
         type="button"
         class="icon add"
         aria-label="Unterseite anlegen"

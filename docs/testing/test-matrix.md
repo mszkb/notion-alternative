@@ -67,7 +67,7 @@ Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-test
 | --- | --- | --- | --- | --- |
 | T-EXP-01 | Vollständiger Export (MD, JSON, ZIP) | Alle Dokumente, Tags, Links, Anhänge enthalten | AC-04 | ☑ ¹² |
 | T-EXP-02 | Export → Import in frische Installation | Round-Trip ohne Verlust | AC-05 | ☑ ¹³ |
-| T-EXP-03 | Import des Notion-Exports „Markdown & CSV“ | Seitenbaum, Bilder, Dateien, Links, To-dos, Toggles, Hinweise übernommen; Vereinfachtes im Bericht; fremde Datei mit Meldung abgelehnt | – | ☑ ²¹ |
+| T-EXP-03 | Import des Notion-Exports „Markdown & CSV“ | Seitenbaum, Bilder, Dateien, Links, To-dos, Toggles, Hinweise übernommen; Vereinfachtes im Bericht; fremde Datei mit Meldung abgelehnt | – | ☑ ²² |
 
 ## PWA / Push
 
@@ -92,6 +92,33 @@ Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-test
 | T-LOAD-01 | Großer Workspace (10 000 Seiten, 500 000 Blöcke): Seed, 10 Geräte parallel, Pull, Snapshot, Export-Log, Suche | Keine Fehler/`SQLITE_BUSY`, Zeiten und RAM innerhalb der Zielwerte | – | ☑ ¹⁷ |
 | T-LOAD-02 | Großer lokaler Bestand im Browser: Re-Sync, Seitenliste, Suchindex, Suche | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
 | T-LOAD-03 | Große Workspaces in der App: Erstsync, Kaltstart, Seite mit 2 000 Blöcken öffnen, Tippen | Zielwerte aus `load-tests.md` | – | ☑ ¹⁷ |
+
+## Ohne Konto
+
+Nach [ADR 0023](../adr/0023-local-area-without-account.md): lokaler Bereich ohne Konto, Übernahme beim Login.
+
+| ID | Szenario | Erwartung | AC | Auto |
+| --- | --- | --- | --- | --- |
+| T-LOCAL-01 | Frischer Browser öffnet die App | Lokaler Workspace ohne Formular; Seite anlegen und tippen; nach Neuladen da; außer `GET /api/auth/me` beim Start keine Anfrage an den Server | – | ☑ ²⁵ |
+| T-LOCAL-02 | Kein Server erreichbar, auch als installierte App offline | Start im lokalen Bereich, Inhalte nach Neuladen da, Hinweis „Nur auf diesem Gerät“ mit „Anmelden“ | – | ☑ ²⁵ |
+| T-LOCAL-03 | Abmelden | Anmeldung erscheint, auch nach Neuladen; „Ohne Konto weiterarbeiten“ öffnet den lokalen Bereich | – | ☑ ²⁵ |
+| T-LOCAL-04 | Export ohne Konto | Markdown, JSON und ZIP aus dem lokalen Bereich | – | ☑ ²⁵ |
+| T-LOCAL-05 | Login mit lokalen Seiten (neues Konto, bestehendes Konto mit Seiten, Abbruch mittendrin) | Übernahme ohne Verlust und ohne Doppel, Dialog „Wohin mit deinen Seiten?“ nur bei vorhandenen Seiten | – | ☐ (#182) |
+
+## Teilen & Rechte
+
+Nach [ADR 0014](../adr/0014-sharing-and-permissions.md): Freigaben pro Workspace mit Rollen. Lese-Links für Externe nach [ADR 0022](../adr/0022-read-links.md).
+
+| ID | Szenario | Erwartung | AC | Auto |
+| --- | --- | --- | --- | --- |
+| T-SHARE-01 | Jeder Endpunkt × jede Rolle × Konto außerhalb | Lesen ab `reader`, Inhalte ändern ab `editor`, Mitglieder verwalten nur `owner`; Konten außerhalb bekommen `404`, nie fremde Daten | – | ☑ ²² |
+| T-SHARE-02 | Rolle wird gesenkt, während ein Gerät offline Änderungen hat | Schon angewandte Operationen kommen als `duplicate` zurück, neue als `rejected` `forbidden`; lokal sichtbar und als Kopie rettbar, nichts verschwindet | – | ☑ ²³ |
+| T-SHARE-03 | Mitglied wird entfernt oder verlässt den Workspace | Server liefert nichts mehr (`404`), keine Push-Hinweise; das Gerät behält den Workspace schreibgeschützt („Zugriff entzogen“) | – | ☑ ²³ |
+| T-SHARE-04 | Ein Mitglied ändert eine Seite | Änderung kommt per Pull bei den anderen an; Push-Hinweis ohne Inhalt an deren Geräte | AC-07 | ☑ ²² |
+| T-SHARE-05 | Ersteller des Workspace | bleibt `owner`, lässt sich weder entfernen noch herabstufen; Anhänge zählen zu seinem Kontingent | – | ☑ ²² |
+| T-SHARE-06 | Gast öffnet einen Lese-Link ([ADR 0022](../adr/0022-read-links.md)) | Sieht nur diese Seite, schreibgeschützt, ohne Konto; keine Workspace-, Block- oder Konto-IDs, keine E-Mail-Adressen; `no-store`, `noindex` | – | ☑ ²⁴ |
+| T-SHARE-07 | Link widerrufen, abgelaufen, Seite gelöscht, Ersteller herabgestuft oder entfernt | Jeweils dasselbe `404`; wiederhergestellte Seite bzw. wieder erteiltes Recht macht den Link wieder gültig; Fehlversuche pro Adresse begrenzt (`429`) | – | ☑ ²⁴ |
+| T-SHARE-08 | Bilder einer geteilten Seite | Nur Rasterbilder aus Bildblöcken oder Titelbild dieser Seite; Dateien, ungenutzte Bilder und Bilder anderer Seiten `404` | – | ☑ ²⁴ |
 
 ## Telemetrie
 
@@ -134,3 +161,11 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ²⁰ ADR 0017 (Inhalte bei Bedarf): `apps/web/src/sync/on-demand.test.ts` (Erstsync ohne Blöcke, Laden beim Öffnen mit späterem Pull, Seiten anderer Geräte, offline und Server nicht erreichbar, Re-Sync lädt geladene Seiten einzeln neu, verlorener Block nach Restore wird erneut gesendet, Abbruch und Fortsetzen, Netzverlust, Export online und offline, Upgrade von Dexie-Version 4), `packages/contract-tests/test/sync-snapshot.test.ts` (`content=false` ganz und seitenweise, Einzelabruf einer Seite mit `seq`, fremde Workspaces).
 
 ²¹ #137: `packages/shared/src/notion-import.test.ts` (anonymisiertes Beispiel im Aufbau des Exports: Titel ohne ID, Unterseiten aus Ordnern, Datenbank als Seite mit Zeilen und CSV, alle Blocktypen, Links, Bild, vereinfachte Teile, verschachtelte ZIPs, fremde Datei), `packages/shared/src/zip-compressed.test.ts` (Deflate, Größenlimit), `packages/contract-tests/test/import.test.ts` (Server nimmt das Ergebnis an, Anhang-Upload), `apps/web/e2e/notion-import.spec.ts`.
+
+²² `packages/contract-tests/test/sharing.test.ts` (Mitglieder-API, Matrix aller Endpunkte, gesenkte Rolle, Entfernen), `test/push.test.ts` (Hinweise an Geräte aller Mitglieder, nicht mehr nach dem Entfernen).
+
+²³ Server: `packages/contract-tests/test/sharing.test.ts`. Client: `apps/web/src/local/sharing.test.ts` (Lesemodus im Store, letzte Rolle offline, Zugriff entzogen beim Abgleich und bei `404`, Warteschlange entzogener Workspaces bleibt lokal, Kopie mit neuen IDs, Verwerfen nur auf Wunsch). E2E: `apps/web/e2e/sharing.spec.ts` (Lesen → Bearbeiten → Entfernen mit zwei Konten).
+
+²⁴ Server: `packages/contract-tests/test/share-links.test.ts`, Link-Verwaltung in der Rollenmatrix von `test/sharing.test.ts`. Client: `apps/web/e2e/share-links.spec.ts` (Link anlegen, als Gast ohne Konto öffnen, widerrufen), `apps/web/src/editor/inline-dom.test.ts` (Seitenlinks als Text).
+
+²⁵ `apps/web/e2e/without-account.spec.ts`, Offline-Start der installierten App in `e2e/pwa-offline.spec.ts`; Startmodus in `src/session.test.ts`, lokaler Workspace in `src/local/store.test.ts`.

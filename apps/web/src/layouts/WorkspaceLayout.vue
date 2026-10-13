@@ -43,6 +43,7 @@ import { onPushHint } from '../pwa'
 import { onSyncHint, requestSync, syncState } from '../sync/engine'
 import { DEFAULT_TRIGGERS, startSyncTriggers } from '../sync/triggers'
 import { isTextTarget, shortcutFor } from '../shortcuts'
+import { ROLE_LABELS } from '../sharing'
 import { toggleTheme } from '../theme'
 
 const route = useRoute()
@@ -81,6 +82,14 @@ const pageHrefTemplate = computed(
 )
 const pageHref = (documentId: string) =>
   pageHrefTemplate.value.replace(PAGE_ID, encodeURIComponent(documentId))
+const workspace = computed(() => workspaces.value.find((w) => w.id === workspaceId.value))
+// Servers before ADR 0014 send no role: the user owns every workspace there. A workspace not
+// in the list yet (opened by link before the first refresh) stays read-only until it is known.
+const role = computed(() => workspace.value?.role ?? (workspace.value ? 'owner' : 'reader'))
+const revoked = computed(() => !!workspace.value?.revoked)
+const readOnly = computed(
+  () => revoked.value || role.value === 'reader' || role.value === 'commenter',
+)
 provide(workspaceKey, {
   store,
   workspaceId,
@@ -89,9 +98,9 @@ provide(workspaceKey, {
   childrenByParent,
   activeDocumentId,
   pageHref,
+  role,
+  readOnly,
 })
-
-const workspace = computed(() => workspaces.value.find((w) => w.id === workspaceId.value))
 const roots = computed(() => childrenByParent.value.get(null) ?? NO_CHILDREN)
 const favorites = computed(() =>
   documents.value
@@ -105,7 +114,11 @@ const tags = useLiveQuery(() => store.listTags(workspaceId.value), [], workspace
 const pending = useLiveQuery(() => store.pendingOperationCount(), 0)
 const withIssues = useLiveQuery(() => store.operationsWithIssues(), [])
 const conflicts = useLiveQuery(() => store.openConflicts(workspaceId.value), [], workspaceId)
-const rejected = computed(() => withIssues.value.filter((op) => op.issue?.status === 'rejected'))
+const rejected = computed(() =>
+  withIssues.value.filter(
+    (op) => op.issue?.status === 'rejected' && op.workspaceId === workspaceId.value,
+  ),
+)
 
 watch(workspaceId, (id) => rememberWorkspace(id), { immediate: true })
 
@@ -193,6 +206,7 @@ async function openHit(hit: SearchHit) {
 // ---------------------------------------------------------------- actions
 
 async function createPage() {
+  if (readOnly.value) return
   const created = await store.createDocument({ workspaceId: workspaceId.value })
   await router.push({
     name: 'page',
@@ -210,7 +224,7 @@ async function recheck() {
       void refreshAttachmentUsage(workspaceId.value)
     }
   } catch {
-    connection.value = 'offline'
+    if (connection.value !== 'local') connection.value = 'offline'
   }
 }
 
@@ -252,7 +266,8 @@ const syncLabel = computed(() => {
 })
 
 function markOffline() {
-  connection.value = 'offline'
+  // Without an account there is no server to lose.
+  if (connection.value !== 'local') connection.value = 'offline'
 }
 
 const connectionLabel = computed(
@@ -261,6 +276,7 @@ const connectionLabel = computed(
       online: 'Server verbunden',
       offline: 'Offline – lokale Daten',
       expired: 'Sitzung abgelaufen',
+      local: 'Nur auf diesem Gerät',
     })[connection.value],
 )
 
@@ -477,6 +493,7 @@ const shellStyle = computed(() => ({
           <h2 id="nav-pages" class="row">
             Seiten
             <button
+              v-if="!readOnly"
               type="button"
               class="icon"
               aria-label="Neue Seite"
@@ -510,7 +527,12 @@ const shellStyle = computed(() => ({
       <footer class="sidebar-footer">
         <p class="status" :class="`status-${connection}`" data-testid="connection">
           <span class="dot" aria-hidden="true"></span>{{ connectionLabel }}
-          <RouterLink v-if="connection === 'expired'" :to="{ name: 'login' }">Anmelden</RouterLink>
+          <RouterLink
+            v-if="connection === 'expired' || connection === 'local'"
+            :to="{ name: 'login' }"
+            data-testid="sign-in"
+            >Anmelden</RouterLink
+          >
         </p>
         <p class="status" :class="`status-${persistence}`" data-testid="persistence">
           {{ persistenceLabel }}
@@ -551,8 +573,10 @@ const shellStyle = computed(() => ({
           – gleichzeitige Änderungen auf mehreren Geräten. Beide Stände sind erhalten.
         </p>
         <p v-if="rejected.length" class="error" data-testid="sync-rejected">
-          {{ rejected.length }} Änderung{{ rejected.length === 1 ? '' : 'en' }} vom Server abgelehnt
-          ({{ rejected[0]?.issue?.message }}). Sie bleiben lokal erhalten.
+          <RouterLink :to="{ name: 'rejected', params: { workspaceId } }">
+            {{ rejected.length }} Änderung{{ rejected.length === 1 ? '' : 'en' }} vom Server
+            abgelehnt</RouterLink
+          >. Sie bleiben lokal erhalten.
         </p>
         <p v-if="syncLabel" class="muted sync-status" data-testid="sync-status">
           {{ syncLabel }}
@@ -561,7 +585,10 @@ const shellStyle = computed(() => ({
           </button>
         </p>
         <p class="muted">
-          {{ currentUser?.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
+          <template v-if="currentUser">
+            {{ currentUser.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
+          </template>
+          <RouterLink :to="{ name: 'members', params: { workspaceId } }">Mitglieder</RouterLink> ·
           <RouterLink :to="{ name: 'trash', params: { workspaceId } }">Papierkorb</RouterLink> ·
           <RouterLink :to="{ name: 'export', params: { workspaceId } }">Export & Import</RouterLink>
           ·
@@ -584,6 +611,19 @@ const shellStyle = computed(() => ({
     ></div>
 
     <main class="content">
+      <p v-if="revoked" class="notice" role="status" data-testid="access-revoked">
+        <strong>Zugriff entzogen.</strong> Du bist kein Mitglied dieses Workspace mehr. Was auf
+        diesem Gerät liegt, bleibt lesbar und lässt sich
+        <RouterLink :to="{ name: 'export', params: { workspaceId } }">exportieren</RouterLink>;
+        ändern und synchronisieren geht nicht mehr.
+        <RouterLink :to="{ name: 'members', params: { workspaceId } }"
+          >Vom Gerät entfernen</RouterLink
+        >
+      </p>
+      <p v-else-if="workspace && readOnly" class="notice" role="status" data-testid="read-only">
+        <strong>Nur lesen.</strong> Deine Rolle in diesem Workspace: {{ ROLE_LABELS[role] }}.
+        Änderungen kann ein Besitzer freigeben.
+      </p>
       <RouterView :key="String(route.params.documentId ?? route.params.tagId ?? '')" />
     </main>
 

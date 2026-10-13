@@ -19,6 +19,8 @@ use NotionAlt\Database\Migrations\M0012DocumentIconCover;
 use NotionAlt\Database\Migrations\M0013AuthAttempts;
 use NotionAlt\Database\Migrations\M0014PushHints;
 use NotionAlt\Database\Migrations\M0015Metrics;
+use NotionAlt\Database\Migrations\M0016WorkspaceMembers;
+use NotionAlt\Database\Migrations\M0017ShareLinks;
 
 /**
  * Runs the migrations. The bookkeeping tables keep their historical names (`kysely_migration`,
@@ -76,6 +78,8 @@ final class Migrator
             '0013_auth_attempts' => new M0013AuthAttempts(),
             '0014_push_hints' => new M0014PushHints(),
             '0015_metrics' => new M0015Metrics(),
+            '0016_workspace_members' => new M0016WorkspaceMembers(),
+            '0017_share_links' => new M0017ShareLinks(),
         ];
     }
 
