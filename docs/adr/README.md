@@ -27,3 +27,4 @@ Status: `Proposed` → `Accepted` | `Rejected` | `Superseded by NNNN`
 | [0019](0019-block-types.md) | Blocktypen To-do, Toggle, Hinweis, Trenner | Accepted |
 | [0022](0022-read-links.md) | Lese-Links für Externe | Accepted |
 | [0023](0023-local-area-without-account.md) | Lokaler Bereich ohne Konto und Übernahme beim Login | Accepted |
+| [0024](0024-mcp-server.md) | MCP-Server für KI-Clients | Proposed |

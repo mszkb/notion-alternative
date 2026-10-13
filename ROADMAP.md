@@ -157,6 +157,16 @@ Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/no
 - [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128); ZIP, `.htaccess`, Einrichtungs-Check und PHP-FPM-Image gebaut; Images auf amd64 und arm64 (QEMU) gebaut und mit den Contract-Tests geprüft; ZIP unter Apache mit `mod_php` per `scripts/webspace-test.sh` geprüft; offen: echter Webspace-Test und Gitea-Nightly gegen PHP)
 - [x] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129); Contract-Tests sind die Spezifikation, Fixtures eingefroren)
 
+## Ohne Phase – MCP-Server
+
+Schnittstelle für KI-Clients (Claude, Cursor, VS Code) als Endpunkt `/api/mcp` im PHP-Server. Gebaut wird erst, wenn [ADR 0024](docs/adr/0024-mcp-server.md) angenommen ist.
+
+- [ ] Persönliche Zugangstoken (nur lesen / lesen und schreiben, pro Workspace, je Token ein Gerät)
+- [ ] MCP-Protokoll (Streamable HTTP, zustandslos) und Lese-Tools: Workspaces, Seitenbaum, Suche, Seite als Markdown
+- [ ] Webhosting: `Authorization`-Header in `.htaccess`, Prüfung in `check.php`; Anleitung für die Clients
+- [ ] Schreib-Tools über `Apply::batch` (Seite anlegen, Blöcke ergänzen und ändern, mit Konflikten statt Überschreiben)
+- [ ] Optional: OAuth 2.1 für claude.ai (eigener ADR)
+
 ## Phase 8 – Collaboration
 
 - [x] Sharing: Workspace mit Mitgliedern, Einladen per E-Mail-Adresse, Verlassen und Entfernen, Zugriff entzogen auf dem Gerät ([ADR 0014](docs/adr/0014-sharing-and-permissions.md), [#78](https://github.com/mszkb/notion-alternative/issues/78), [Anleitung](docs/user/sharing.md))
