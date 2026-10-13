@@ -63,6 +63,14 @@ test('exports the local pages without an account (Export first)', async ({ page 
   await newPage(page, 'Exportiert ohne Konto')
   await waitForSaved(page)
   await page.getByRole('link', { name: 'Export & Import' }).click()
+  // No server history and no offline hint without an account (#200).
+  await expect(page.getByLabel('Mit Verlauf')).toHaveCount(0)
+  await expect(page.getByTestId('export-history-hint')).toHaveText(
+    'Ohne Konto gibt es keinen Verlauf auf einem Server; exportiert wird der aktuelle Stand.',
+  )
+  await expect(page.getByTestId('import-account-hint')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Alles exportieren' })).toBeVisible()
+  await page.getByText('Weitere Formate').click()
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'JSON herunterladen' }).click()
   const download = await downloadPromise

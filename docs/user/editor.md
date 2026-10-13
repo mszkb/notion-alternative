@@ -62,4 +62,4 @@ Jeder Schritt lässt sich mit `Strg/⌘ + Z` rückgängig machen.
 
 ## Umzug aus Notion
 
-Siehe [Export und Import → Umzug aus Notion](export.md#umzug-aus-notion).
+Siehe [Export und Import → Umzug aus Notion](export.md#umzug-aus-notion) (in der App: **Export & Import → Aus Notion importieren**).

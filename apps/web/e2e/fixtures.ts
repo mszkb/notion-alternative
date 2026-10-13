@@ -48,11 +48,13 @@ async function createWith(page: Page, button: Locator, title: string): Promise<v
   await page.getByLabel('Titel').press('Enter')
 }
 
-/** Opens the status details at the bottom of the sidebar and starts a sync (#195). */
+/** Starts a sync from the status details at the bottom of the sidebar (#195), then closes them. */
 export async function syncNow(page: Page): Promise<void> {
   const summary = page.getByTestId('sync-summary')
   if ((await summary.getAttribute('aria-expanded')) !== 'true') await summary.click()
   await page.getByRole('button', { name: 'Jetzt synchronisieren' }).click()
+  await page.keyboard.press('Escape')
+  await expect(summary).toHaveAttribute('aria-expanded', 'false')
 }
 
 export async function newPage(page: Page, title: string): Promise<void> {

@@ -28,6 +28,7 @@ test('exports the workspace as Markdown, offline too', async ({ signedIn: page }
   // The export reads the local database only.
   await takeServerDown(page)
   await page.getByRole('link', { name: 'Export & Import' }).click()
+  await page.getByText('Weitere Formate').click()
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Markdown herunterladen (ZIP)' }).click()
   const download = await downloadPromise
@@ -55,6 +56,7 @@ test('exports JSON with and without history', async ({ signedIn: page }) => {
   await expect(page.getByTestId('sync-status')).toContainText('Synchronisiert um')
 
   await page.getByRole('link', { name: 'Export & Import' }).click()
+  await page.getByText('Weitere Formate').click()
   const readJson = async () => {
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'JSON herunterladen' }).click()
@@ -79,6 +81,7 @@ test('exports JSON with and without history', async ({ signedIn: page }) => {
   await page.context().setOffline(true)
   await page.evaluate(() => window.dispatchEvent(new Event('offline')))
   await expect(page.getByLabel('Mit Verlauf')).toBeDisabled()
+  await expect(page.getByTestId('export-history-hint')).toContainText('keine Verbindung')
   const offline = await readJson()
   expect(offline.history).toBeNull()
   expect(offline.documents).toHaveLength(2)
@@ -129,7 +132,7 @@ test('T-EXP-01: complete ZIP with attachments, manifest and checksums', async ({
   await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
 
   await page.getByRole('link', { name: 'Export & Import' }).click()
-  const download = await downloadVia(page, 'Vollständigen Export herunterladen')
+  const download = await downloadVia(page, 'Alles exportieren')
   expect(download.suggestedFilename()).toMatch(/-export-\d{4}-\d{2}-\d{2}\.zip$/)
   const verified = await verifyExportArchive(new Uint8Array(readFileSync((await download.path())!)))
   expect(verified.manifest.history).toBe(true)
@@ -149,9 +152,7 @@ test('T-EXP-01: complete ZIP with attachments, manifest and checksums', async ({
   await page.context().setOffline(true)
   await page.evaluate(() => window.dispatchEvent(new Event('offline')))
   const offline = await verifyExportArchive(
-    new Uint8Array(
-      readFileSync((await (await downloadVia(page, 'Vollständigen Export herunterladen')).path())!),
-    ),
+    new Uint8Array(readFileSync((await (await downloadVia(page, 'Alles exportieren')).path())!)),
   )
   expect(offline.manifest.history).toBe(false)
   expect(offline.manifest.missing_attachments.map((a) => a.name)).toEqual(['bericht.pdf'])
@@ -171,7 +172,7 @@ test('T-EXP-02: imports a complete export as a new workspace', async ({ signedIn
   await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
 
   await page.getByRole('link', { name: 'Export & Import' }).click()
-  const download = await downloadVia(page, 'Vollständigen Export herunterladen')
+  const download = await downloadVia(page, 'Alles exportieren')
   const archive = readFileSync((await download.path())!)
 
   // Garbage and tampered archives are refused before anything is sent.
