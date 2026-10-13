@@ -128,6 +128,20 @@ Folgt aus der Zielgruppe ([`vision.md`](docs/product/vision.md)); Epic [#130](ht
 - [x] Seiten-Icons und Titelbilder ([#136](https://github.com/mszkb/notion-alternative/issues/136))
 - [x] Import aus Notion ([#137](https://github.com/mszkb/notion-alternative/issues/137))
 
+UX-Rundgang Oktober 2026 (Epic [#205](https://github.com/mszkb/notion-alternative/issues/205)):
+
+- [x] Markdown beim Tippen umwandeln ([#194](https://github.com/mszkb/notion-alternative/issues/194))
+- [x] Seitenleiste: Fußzeile mit einer Statuszeile, Werkzeuge als Einträge ([#195](https://github.com/mszkb/notion-alternative/issues/195))
+- [x] Workspace-Menü oben links ([#196](https://github.com/mszkb/notion-alternative/issues/196))
+- [x] `Strg/⌘ + K`: Link nur bei markiertem Text, sonst Schnellsuche ([#197](https://github.com/mszkb/notion-alternative/issues/197))
+- [x] Einheitliches Datumsformat ([#198](https://github.com/mszkb/notion-alternative/issues/198))
+- [x] „Verlinkt von“ nur bei Rückverweisen ([#199](https://github.com/mszkb/notion-alternative/issues/199))
+- [x] Export & Import mit einem Hauptknopf ([#200](https://github.com/mszkb/notion-alternative/issues/200))
+- [x] Schmale Ansicht: Seitenleiste mit Abdunkelung ([#201](https://github.com/mszkb/notion-alternative/issues/201))
+- [x] Einstellungen gegliedert, Fehlerbehebung eingeklappt ([#202](https://github.com/mszkb/notion-alternative/issues/202))
+- [x] Seitenbaum: Icon-Spalte statt Einrückung ([#203](https://github.com/mszkb/notion-alternative/issues/203))
+- [ ] Übernahme: Abschlusstext online ([#204](https://github.com/mszkb/notion-alternative/issues/204), braucht [#193](https://github.com/mszkb/notion-alternative/pull/193))
+
 ## Ohne Phase – Opt-in-Telemetrie
 
 Einordnung in eine Phase noch offen ([#103](https://github.com/mszkb/notion-alternative/issues/103)). Gebaut wird erst, wenn [ADR 0016](docs/adr/0016-opt-in-telemetry.md) angenommen ist.
