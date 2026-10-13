@@ -153,6 +153,6 @@ test('a file beyond the storage limit stays on the device and is marked', async 
   })
   await expect(page.getByTestId('sync-rejected')).toBeVisible()
 
-  await page.getByRole('link', { name: 'Konto' }).click()
+  await page.getByRole('link', { name: 'Einstellungen' }).click()
   await expect(page.getByTestId('server-usage')).toContainText(/0 B\s+von 50,0 KB belegt/)
 })

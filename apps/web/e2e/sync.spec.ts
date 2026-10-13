@@ -40,7 +40,7 @@ test('manual full re-sync keeps pages and unsynced work', async ({ signedIn: pag
   await waitForSaved(page)
   await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
 
-  await page.getByRole('link', { name: 'Konto' }).click()
+  await page.getByRole('link', { name: 'Einstellungen' }).click()
   await page.getByRole('button', { name: 'Neu synchronisieren' }).click()
   await expect(page.getByTestId('resync-done')).toBeVisible({ timeout: 10_000 })
 

@@ -47,7 +47,7 @@ test('after signing out the login offers to continue without an account', async 
   await page.goto('/?choose=1')
   await page.getByRole('button', { name: 'Abmelden', exact: true }).click()
   await page
-    .getByRole('region', { name: 'Abmelden' })
+    .getByRole('dialog', { name: 'Abmelden' })
     .getByRole('button', { name: 'Abmelden', exact: true })
     .click()
   await expect(page).toHaveURL(/\/login$/)

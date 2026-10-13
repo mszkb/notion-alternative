@@ -1,7 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { jsonExportSchema, readZip, verifyExportArchive } from '@notion-alt/shared'
 import type { Download, Page } from '@playwright/test'
-import { expect, newPage, newSubpage, takeServerDown, test, waitForSaved } from './fixtures'
+import {
+  expect,
+  newPage,
+  newSubpage,
+  syncNow,
+  takeServerDown,
+  test,
+  waitForSaved,
+} from './fixtures'
 
 test('exports the workspace as Markdown, offline too', async ({ signedIn: page }) => {
   await newPage(page, 'Ziel')
@@ -43,7 +51,7 @@ test('exports JSON with and without history', async ({ signedIn: page }) => {
   await newPage(page, 'Bleibt')
   await page.keyboard.type('Inhalt')
   await waitForSaved(page)
-  await page.getByRole('button', { name: 'Jetzt synchronisieren' }).click()
+  await syncNow(page)
   await expect(page.getByTestId('sync-status')).toContainText('Synchronisiert um')
 
   await page.getByRole('link', { name: 'Export & Import' }).click()

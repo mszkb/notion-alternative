@@ -5,6 +5,7 @@ import {
   newPage,
   PASSWORD,
   signIn,
+  syncNow,
   takeServerDown,
   test,
   waitForSaved,
@@ -186,7 +187,7 @@ test('T-OFF-06: without push, the timer and "Jetzt synchronisieren" bring change
   await newPage(page, 'Per Knopf')
   await waitForSaved(page)
   await synced(page)
-  await other.getByRole('button', { name: 'Jetzt synchronisieren' }).click()
+  await syncNow(other)
   await expect(other.getByRole('tree')).toContainText('Per Knopf', { timeout: 10_000 })
   await context.close()
 })

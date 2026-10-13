@@ -77,7 +77,7 @@ Ein Sync-Lauf ist immer Push → Pull (bzw. Re-Sync) und läuft unabhängig von 
 - Timer: alle 5 Minuten, solange die App sichtbar ist; versteckte Tabs pollen nicht (Akku, Datenvolumen). Ist der Server nicht erreichbar, wird jede Minute neu geprüft.
 - Lokale Änderung: 1,5 s entprellt, nur Push/Pull ohne Session- und Workspace-Abgleich
 - Web-Push-Hinweis (Phase 4): `onSyncHint` startet nur einen normalen Lauf; Inhalte kommen nie über Push
-- „Jetzt synchronisieren“ in der Seitenleiste, „Neu synchronisieren“ (vollständig) auf der Kontoseite
+- „Jetzt synchronisieren“ in der Seitenleiste (Klick auf die Statuszeile), „Neu synchronisieren“ (vollständig) auf der Kontoseite
 
 Läufe sind Single-Flight: Im Tab wartet eine Anfrage auf den laufenden Lauf und löst danach genau einen weiteren aus; über Tabs desselben Kontos serialisiert ein Web Lock (`notion-alt-sync:<deviceId>`) die Läufe. Fehler werden mit exponentiellem Backoff (1 s … 5 min) wiederholt. Die Seitenleiste zeigt Verbindung (verbunden / offline / Sitzung abgelaufen mit Link zum Anmelden), Sync-Status (synchronisiert um … / ausstehend / läuft / fehlgeschlagen), ausstehende Operationen sowie Konflikte und Ablehnungen.
 

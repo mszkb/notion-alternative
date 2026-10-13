@@ -50,4 +50,4 @@ Für Releases auf einem echten Gerät durchgehen und Ergebnis mit iOS-Version im
 - [ ] Nach „Zum Home-Bildschirm“: Symbol mit App-Icon (blaues Seiten-Symbol) und Name „Notizen“
 - [ ] Start über das Symbol öffnet ohne Safari-Leisten; der Hinweis ist dort nicht mehr sichtbar
 - [ ] Flugmodus an, App schließen und neu starten: Seiten sind lesbar und bearbeitbar
-- [ ] Flugmodus aus: Änderungen werden synchronisiert („0 lokale Änderungen noch nicht synchronisiert“)
+- [ ] Flugmodus aus: Änderungen werden synchronisiert (unten in der Seitenleiste „Synchronisiert“; ein Klick darauf zeigt „0 lokale Änderungen noch nicht synchronisiert“)

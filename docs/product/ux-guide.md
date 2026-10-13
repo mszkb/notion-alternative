@@ -18,7 +18,9 @@ Die Produktprinzipien gelten unverändert: Jede Bedienung funktioniert offline, 
 
 | Muster (wie in Notion) | Unsere Umsetzung | Stand |
 | --- | --- | --- |
-| Seitenleiste links: Suche, Favoriten, Seitenbaum, Papierkorb, Einstellungen unten | `WorkspaceLayout.vue`, `composables/sidebar.ts` | umgesetzt: einklappbar (`Strg/⌘ + \`), Breite per Ziehen oder Pfeiltasten am Rand, beides pro Gerät gemerkt; schmal als Overlay (#132) |
+| Seitenleiste links: Suche, Favoriten, Seitenbaum, Papierkorb, Einstellungen unten | `WorkspaceLayout.vue`, `composables/sidebar.ts` | umgesetzt: einklappbar (`Strg/⌘ + \`), Breite per Ziehen oder Pfeiltasten am Rand, beides pro Gerät gemerkt; schmal als Overlay (#132). Einstellungen, Mitglieder, Papierkorb, Export & Import und Tastenkürzel als Einträge mit Icon (`NavIcon.vue`, #195) |
+| Workspace-Menü oben links: wechseln, anlegen, Einstellungen, abmelden | `WorkspaceMenu.vue`, `LogoutDialog.vue`; `role="menu"`, Pfeiltasten, `Esc` | umgesetzt (#196); ohne Konto: „Auf diesem Gerät“ und „Anmelden“ |
+| Status unauffällig, Hinweise nur bei Bedarf | `SyncStatus.vue`: **eine** Zeile mit Punkt und Kurztext („Synchronisiert“, „3 Änderungen warten“, „Offline“, „Nur auf diesem Gerät“), Klick öffnet Details und „Jetzt synchronisieren“. Speicherhinweis erst mit Inhalt und einmal wegklickbar; Konflikte und abgelehnte Änderungen bleiben rot sichtbar | umgesetzt (#195) |
 | Seitenbaum mit Auf-/Zuklappen, „+“ bei Hover für eine Unterseite, Ziehen zum Verschieben | `TreeNode.vue` | vorhanden |
 | Zentrierte Inhaltsspalte, großer Seitentitel, viel Weißraum | `.page`, `--content-width` | vorhanden |
 | Kopfzeile mit Breadcrumbs und Seitenmenü | `PageView.vue` | umgesetzt: „Bearbeitet …“, Favorit, Seitenmenü ⋯ (Unterseite, Verlauf, Export, Löschen) (#132) |

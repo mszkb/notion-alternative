@@ -6,7 +6,10 @@ import { api } from '../api'
 import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
 import CommandPalette from '../components/CommandPalette.vue'
+import NavIcon from '../components/NavIcon.vue'
 import ShortcutsDialog from '../components/ShortcutsDialog.vue'
+import SyncStatus from '../components/SyncStatus.vue'
+import WorkspaceMenu from '../components/WorkspaceMenu.vue'
 import { loadRecentPages, rememberVisit } from '../composables/recent-pages'
 import {
   setSidebarCollapsed,
@@ -38,9 +41,9 @@ import {
   workspaceSearch,
 } from '../local/context'
 import type { SearchHit } from '../local/search'
-import { connection, currentUser, refreshSession } from '../session'
+import { connection, refreshSession } from '../session'
 import { onPushHint } from '../pwa'
-import { onSyncHint, requestSync, syncState } from '../sync/engine'
+import { onSyncHint, requestSync } from '../sync/engine'
 import { DEFAULT_TRIGGERS, startSyncTriggers } from '../sync/triggers'
 import { isTextTarget, shortcutFor } from '../shortcuts'
 import { ROLE_LABELS } from '../sharing'
@@ -248,47 +251,40 @@ async function syncNow() {
   await recheck()
 }
 
-const timeFormat = new Intl.DateTimeFormat('de-DE', { timeStyle: 'short' })
-
-/** One line telling whether local data is on the server. */
-const syncLabel = computed(() => {
-  if (connection.value !== 'online') return null
-  const resync = syncState.value.resync
-  if (resync) {
-    const percent = resync.total ? Math.floor((resync.done / resync.total) * 100) : 0
-    return `Neu synchronisieren… ${percent} %`
-  }
-  if (syncState.value.running) return 'Synchronisiert…'
-  if (syncState.value.lastError) return 'Synchronisierung fehlgeschlagen – neuer Versuch folgt'
-  if (pending.value > withIssues.value.length) return 'Änderungen ausstehend'
-  const at = syncState.value.lastSyncAt
-  return at ? `Synchronisiert um ${timeFormat.format(new Date(at))}` : 'Noch nicht synchronisiert'
-})
-
 function markOffline() {
   // Without an account there is no server to lose.
   if (connection.value !== 'local') connection.value = 'offline'
 }
 
-const connectionLabel = computed(
-  () =>
-    ({
-      online: 'Server verbunden',
-      offline: 'Offline – lokale Daten',
-      expired: 'Sitzung abgelaufen',
-      local: 'Nur auf diesem Gerät',
-    })[connection.value],
-)
+// ---------------------------------------------------------------- storage hint (#195)
 
-const persistenceLabel = computed(
+const PERSISTENCE_HINT_KEY = 'notion-alt.persistenceHintDismissed'
+function readHintDismissed(): boolean {
+  try {
+    return localStorage.getItem(PERSISTENCE_HINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const persistenceHintDismissed = ref(readHintDismissed())
+/**
+ * The browser may delete local data under storage pressure. Say so once there is something to
+ * lose; after dismissing it the state stays in the status details and the settings.
+ */
+const showPersistenceHint = computed(
   () =>
-    ({
-      persisted: 'Speicher dauerhaft',
-      'not-persisted': 'Speicher nicht dauerhaft',
-      unsupported: 'Dauerhafter Speicher nicht unterstützt',
-      unknown: 'Speicherstatus unbekannt',
-    })[persistence.value],
+    persistence.value === 'not-persisted' &&
+    !persistenceHintDismissed.value &&
+    documents.value.length > 0,
 )
+function dismissPersistenceHint() {
+  persistenceHintDismissed.value = true
+  try {
+    localStorage.setItem(PERSISTENCE_HINT_KEY, '1')
+  } catch {
+    // Private mode: hidden for this visit only.
+  }
+}
 
 const sidebarOpen = ref(false)
 watch(
@@ -402,9 +398,7 @@ const shellStyle = computed(() => ({
 
     <aside id="sidebar" class="sidebar" aria-label="Navigation">
       <header class="sidebar-header">
-        <RouterLink class="workspace-name" :to="{ name: 'home', query: { choose: '1' } }">
-          {{ workspace?.name ?? 'Workspace' }}
-        </RouterLink>
+        <WorkspaceMenu :workspace-id="workspaceId" />
         <button
           type="button"
           class="icon sidebar-collapse"
@@ -524,48 +518,40 @@ const shellStyle = computed(() => ({
         </section>
       </template>
 
+      <nav class="nav-section nav-tools" aria-label="Werkzeuge">
+        <ul class="nav-list">
+          <li v-if="connection !== 'local'">
+            <RouterLink class="nav-item nav-tool" :to="{ name: 'account' }">
+              <NavIcon name="settings" />Einstellungen
+            </RouterLink>
+          </li>
+          <li v-if="connection !== 'local'">
+            <RouterLink
+              class="nav-item nav-tool"
+              :to="{ name: 'members', params: { workspaceId } }"
+            >
+              <NavIcon name="members" />Mitglieder
+            </RouterLink>
+          </li>
+          <li>
+            <RouterLink class="nav-item nav-tool" :to="{ name: 'trash', params: { workspaceId } }">
+              <NavIcon name="trash" />Papierkorb
+            </RouterLink>
+          </li>
+          <li>
+            <RouterLink class="nav-item nav-tool" :to="{ name: 'export', params: { workspaceId } }">
+              <NavIcon name="export" />Export & Import
+            </RouterLink>
+          </li>
+          <li>
+            <button type="button" class="nav-item nav-tool" @click="showShortcuts">
+              <NavIcon name="keyboard" />Tastenkürzel
+            </button>
+          </li>
+        </ul>
+      </nav>
+
       <footer class="sidebar-footer">
-        <p class="status" :class="`status-${connection}`" data-testid="connection">
-          <span class="dot" aria-hidden="true"></span>{{ connectionLabel }}
-          <RouterLink
-            v-if="connection === 'expired' || connection === 'local'"
-            :to="{ name: 'login' }"
-            data-testid="sign-in"
-            >Anmelden</RouterLink
-          >
-        </p>
-        <p class="status" :class="`status-${persistence}`" data-testid="persistence">
-          {{ persistenceLabel }}
-          <button
-            v-if="persistence === 'not-persisted'"
-            type="button"
-            class="link"
-            @click="requestPersistence"
-          >
-            Erneut anfragen
-          </button>
-        </p>
-        <p v-if="persistence === 'not-persisted'" class="hint muted">
-          Der Browser darf lokale Daten bei Speichermangel löschen. Tipp: App installieren oder
-          regelmäßig exportieren.
-        </p>
-        <p v-if="deviceStatus === 'revoked'" class="error" data-testid="device-revoked">
-          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten. Nach erneuter
-          Anmeldung synchronisiert es als neues Gerät weiter.
-        </p>
-        <p v-if="installPrompt" class="status">
-          <button type="button" class="link" @click="installApp">App installieren</button>
-          – startet wie eine eigene App, auch offline.
-        </p>
-        <p v-if="showIosHint" class="hint muted" data-testid="ios-install-hint">
-          Als App installieren: in Safari <strong>Teilen</strong> →
-          <strong>„Zum Home-Bildschirm“</strong>. Erst dann bleiben die lokalen Daten dauerhaft
-          gespeichert, und Benachrichtigungen sind möglich.
-          <button type="button" class="link" @click="dismissIosHint">Ausblenden</button>
-        </p>
-        <p class="muted" data-testid="pending">
-          {{ pending }} lokale Änderung{{ pending === 1 ? '' : 'en' }} noch nicht synchronisiert
-        </p>
         <p v-if="conflicts.length" class="error" data-testid="sync-conflicts">
           <RouterLink :to="{ name: 'conflicts', params: { workspaceId } }">
             {{ conflicts.length }} Konflikt{{ conflicts.length === 1 ? '' : 'e' }}
@@ -578,22 +564,30 @@ const shellStyle = computed(() => ({
             abgelehnt</RouterLink
           >. Sie bleiben lokal erhalten.
         </p>
-        <p v-if="syncLabel" class="muted sync-status" data-testid="sync-status">
-          {{ syncLabel }}
-          <button type="button" class="link" :disabled="syncState.running" @click="syncNow">
-            Jetzt synchronisieren
+        <p v-if="deviceStatus === 'revoked'" class="error" data-testid="device-revoked">
+          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten. Nach erneuter
+          Anmeldung synchronisiert es als neues Gerät weiter.
+        </p>
+        <p v-if="showPersistenceHint" class="hint" data-testid="persistence-hint">
+          Der Browser darf lokale Daten bei Speichermangel löschen. Tipp: App installieren oder
+          regelmäßig exportieren.
+          <button type="button" class="link" @click="requestPersistence">
+            Dauerhaft speichern
           </button>
-        </p>
-        <p class="muted">
-          <template v-if="currentUser">
-            {{ currentUser.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
-          </template>
-          <RouterLink :to="{ name: 'members', params: { workspaceId } }">Mitglieder</RouterLink> ·
-          <RouterLink :to="{ name: 'trash', params: { workspaceId } }">Papierkorb</RouterLink> ·
-          <RouterLink :to="{ name: 'export', params: { workspaceId } }">Export & Import</RouterLink>
           ·
-          <button type="button" class="link" @click="showShortcuts">Tastenkürzel</button>
+          <button type="button" class="link" @click="dismissPersistenceHint">Ausblenden</button>
         </p>
+        <p v-if="installPrompt" class="hint">
+          <button type="button" class="link" @click="installApp">App installieren</button>
+          – startet wie eine eigene App, auch offline.
+        </p>
+        <p v-if="showIosHint" class="hint muted" data-testid="ios-install-hint">
+          Als App installieren: in Safari <strong>Teilen</strong> →
+          <strong>„Zum Home-Bildschirm“</strong>. Erst dann bleiben die lokalen Daten dauerhaft
+          gespeichert, und Benachrichtigungen sind möglich.
+          <button type="button" class="link" @click="dismissIosHint">Ausblenden</button>
+        </p>
+        <SyncStatus :pending="pending" :with-issues="withIssues.length" @sync="syncNow" />
       </footer>
     </aside>
     <div

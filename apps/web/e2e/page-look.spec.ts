@@ -1,4 +1,4 @@
-import { expect, newPage, test } from './fixtures'
+import { expect, newPage, syncNow, test } from './fixtures'
 
 // #136: page icon and cover, shown in the tree and kept on another device.
 
@@ -15,7 +15,7 @@ test('icon and cover gradient appear in the page, the tree and on another device
   await page.getByRole('button', { name: 'Farbverlauf ocean' }).click()
   await expect(page.getByTestId('page-cover')).toHaveClass(/cover-ocean/)
   await expect(page.getByRole('tree')).toContainText('✈️ Reise')
-  await page.getByRole('button', { name: 'Jetzt synchronisieren' }).click()
+  await syncNow(page)
   await expect(page.getByTestId('pending')).toContainText('0 lokale Änderungen')
 
   const other = await browser.newContext({ storageState: await page.context().storageState() })

@@ -17,7 +17,7 @@ test('signing out keeps local data by default', async ({ signedIn: page }) => {
   await waitForSaved(page)
   await openSignOut(page)
   await page
-    .getByRole('region', { name: 'Abmelden' })
+    .getByRole('dialog', { name: 'Abmelden' })
     .getByRole('button', { name: 'Abmelden', exact: true })
     .click()
   await expect(page).toHaveURL(/\/login$/)
@@ -35,7 +35,7 @@ test('deleting local data with unsynced changes needs explicit confirmation', as
   await waitForSaved(page)
 
   await openSignOut(page)
-  const dialog = page.getByRole('region', { name: 'Abmelden' })
+  const dialog = page.getByRole('dialog', { name: 'Abmelden' })
   await dialog.getByLabel('Lokale Daten auf diesem Gerät löschen').check()
   await expect(dialog.getByTestId('unsynced-warning')).toContainText('noch nicht synchronisiert')
 
@@ -57,7 +57,7 @@ test('local data can be deleted while the server is unreachable', async ({ signe
   await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
   await openSignOut(page)
   await page.route('**/api/**', (route) => route.abort('connectionrefused'))
-  const dialog = page.getByRole('region', { name: 'Abmelden' })
+  const dialog = page.getByRole('dialog', { name: 'Abmelden' })
   await dialog.getByLabel('Lokale Daten auf diesem Gerät löschen').check()
   page.once('dialog', (confirm) => {
     expect(confirm.message()).toContain('nicht erreichbar')
