@@ -780,6 +780,35 @@ button.status-summary[aria-expanded='true'] {
   font-size: var(--text-sm);
 }
 
+.backlinks summary {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: baseline;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.backlinks summary::before {
+  content: '▸';
+  color: var(--muted);
+}
+
+.backlinks details[open] summary::before {
+  content: '▾';
+}
+
+.backlinks summary::-webkit-details-marker {
+  display: none;
+}
+
+.backlinks summary h2 {
+  margin: 0;
+}
+
+.backlinks ul {
+  margin-top: var(--space-sm);
+}
+
 .link-list li {
   display: flex;
   gap: var(--space-md);
