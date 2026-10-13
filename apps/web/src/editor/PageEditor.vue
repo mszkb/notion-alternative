@@ -1065,7 +1065,9 @@ function onKeydown(block: Block, event: KeyboardEvent) {
       scheduleSave(block.id)
       return
     }
-    if (key === 'k') {
+    // Like Notion (#197): with selected text Ctrl/⌘+K links it; without a selection the event
+    // goes on to the quick search (WorkspaceLayout).
+    if (key === 'k' && hasTextSelection(el)) {
       event.preventDefault()
       openPicker(block, el, 'link', 0)
       return
@@ -1214,6 +1216,14 @@ const picker = ref<{
   remove: number
   position: { top: number; left: number }
 } | null>(null)
+
+/** Whether a non-empty part of `el` is selected. */
+function hasTextSelection(el: HTMLElement): boolean {
+  const selection = document.getSelection()
+  if (!selection?.rangeCount || selection.isCollapsed) return false
+  const range = selection.getRangeAt(0)
+  return el.contains(range.commonAncestorContainer) && range.toString().length > 0
+}
 
 function openPicker(block: Block, el: HTMLElement, mode: 'page' | 'link', remove: number) {
   const selection = document.getSelection()

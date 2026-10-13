@@ -62,7 +62,7 @@ Wie in Notion, Übersicht in der App mit `Strg/⌘ + /` (`SHORTCUT_OVERVIEW` in 
 
 | Kürzel | Aktion | Konflikt mit dem Browser |
 | --- | --- | --- |
-| `Strg/⌘ + K` | Schnellsuche; im Text: Link auf eine Seite | Chrome/Firefox: Websuche in der Adressleiste – die App übernimmt es, wie Notion |
+| `Strg/⌘ + K` | Schnellsuche, auch im Text; mit markiertem Text: Link einfügen (#197) | Chrome/Firefox: Websuche in der Adressleiste – die App übernimmt es, wie Notion |
 | `Strg/⌘ + P` | Schnellsuche, auch im Text | Drucken – die App übernimmt es, wie Notion; Drucken über das Browser-Menü |
 | `Strg/⌘ + N` | Neue Seite | Chrome und Firefox geben es Webseiten nicht (neues Fenster). Ersatz: `Strg/⌘ + Alt + N`; in der installierten App je nach Browser auch `Strg/⌘ + N` |
 | `Strg/⌘ + \` | Seitenleiste ein-/ausblenden | keiner |

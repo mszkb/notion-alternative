@@ -45,7 +45,7 @@ import { connection, refreshSession } from '../session'
 import { onPushHint } from '../pwa'
 import { onSyncHint, requestSync } from '../sync/engine'
 import { DEFAULT_TRIGGERS, startSyncTriggers } from '../sync/triggers'
-import { isTextTarget, shortcutFor } from '../shortcuts'
+import { shortcutFor } from '../shortcuts'
 import { ROLE_LABELS } from '../sharing'
 import { toggleTheme } from '../theme'
 
@@ -308,7 +308,7 @@ const paletteOpen = ref(false)
 const shortcutsOpen = ref(false)
 
 function onShortcut(event: KeyboardEvent) {
-  const command = shortcutFor(event, isTextTarget(event.target))
+  const command = shortcutFor(event)
   if (!command) return
   event.preventDefault()
   if (command === 'palette') {

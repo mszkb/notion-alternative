@@ -41,7 +41,8 @@ Jeder Schritt lässt sich mit `Strg/⌘ + Z` rückgängig machen.
 
 | Kürzel | Aktion |
 | --- | --- |
-| `Strg/⌘ + K` oder `Strg/⌘ + P` | Schnellsuche: zuletzt besuchte Seiten, Volltext, Befehle |
+| `Strg/⌘ + K` oder `Strg/⌘ + P` | Schnellsuche: zuletzt besuchte Seiten, Volltext, Befehle (auch beim Schreiben) |
+| `Strg/⌘ + K` mit markiertem Text | Markierten Text verlinken (Seite oder URL) |
 | `Strg/⌘ + \` | Seitenleiste ein-/ausblenden (Breite: am Rand ziehen) |
 | `Strg/⌘ + Alt + N` | Neue Seite (`Strg/⌘ + N` nur, wo der Browser es erlaubt) |
 | `Strg/⌘ + Umschalt + L` | Hell/Dunkel umschalten (auch unter Konto → Darstellung) |
