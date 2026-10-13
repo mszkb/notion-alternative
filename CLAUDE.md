@@ -41,7 +41,7 @@ Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaff
 | `docs/adr/` | Architecture Decision Records (Vorlage: `0000-template.md`) |
 | `docs/process/` | Definition of Done, Aufgabenzerlegung für den Roadmap-Agenten |
 | `docs/testing/` | Testmatrix (offline/online, Mehrgeräte, Konflikte, Backups, Migrationen) |
-| `docs/user/` | Anleitungen für Nutzer (App installieren, Seiten bearbeiten, Export und Import, Workspaces teilen) |
+| `docs/user/` | Anleitungen für Nutzer (App installieren, Seiten bearbeiten, Export und Import, Workspaces teilen), Funktionen im Überblick (`features.md`) |
 | `docs/privacy/` | Datenschutz, z. B. Datenkatalog der Opt-in-Telemetrie |
 
 Bei Fragen zu Scope oder Architektur zuerst dort nachlesen, nicht raten.

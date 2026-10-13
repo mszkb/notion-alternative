@@ -56,6 +56,7 @@ Diese Teile gibt es in beiden Clients als eigene Implementierung. Ändert sich e
 | --- | --- | --- | --- |
 | Workspaces auflisten/wechseln | ✅ | ✅ | Web `views/HomeView.vue`, `composables/workspace.ts`; ui `HomeScreen.kt` |
 | Workspace anlegen | ✅ | ❌ | Web `views/HomeView.vue` |
+| Workspaces teilen: Mitglieder, Rollen, Nur-lesen, abgelehnte Änderungen retten ([Nutzerbeschreibung](../user/features.md#workspaces-teilen-mitglieder-und-rollen), ADR 0014) | ✅ | ❌ (kennt Rollen nicht; `forbidden` erscheint als abgelehnte Änderung) | Web `views/MembersView.vue`, `views/RejectedView.vue`, `sharing.ts`, `export/rescue.ts`, `local/store.ts`; Contract-Tests `packages/contract-tests/test/sharing.test.ts` |
 | Seitenbaum, auf-/zuklappen (pro Gerät gemerkt) | ✅ | ✅ | Web `components/TreeNode.vue`, `composables/tree-state.ts`; ui `HomeScreen.kt` |
 | Seite/Unterseite anlegen | ✅ | ✅ | Web `layouts/WorkspaceLayout.vue`; ui `HomeScreen.kt`, `PageScreen.kt`; core `LocalStore.createDocument` |
 | Seite verschieben | ✅ (Drag & Drop) | 🟡 nur Dialog „Verschieben nach …“, ans Ende | Web `components/TreeNode.vue`; ui `PageScreen.kt`; core `LocalStore.moveDocument` |
