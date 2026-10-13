@@ -41,6 +41,9 @@ test('manual full re-sync keeps pages and unsynced work', async ({ signedIn: pag
   await expect(page.getByTestId('pending')).toHaveText(/^0 /, { timeout: 10_000 })
 
   await page.getByRole('link', { name: 'Einstellungen' }).click()
+  // Rare and risky actions are folded away under "Fehlerbehebung" (#202).
+  await expect(page.getByRole('button', { name: 'Neu synchronisieren' })).toBeHidden()
+  await page.getByText('Fehlerbehebung', { exact: true }).last().click()
   await page.getByRole('button', { name: 'Neu synchronisieren' }).click()
   await expect(page.getByTestId('resync-done')).toBeVisible({ timeout: 10_000 })
 

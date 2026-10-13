@@ -36,7 +36,7 @@ In der installierten App erscheinen weder der Button noch der Hinweis.
 
 Ein neues Gerät lädt zuerst nur den Seitenbaum mit Titeln, Tags und Favoriten. Den Inhalt einer Seite lädt die App, sobald sie geöffnet wird, und behält ihn dann; die Seite ist ab da auch offline verfügbar. Bilder und Dateien lädt die App, wenn eine Seite sie zeigt.
 
-Vor einer Reise oder einem Flug: **Konto → Offline verfügbar → „Alles offline verfügbar machen“**. Die App lädt dann alle Seiten und Anhänge; ein Balken zeigt den Fortschritt. „Abbrechen“ hält jederzeit an, Geladenes bleibt, ein erneuter Klick setzt fort. Danach hält das Gerät alle Seiten offline bereit, auch neue von anderen Geräten. „Nur bei Bedarf laden“ stellt zurück.
+Vor einer Reise oder einem Flug: **Einstellungen → Offline & Sync → „Alles offline verfügbar machen“**. Die App lädt dann alle Seiten und Anhänge; ein Balken zeigt den Fortschritt. „Abbrechen“ hält jederzeit an, Geladenes bleibt, ein erneuter Klick setzt fort. Danach hält das Gerät alle Seiten offline bereit, auch neue von anderen Geräten. „Nur bei Bedarf laden“ stellt zurück.
 
 Nur die Anhänge laden: „Alle Anhänge offline verfügbar machen“. Anhänge, die ein anderes Gerät noch nicht hochgeladen hat, kommen beim nächsten Mal.
 

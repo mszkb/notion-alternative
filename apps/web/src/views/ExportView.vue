@@ -404,6 +404,11 @@ async function runImport(newIds: boolean) {
   justify-items: start;
 }
 
+.export-main h2 {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 .export-main h2,
 .export-main p,
 .export-main .check {

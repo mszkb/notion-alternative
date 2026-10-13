@@ -54,7 +54,7 @@ Neue Werte erst als Token anlegen, dann verwenden. Die Systemschrift ist Absicht
 ## Hell und dunkel
 
 - Standard: wie das System (`prefers-color-scheme`).
-- Manuell: Konto → Darstellung, oder `Strg/⌘ + Umschalt + L` (#134). Die Wahl gilt pro Gerät und Browser (`localStorage`) und wird vor dem ersten Zeichnen angewendet (`initTheme` in `main.ts`).
+- Manuell: Einstellungen → Darstellung, oder `Strg/⌘ + Umschalt + L` (#134). Die Wahl gilt pro Gerät und Browser (`localStorage`) und wird vor dem ersten Zeichnen angewendet (`initTheme` in `main.ts`).
 - Technisch: `data-theme="light"` bzw. `"dark"` auf `<html>`. Die dunklen Werte stehen einmal für die Systemeinstellung und einmal für die manuelle Wahl; beide Blöcke müssen gleich bleiben.
 
 ## Tastenkürzel

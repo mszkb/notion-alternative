@@ -56,7 +56,7 @@ Jeder Schritt lässt sich mit `Strg/⌘ + Z` rückgängig machen.
 | `Strg/⌘ + K` mit markiertem Text | Markierten Text verlinken (Seite oder URL) |
 | `Strg/⌘ + \` | Seitenleiste ein-/ausblenden (Breite: am Rand ziehen) |
 | `Strg/⌘ + Alt + N` | Neue Seite (`Strg/⌘ + N` nur, wo der Browser es erlaubt) |
-| `Strg/⌘ + Umschalt + L` | Hell/Dunkel umschalten (auch unter Konto → Darstellung) |
+| `Strg/⌘ + Umschalt + L` | Hell/Dunkel umschalten (auch unter Einstellungen → Allgemein → Darstellung) |
 | `Strg/⌘ + /` | Übersicht aller Kürzel |
 | `Strg/⌘ + B / I / E` | Fett, kursiv, Code |
 

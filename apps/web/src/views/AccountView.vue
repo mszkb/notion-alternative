@@ -3,7 +3,13 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { type AttachmentUsage, type Device, PASSWORD_MIN_LENGTH } from '@notion-alt/shared'
 import { ApiError, api } from '../api'
 import { deviceStatus } from '../device'
-import { persistence, refreshWorkspaces, requireStore, workspaces } from '../local/context'
+import {
+  persistence,
+  refreshWorkspaces,
+  requestPersistence,
+  requireStore,
+  workspaces,
+} from '../local/context'
 import { refreshAttachmentUsage } from '../limits'
 import {
   downloadAllAttachments,
@@ -24,6 +30,9 @@ import { setTheme, themePreference, type ThemePreference } from '../theme'
 import { loadAllDocuments, type MakeOfflineProgress, type MakeOfflineResult } from '../sync/offline'
 import type { OfflineMode } from '../local/db'
 import { formatDateTime } from '../format'
+
+/** "Fehlerbehebung" is rare and risky: folded unless opened (#202). */
+const troubleshootingOpen = ref(false)
 
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -300,303 +309,382 @@ async function changePassword() {
 </script>
 
 <template>
-  <main class="card">
+  <main class="card settings">
     <header class="row">
-      <h1>Konto</h1>
+      <h1>Einstellungen</h1>
       <RouterLink :to="{ name: 'home' }">Zurück</RouterLink>
     </header>
     <p class="muted">Angemeldet als {{ currentUser?.email }}</p>
 
-    <h2>Darstellung</h2>
-    <label class="theme-choice">
-      Farbschema
-      <select
-        :value="themePreference"
-        data-testid="theme"
-        @change="setTheme(($event.target as HTMLSelectElement).value as ThemePreference)"
-      >
-        <option value="system">Wie das System</option>
-        <option value="light">Hell</option>
-        <option value="dark">Dunkel</option>
-      </select>
-    </label>
-    <p class="muted">
-      Umschalten zwischen hell und dunkel auch mit <kbd>Strg/⌘ + Umschalt + L</kbd>.
-    </p>
+    <nav class="settings-nav" aria-label="Abschnitte">
+      <a href="#settings-general">Allgemein</a>
+      <a href="#settings-account">Konto &amp; Sicherheit</a>
+      <a href="#settings-offline">Offline &amp; Sync</a>
+      <a href="#settings-storage">Speicher</a>
+      <a href="#settings-troubleshooting" @click="troubleshootingOpen = true">Fehlerbehebung</a>
+    </nav>
 
-    <h2>Passwort ändern</h2>
-    <p v-if="connection !== 'online'" class="muted" data-testid="password-offline">
-      Zum Ändern des Passworts wird eine Serververbindung benötigt.
-    </p>
-    <form @submit.prevent="changePassword">
-      <fieldset :disabled="connection !== 'online' || busy">
-        <label>
-          Aktuelles Passwort
-          <input
-            v-model="currentPassword"
-            type="password"
-            autocomplete="current-password"
-            required
-          />
-        </label>
-        <label>
-          Neues Passwort
-          <input
-            v-model="newPassword"
-            type="password"
-            autocomplete="new-password"
-            :minlength="PASSWORD_MIN_LENGTH"
-            required
-          />
-        </label>
-        <label>
-          Neues Passwort wiederholen
-          <input
-            v-model="repeatPassword"
-            type="password"
-            autocomplete="new-password"
-            :minlength="PASSWORD_MIN_LENGTH"
-            required
-          />
-        </label>
-        <button type="submit">Passwort ändern</button>
-      </fieldset>
-    </form>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="done" role="status">
-      Passwort geändert. Andere Geräte müssen sich neu anmelden; ihre lokalen Daten bleiben
-      erhalten.
-    </p>
+    <section id="settings-general" aria-labelledby="settings-general-title">
+      <h2 id="settings-general-title">Allgemein</h2>
+      <h3>Darstellung</h3>
+      <label class="theme-choice">
+        Farbschema
+        <select
+          :value="themePreference"
+          data-testid="theme"
+          @change="setTheme(($event.target as HTMLSelectElement).value as ThemePreference)"
+        >
+          <option value="system">Wie das System</option>
+          <option value="light">Hell</option>
+          <option value="dark">Dunkel</option>
+        </select>
+      </label>
+      <p class="muted">
+        Umschalten zwischen hell und dunkel auch mit <kbd>Strg/⌘ + Umschalt + L</kbd>.
+      </p>
 
-    <h2>Geräte</h2>
-    <p v-if="deviceStatus === 'revoked'" class="error">
-      Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten. Nach erneuter
-      Anmeldung synchronisiert es als neues Gerät weiter.
-    </p>
-    <p v-if="connection !== 'online'" class="muted">
-      Die Geräteliste ist nur mit Serververbindung verfügbar.
-    </p>
-    <ul v-else-if="devices" class="devices" aria-label="Geräte">
-      <li v-for="device in devices" :key="device.id" :data-testid="`device-${device.id}`">
-        <form v-if="editing === device.id" class="row" @submit.prevent="saveRename(device)">
-          <input v-model="editName" aria-label="Gerätename" maxlength="100" required />
-          <button type="submit">Speichern</button>
-          <button type="button" class="link" @click="editing = null">Abbrechen</button>
-        </form>
-        <template v-else>
-          <span>
-            <strong>{{ device.name }}</strong>
-            <span v-if="device.current" class="muted"> (dieses Gerät)</span>
-            <br />
-            <small class="muted">zuletzt gesehen {{ formatDateTime(device.lastSeenAt) }}</small>
-          </span>
-          <span class="row">
-            <button type="button" class="link" @click="startRename(device)">Umbenennen</button>
-            <button
-              v-if="!device.current"
-              type="button"
-              class="link danger"
-              @click="removeDevice(device)"
-            >
-              Entfernen
-            </button>
-          </span>
-        </template>
-      </li>
-    </ul>
-    <p v-if="deviceError" class="error" role="alert">{{ deviceError }}</p>
-
-    <h2>Synchronisierung</h2>
-    <p class="muted">
-      Lädt alle Workspaces vollständig neu vom Server. Noch nicht synchronisierte Änderungen auf
-      diesem Gerät werden zuerst gesendet und bleiben erhalten.
-    </p>
-    <button
-      type="button"
-      :disabled="connection !== 'online' || deviceStatus === 'revoked' || resyncing"
-      @click="resync"
-    >
-      {{ resyncing ? 'Synchronisiert…' : 'Neu synchronisieren' }}
-    </button>
-    <p v-if="syncState.resync" class="muted" data-testid="resync-progress">
-      <progress :value="syncState.resync.done" :max="syncState.resync.total || 1" />
-      {{ syncState.resync.done.toLocaleString('de-DE') }} von
-      {{ syncState.resync.total.toLocaleString('de-DE') }} Einträgen
-    </p>
-    <p v-if="resyncDone" class="muted" data-testid="resync-done">Vollständig synchronisiert.</p>
-    <p v-if="!resyncing && syncState.lastError" class="error">
-      Synchronisierung fehlgeschlagen: {{ syncState.lastError }}
-    </p>
-
-    <h2>Offline verfügbar</h2>
-    <p class="muted" data-testid="offline-mode">
-      <template v-if="offlineMode === 'all'">
-        Dieses Gerät hält alle Seiten offline bereit, auch neue von anderen Geräten.
-      </template>
-      <template v-else>
-        Dieses Gerät lädt den Inhalt einer Seite, sobald sie geöffnet wird; geöffnete Seiten bleiben
-        offline verfügbar. Anhänge lädt die App, sobald eine Seite sie zeigt. Vor einer Reise lässt
-        sich alles auf einmal laden.
-      </template>
-    </p>
-    <p v-if="pageCounts" data-testid="offline-pages">
-      {{ pageCounts.loaded.toLocaleString('de-DE') }} von
-      {{ pageCounts.total.toLocaleString('de-DE') }} Seiten auf diesem Gerät.
-    </p>
-    <template v-if="!makeOffline">
+      <h3>Benachrichtigungen</h3>
+      <p class="muted">
+        Ein Hinweis, wenn auf einem anderen Gerät etwas geändert wurde – ohne Inhalte. Die
+        Synchronisierung läuft auch ohne Benachrichtigungen.
+      </p>
+      <p data-testid="notification-state">
+        {{
+          {
+            unsupported:
+              'Hier nicht verfügbar: Benachrichtigungen gehen nur über eine HTTPS-Adresse oder in der installierten App. Die Synchronisierung läuft trotzdem.',
+            'needs-install':
+              'Auf iPhone und iPad nur in der installierten App (Teilen → „Zum Home-Bildschirm“).',
+            denied:
+              'Im Browser blockiert. Zum Erlauben: Schloss-Symbol neben der Adresse → Website-Einstellungen → Benachrichtigungen.',
+            off: 'Aus.',
+            on: 'An für dieses Gerät.',
+          }[notificationState]
+        }}
+      </p>
       <button
-        v-if="offlineMode !== 'all'"
+        v-if="notificationState === 'off'"
         type="button"
-        :disabled="connection !== 'online'"
-        data-testid="make-offline"
-        @click="makeEverythingOffline"
+        :disabled="connection !== 'online' || notificationBusy"
+        @click="toggleNotifications(true)"
       >
-        Alles offline verfügbar machen
+        Benachrichtigungen aktivieren
       </button>
       <button
-        v-else
+        v-if="notificationState === 'on'"
         type="button"
         class="secondary"
-        data-testid="load-on-demand"
-        @click="loadOnDemand"
+        :disabled="notificationBusy"
+        @click="toggleNotifications(false)"
       >
-        Nur bei Bedarf laden
+        Benachrichtigungen deaktivieren
       </button>
-    </template>
-    <template v-else>
-      <p v-if="makeOffline.phase === 'pages'" class="muted" data-testid="make-offline-progress">
-        <progress :value="makeOffline.progress.done" :max="makeOffline.progress.total || 1" />
-        {{ makeOffline.progress.done.toLocaleString('de-DE') }} von
-        {{ makeOffline.progress.total.toLocaleString('de-DE') }} Seiten geladen
+      <p v-if="notificationError" class="error" role="alert">{{ notificationError }}</p>
+    </section>
+
+    <section id="settings-account" aria-labelledby="settings-account-title">
+      <h2 id="settings-account-title">Konto &amp; Sicherheit</h2>
+      <h3>Passwort ändern</h3>
+      <p v-if="connection !== 'online'" class="muted" data-testid="password-offline">
+        Zum Ändern des Passworts wird eine Serververbindung benötigt.
       </p>
-      <button
-        v-if="makeOffline.phase === 'pages'"
-        type="button"
-        data-testid="make-offline-cancel"
-        @click="makeOfflineAbort?.abort()"
-      >
-        Abbrechen
-      </button>
-    </template>
-    <p v-if="makeOfflineResult" role="status" data-testid="make-offline-result">
-      {{ makeOfflineResult }}
-    </p>
-    <p v-if="attachmentTotals" data-testid="offline-attachments">
-      {{ attachmentTotals.local.toLocaleString('de-DE') }} von
-      {{ attachmentTotals.total.toLocaleString('de-DE') }} Anhängen auf diesem Gerät ({{
-        formatBytes(attachmentTotals.localBytes)
-      }}
-      von {{ formatBytes(attachmentTotals.bytes) }}).
-    </p>
-    <button
-      v-if="!attachmentProgress && !makeOffline"
-      type="button"
-      :disabled="
-        connection !== 'online' ||
-        !attachmentTotals ||
-        attachmentTotals.local === attachmentTotals.total
-      "
-      @click="downloadAttachments"
-    >
-      Alle Anhänge offline verfügbar machen
-    </button>
-    <template v-else-if="attachmentProgress">
-      <p class="muted" data-testid="offline-attachments-progress">
-        <progress :value="attachmentProgress.bytes" :max="attachmentProgress.totalBytes || 1" />
-        {{ attachmentProgress.done.toLocaleString('de-DE') }} von
-        {{ attachmentProgress.total.toLocaleString('de-DE') }} Anhängen ({{
-          formatBytes(attachmentProgress.bytes)
-        }}
-        von {{ formatBytes(attachmentProgress.totalBytes) }})
+      <form @submit.prevent="changePassword">
+        <fieldset :disabled="connection !== 'online' || busy">
+          <label>
+            Aktuelles Passwort
+            <input
+              v-model="currentPassword"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <label>
+            Neues Passwort
+            <input
+              v-model="newPassword"
+              type="password"
+              autocomplete="new-password"
+              :minlength="PASSWORD_MIN_LENGTH"
+              required
+            />
+          </label>
+          <label>
+            Neues Passwort wiederholen
+            <input
+              v-model="repeatPassword"
+              type="password"
+              autocomplete="new-password"
+              :minlength="PASSWORD_MIN_LENGTH"
+              required
+            />
+          </label>
+          <button type="submit">Passwort ändern</button>
+        </fieldset>
+      </form>
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <p v-if="done" role="status">
+        Passwort geändert. Andere Geräte müssen sich neu anmelden; ihre lokalen Daten bleiben
+        erhalten.
       </p>
-      <button type="button" @click="attachmentAbort?.abort()">Abbrechen</button>
-    </template>
-    <p v-if="attachmentResultText" role="status" data-testid="offline-attachments-result">
-      {{ attachmentResultText }}
-    </p>
 
-    <h2>Benachrichtigungen</h2>
-    <p class="muted">
-      Ein Hinweis, wenn auf einem anderen Gerät etwas geändert wurde – ohne Inhalte. Die
-      Synchronisierung läuft auch ohne Benachrichtigungen.
-    </p>
-    <p data-testid="notification-state">
-      {{
-        {
-          unsupported: 'In diesem Browser bzw. über diese Adresse nicht verfügbar.',
-          'needs-install':
-            'Auf iPhone und iPad nur in der installierten App (Teilen → „Zum Home-Bildschirm“).',
-          denied: 'Im Browser blockiert; in den Website-Einstellungen wieder erlauben.',
-          off: 'Aus.',
-          on: 'An für dieses Gerät.',
-        }[notificationState]
-      }}
-    </p>
-    <button
-      v-if="notificationState === 'off'"
-      type="button"
-      :disabled="connection !== 'online' || notificationBusy"
-      @click="toggleNotifications(true)"
-    >
-      Benachrichtigungen aktivieren
-    </button>
-    <button
-      v-if="notificationState === 'on'"
-      type="button"
-      :disabled="notificationBusy"
-      @click="toggleNotifications(false)"
-    >
-      Benachrichtigungen deaktivieren
-    </button>
-    <p v-if="notificationError" class="error" role="alert">{{ notificationError }}</p>
-
-    <h2>Speicher auf diesem Gerät</h2>
-    <p v-if="usage" data-testid="storage-usage">
-      {{ formatBytes(usage.usage) }} von {{ formatBytes(usage.quota) }} belegt (lokale Daten und
-      App-Dateien).
-    </p>
-    <p v-else class="muted">Der Browser nennt keinen Speicherverbrauch.</p>
-    <p class="muted">
-      {{
-        persistence === 'persisted'
-          ? 'Der Browser hat dauerhaften Speicher gewährt.'
-          : 'Der Browser darf lokale Daten bei Speichermangel löschen; installieren hilft.'
-      }}
-    </p>
-
-    <template v-if="serverUsage.size">
-      <h2>Anhänge auf dem Server</h2>
-      <ul class="usage" data-testid="server-usage">
-        <li
-          v-for="workspace in workspaces.filter((w) => serverUsage.has(w.id))"
-          :key="workspace.id"
-        >
-          {{ workspace.name }}:
-          {{ formatBytes(serverUsage.get(workspace.id)!.usedBytes) }}
-          <template v-if="serverUsage.get(workspace.id)!.quotaBytes !== null">
-            von {{ formatBytes(serverUsage.get(workspace.id)!.quotaBytes!) }}
+      <h3>Geräte</h3>
+      <p v-if="deviceStatus === 'revoked'" class="error">
+        Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten. Nach erneuter
+        Anmeldung synchronisiert es als neues Gerät weiter.
+      </p>
+      <p v-if="connection !== 'online'" class="muted">
+        Die Geräteliste ist nur mit Serververbindung verfügbar.
+      </p>
+      <ul v-else-if="devices" class="devices" aria-label="Geräte">
+        <li v-for="device in devices" :key="device.id" :data-testid="`device-${device.id}`">
+          <form v-if="editing === device.id" class="row" @submit.prevent="saveRename(device)">
+            <input v-model="editName" aria-label="Gerätename" maxlength="100" required />
+            <button type="submit">Speichern</button>
+            <button type="button" class="link" @click="editing = null">Abbrechen</button>
+          </form>
+          <template v-else>
+            <span>
+              <strong>{{ device.name }}</strong>
+              <span v-if="device.current" class="muted"> (dieses Gerät)</span>
+              <br />
+              <small class="muted">zuletzt gesehen {{ formatDateTime(device.lastSeenAt) }}</small>
+            </span>
+            <span class="row">
+              <button type="button" class="link" @click="startRename(device)">Umbenennen</button>
+              <button
+                v-if="!device.current"
+                type="button"
+                class="link danger"
+                @click="removeDevice(device)"
+              >
+                Entfernen
+              </button>
+            </span>
           </template>
-          belegt ({{ serverUsage.get(workspace.id)!.count }} Anhänge, höchstens
-          {{ formatBytes(serverUsage.get(workspace.id)!.maxFileBytes) }} pro Datei)
         </li>
       </ul>
-    </template>
+      <p v-if="deviceError" class="error" role="alert">{{ deviceError }}</p>
+    </section>
 
-    <h2>App-Version</h2>
-    <p class="muted">
-      Hängt die App auf einer alten Version fest, entfernt dies die zwischengespeicherten
-      App-Dateien und lädt sie neu vom Server. Lokale Daten bleiben erhalten.
-    </p>
-    <button type="button" :disabled="connection !== 'online'" @click="resetAppCache">
-      App-Cache zurücksetzen
-    </button>
+    <section id="settings-offline" aria-labelledby="settings-offline-title">
+      <h2 id="settings-offline-title">Offline &amp; Sync</h2>
+      <p class="muted" data-testid="offline-mode">
+        <template v-if="offlineMode === 'all'">
+          Dieses Gerät hält alle Seiten offline bereit, auch neue von anderen Geräten.
+        </template>
+        <template v-else>
+          Dieses Gerät lädt den Inhalt einer Seite, sobald sie geöffnet wird; geöffnete Seiten
+          bleiben offline verfügbar. Anhänge lädt die App, sobald eine Seite sie zeigt. Vor einer
+          Reise lässt sich alles auf einmal laden.
+        </template>
+      </p>
+      <p v-if="pageCounts" data-testid="offline-pages">
+        {{ pageCounts.loaded.toLocaleString('de-DE') }} von
+        {{ pageCounts.total.toLocaleString('de-DE') }} Seiten auf diesem Gerät.
+      </p>
+      <template v-if="!makeOffline">
+        <button
+          v-if="offlineMode !== 'all'"
+          type="button"
+          :disabled="connection !== 'online'"
+          data-testid="make-offline"
+          @click="makeEverythingOffline"
+        >
+          Alles offline verfügbar machen
+        </button>
+        <button
+          v-else
+          type="button"
+          class="secondary"
+          data-testid="load-on-demand"
+          @click="loadOnDemand"
+        >
+          Nur bei Bedarf laden
+        </button>
+      </template>
+      <template v-else>
+        <p v-if="makeOffline.phase === 'pages'" class="muted" data-testid="make-offline-progress">
+          <progress :value="makeOffline.progress.done" :max="makeOffline.progress.total || 1" />
+          {{ makeOffline.progress.done.toLocaleString('de-DE') }} von
+          {{ makeOffline.progress.total.toLocaleString('de-DE') }} Seiten geladen
+        </p>
+        <button
+          v-if="makeOffline.phase === 'pages'"
+          type="button"
+          class="secondary"
+          data-testid="make-offline-cancel"
+          @click="makeOfflineAbort?.abort()"
+        >
+          Abbrechen
+        </button>
+      </template>
+      <p v-if="makeOfflineResult" role="status" data-testid="make-offline-result">
+        {{ makeOfflineResult }}
+      </p>
+      <p v-if="attachmentTotals" data-testid="offline-attachments">
+        {{ attachmentTotals.local.toLocaleString('de-DE') }} von
+        {{ attachmentTotals.total.toLocaleString('de-DE') }} Anhängen auf diesem Gerät ({{
+          formatBytes(attachmentTotals.localBytes)
+        }}
+        von {{ formatBytes(attachmentTotals.bytes) }}).
+      </p>
+      <button
+        v-if="!attachmentProgress && !makeOffline"
+        type="button"
+        class="secondary"
+        :disabled="
+          connection !== 'online' ||
+          !attachmentTotals ||
+          attachmentTotals.local === attachmentTotals.total
+        "
+        @click="downloadAttachments"
+      >
+        Alle Anhänge offline verfügbar machen
+      </button>
+      <template v-else-if="attachmentProgress">
+        <p class="muted" data-testid="offline-attachments-progress">
+          <progress :value="attachmentProgress.bytes" :max="attachmentProgress.totalBytes || 1" />
+          {{ attachmentProgress.done.toLocaleString('de-DE') }} von
+          {{ attachmentProgress.total.toLocaleString('de-DE') }} Anhängen ({{
+            formatBytes(attachmentProgress.bytes)
+          }}
+          von {{ formatBytes(attachmentProgress.totalBytes) }})
+        </p>
+        <button type="button" class="secondary" @click="attachmentAbort?.abort()">Abbrechen</button>
+      </template>
+      <p v-if="attachmentResultText" role="status" data-testid="offline-attachments-result">
+        {{ attachmentResultText }}
+      </p>
+    </section>
+
+    <section id="settings-storage" aria-labelledby="settings-storage-title">
+      <h2 id="settings-storage-title">Speicher</h2>
+      <h3>Auf diesem Gerät</h3>
+      <p v-if="usage" data-testid="storage-usage">
+        {{ formatBytes(usage.usage) }} von {{ formatBytes(usage.quota) }} belegt (lokale Daten und
+        App-Dateien).
+      </p>
+      <p v-else class="muted">Der Browser nennt keinen Speicherverbrauch.</p>
+      <p class="muted" data-testid="storage-persistence">
+        {{
+          persistence === 'persisted'
+            ? 'Der Browser hat dauerhaften Speicher gewährt.'
+            : 'Der Browser darf lokale Daten bei Speichermangel löschen. Abhilfe: die App installieren oder regelmäßig exportieren.'
+        }}
+      </p>
+      <button
+        v-if="persistence === 'not-persisted'"
+        type="button"
+        class="secondary"
+        @click="requestPersistence"
+      >
+        Dauerhaften Speicher anfragen
+      </button>
+
+      <template v-if="serverUsage.size">
+        <h3>Anhänge auf dem Server</h3>
+        <ul class="usage" data-testid="server-usage">
+          <li
+            v-for="workspace in workspaces.filter((w) => serverUsage.has(w.id))"
+            :key="workspace.id"
+          >
+            {{ workspace.name }}:
+            {{ formatBytes(serverUsage.get(workspace.id)!.usedBytes) }}
+            <template v-if="serverUsage.get(workspace.id)!.quotaBytes !== null">
+              von {{ formatBytes(serverUsage.get(workspace.id)!.quotaBytes!) }}
+            </template>
+            belegt ({{ serverUsage.get(workspace.id)!.count }} Anhänge, höchstens
+            {{ formatBytes(serverUsage.get(workspace.id)!.maxFileBytes) }} pro Datei)
+          </li>
+        </ul>
+      </template>
+    </section>
+
+    <details
+      id="settings-troubleshooting"
+      class="troubleshooting"
+      :open="troubleshootingOpen"
+      @toggle="troubleshootingOpen = ($event.target as HTMLDetailsElement).open"
+    >
+      <summary><h2>Fehlerbehebung</h2></summary>
+      <p class="muted">Nur nötig, wenn etwas nicht wie erwartet funktioniert.</p>
+      <h3>Neu synchronisieren</h3>
+      <p class="muted">
+        Lädt alle Workspaces vollständig neu vom Server. Noch nicht synchronisierte Änderungen auf
+        diesem Gerät werden zuerst gesendet und bleiben erhalten.
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        :disabled="connection !== 'online' || deviceStatus === 'revoked' || resyncing"
+        @click="resync"
+      >
+        {{ resyncing ? 'Synchronisiert…' : 'Neu synchronisieren' }}
+      </button>
+      <p v-if="syncState.resync" class="muted" data-testid="resync-progress">
+        <progress :value="syncState.resync.done" :max="syncState.resync.total || 1" />
+        {{ syncState.resync.done.toLocaleString('de-DE') }} von
+        {{ syncState.resync.total.toLocaleString('de-DE') }} Einträgen
+      </p>
+      <p v-if="resyncDone" class="muted" data-testid="resync-done">Vollständig synchronisiert.</p>
+      <p v-if="!resyncing && syncState.lastError" class="error">
+        Synchronisierung fehlgeschlagen: {{ syncState.lastError }}
+      </p>
+
+      <h3>App-Version</h3>
+      <p class="muted">
+        Hängt die App auf einer alten Version fest, entfernt dies die zwischengespeicherten
+        App-Dateien und lädt sie neu vom Server. Lokale Daten bleiben erhalten.
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        :disabled="connection !== 'online'"
+        @click="resetAppCache"
+      >
+        App-Cache zurücksetzen
+      </button>
+    </details>
   </main>
 </template>
 
 <style scoped>
+.settings section,
+.troubleshooting {
+  margin-top: var(--space-2xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border);
+}
+
 h2 {
-  margin: var(--space-xl) 0 var(--space-md);
+  margin: 0 0 var(--space-md);
   font-size: var(--text-lg);
+}
+
+h3 {
+  margin: var(--space-xl) 0 var(--space-sm);
+  font-size: var(--text-sm);
+}
+
+h2 + h3 {
+  margin-top: 0;
+}
+
+.settings-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  font-size: var(--text-sm);
+}
+
+.troubleshooting summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.troubleshooting summary h2 {
+  display: inline;
 }
 
 .devices {

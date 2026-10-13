@@ -403,7 +403,9 @@ async function deletePage() {
       <template v-if="content === 'offline'">
         Der Inhalt dieser Seite ist nicht auf diesem Gerät. Er wird geladen, sobald der Server
         erreichbar ist. Damit alle Seiten auch ohne Verbindung da sind:
-        <RouterLink :to="{ name: 'account' }">Konto → Offline verfügbar</RouterLink>.
+        <RouterLink :to="{ name: 'account', hash: '#settings-offline' }"
+          >Einstellungen → Offline &amp; Sync</RouterLink
+        >.
       </template>
       <template v-else-if="content === 'missing'">
         Der Inhalt dieser Seite ist auf dem Server nicht verfügbar.
