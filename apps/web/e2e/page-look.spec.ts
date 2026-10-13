@@ -14,7 +14,10 @@ test('icon and cover gradient appear in the page, the tree and on another device
   await page.getByRole('button', { name: 'Titelbild hinzufügen' }).click()
   await page.getByRole('button', { name: 'Farbverlauf ocean' }).click()
   await expect(page.getByTestId('page-cover')).toHaveClass(/cover-ocean/)
-  await expect(page.getByRole('tree')).toContainText('✈️ Reise')
+  // The icon stands in the arrow's column of the tree (#203).
+  const row = page.getByRole('treeitem', { name: /Reise/ }).locator('.tree-row')
+  await expect(row.locator('.tree-icon')).toHaveText('✈️')
+  await expect(row.getByRole('link')).toHaveText('Reise')
   await syncNow(page)
   await expect(page.getByTestId('pending')).toContainText('0 lokale Änderungen')
 

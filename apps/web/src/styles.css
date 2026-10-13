@@ -485,6 +485,30 @@ button.workspace-name[aria-expanded='true'] {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+/* Page icon in the arrow's column; the arrow replaces it on hover or focus (#203). */
+.tree-row .toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-start;
+  width: 1.5rem;
+  padding-left: 0;
+}
+
+.tree-row .tree-arrow {
+  display: none;
+}
+
+.tree-row:hover button.toggle .tree-icon,
+.tree-row:focus-within button.toggle .tree-icon {
+  display: none;
+}
+
+.tree-row:hover button.toggle .tree-arrow,
+.tree-row:focus-within button.toggle .tree-arrow {
+  display: inline;
+}
+
 .tree-link {
   flex: 1;
   min-width: 0;
