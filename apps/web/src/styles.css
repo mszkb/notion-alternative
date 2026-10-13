@@ -22,6 +22,7 @@
   --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.15);
   --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.15);
   --backdrop: rgba(0, 0, 0, 0.25);
+  --scrim: rgba(0, 0, 0, 0.4);
 
   /* spacing */
   --space-2xs: 0.15rem;
@@ -77,6 +78,7 @@
     --code-bg: rgba(135, 131, 120, 0.25);
     --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.5);
     --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.5);
+    --scrim: rgba(0, 0, 0, 0.6);
     color-scheme: dark;
   }
 }
@@ -97,6 +99,7 @@
   --code-bg: rgba(135, 131, 120, 0.25);
   --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.5);
   --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }
 
@@ -272,7 +275,8 @@ button.danger,
   font-size: var(--text-sm);
 }
 
-.sidebar-toggle {
+.sidebar-toggle,
+.sidebar-scrim {
   display: none;
 }
 
@@ -1371,13 +1375,31 @@ button.cover-swatch {
     inset: 0 auto 0 0;
     z-index: 25;
     width: min(20rem, 85vw);
-    padding-top: var(--space-3xl);
     transform: translateX(-100%);
     transition: transform 0.2s;
   }
 
   .sidebar-open .sidebar {
     transform: none;
+    box-shadow: var(--shadow-popover);
+  }
+
+  /* Dims the content behind the open sidebar; a tap on it closes the sidebar (#201). */
+  .sidebar-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 24;
+    display: block;
+    background: var(--scrim);
+  }
+
+  /* While open, the sidebar's own close button replaces ☰. */
+  .sidebar-open .sidebar-toggle {
+    display: none;
+  }
+
+  .sidebar-collapse {
+    opacity: 1;
   }
 
   /* The overlay replaces collapsing and resizing. */
@@ -1385,7 +1407,6 @@ button.cover-swatch {
     display: flex;
   }
 
-  .sidebar-collapse,
   .sidebar-expand,
   .sidebar-resizer {
     display: none;

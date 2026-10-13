@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { Document, ServerSearchHit } from '@notion-alt/shared'
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
+import { FINE_POINTER, NARROW, useMediaQuery } from '../composables/media'
 import CommandPalette from '../components/CommandPalette.vue'
 import NavIcon from '../components/NavIcon.vue'
 import ShortcutsDialog from '../components/ShortcutsDialog.vue'
@@ -286,20 +287,86 @@ function dismissPersistenceHint() {
   }
 }
 
+// ---------------------------------------------------------------- sidebar (#132, #201)
+
+const narrow = useMediaQuery(NARROW)
+/** Shortcut hints only where there is a keyboard. */
+const keyboard = useMediaQuery(FINE_POINTER, true)
 const sidebarOpen = ref(false)
+/** The sidebar lies over the content (narrow screens). */
+const overlay = computed(() => narrow.value && sidebarOpen.value)
+const sidebar = ref<HTMLElement | null>(null)
+const sidebarToggle = ref<HTMLButtonElement | null>(null)
+
 watch(
   () => route.fullPath,
-  () => (sidebarOpen.value = false),
+  () => closeSidebar(false),
 )
+watch(narrow, (isNarrow) => {
+  if (!isNarrow) sidebarOpen.value = false
+})
 
-// ---------------------------------------------------------------- sidebar (#132)
+async function openSidebar() {
+  sidebarOpen.value = true
+  await nextTick()
+  focusables()[0]?.focus()
+}
 
-const NARROW = '(max-width: 760px)'
+function closeSidebar(returnFocus = true) {
+  if (!sidebarOpen.value) return
+  sidebarOpen.value = false
+  if (returnFocus) void nextTick(() => sidebarToggle.value?.focus())
+}
 
 /** Ctrl/⌘ + \ shows or hides the sidebar; on narrow screens it opens the overlay. */
 function toggleSidebar() {
-  if (globalThis.matchMedia?.(NARROW).matches) sidebarOpen.value = !sidebarOpen.value
-  else setSidebarCollapsed(!sidebarCollapsed.value)
+  if (narrow.value) {
+    if (sidebarOpen.value) closeSidebar()
+    else void openSidebar()
+  } else setSidebarCollapsed(!sidebarCollapsed.value)
+}
+
+function focusables(): HTMLElement[] {
+  const selector = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]'
+  return [...(sidebar.value?.querySelectorAll<HTMLElement>(selector) ?? [])].filter(
+    (el) => el.offsetParent !== null,
+  )
+}
+
+/** While the overlay is open, Esc closes it and Tab stays inside (#201). */
+function onSidebarKeydown(event: KeyboardEvent) {
+  if (!overlay.value) return
+  if (event.key === 'Escape' && !event.defaultPrevented) {
+    event.preventDefault()
+    closeSidebar()
+  } else if (event.key === 'Tab') {
+    const items = focusables()
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (!first || !last) return
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+}
+
+/** Swiping the overlay to the left closes it. */
+let touchStart: { x: number; y: number } | null = null
+function onTouchStart(event: TouchEvent) {
+  const touch = event.touches[0]
+  touchStart = overlay.value && touch ? { x: touch.clientX, y: touch.clientY } : null
+}
+function onTouchEnd(event: TouchEvent) {
+  const touch = event.changedTouches[0]
+  if (!touchStart || !touch) return
+  const dx = touch.clientX - touchStart.x
+  const dy = touch.clientY - touchStart.y
+  touchStart = null
+  if (dx < -60 && Math.abs(dx) > Math.abs(dy)) closeSidebar()
 }
 
 // ---------------------------------------------------------------- shortcuts, quick search (#134)
@@ -376,14 +443,22 @@ const shellStyle = computed(() => ({
     :style="shellStyle"
   >
     <button
+      ref="sidebarToggle"
       type="button"
       class="sidebar-toggle"
       :aria-expanded="sidebarOpen"
       aria-controls="sidebar"
-      @click="sidebarOpen = !sidebarOpen"
+      @click="toggleSidebar"
     >
       ☰ <span class="visually-hidden">Navigation</span>
     </button>
+    <div
+      v-if="overlay"
+      class="sidebar-scrim"
+      aria-hidden="true"
+      data-testid="sidebar-scrim"
+      @click="closeSidebar()"
+    ></div>
     <button
       v-if="sidebarCollapsed"
       type="button"
@@ -396,16 +471,24 @@ const shellStyle = computed(() => ({
       »
     </button>
 
-    <aside id="sidebar" class="sidebar" aria-label="Navigation">
+    <aside
+      id="sidebar"
+      ref="sidebar"
+      class="sidebar"
+      aria-label="Navigation"
+      @keydown="onSidebarKeydown"
+      @touchstart.passive="onTouchStart"
+      @touchend="onTouchEnd"
+    >
       <header class="sidebar-header">
         <WorkspaceMenu :workspace-id="workspaceId" />
         <button
           type="button"
           class="icon sidebar-collapse"
           aria-label="Seitenleiste ausblenden"
-          title="Seitenleiste ausblenden (Strg/⌘ + \)"
+          :title="keyboard ? 'Seitenleiste ausblenden (Strg/⌘ + \\)' : 'Seitenleiste ausblenden'"
           data-testid="sidebar-collapse"
-          @click="setSidebarCollapsed(true)"
+          @click="narrow ? closeSidebar() : setSidebarCollapsed(true)"
         >
           «
         </button>
@@ -415,7 +498,7 @@ const shellStyle = computed(() => ({
         v-model="query"
         class="search"
         type="search"
-        placeholder="Suchen… (Strg/⌘ + K)"
+        :placeholder="keyboard ? 'Suchen… (Strg/⌘ + K)' : 'Suchen…'"
         aria-label="Seiten durchsuchen"
         @keydown.enter="hits[0] && openHit(hits[0])"
         @keydown.escape="query = ''"
@@ -545,7 +628,7 @@ const shellStyle = computed(() => ({
               <NavIcon name="export" />Export & Import
             </RouterLink>
           </li>
-          <li>
+          <li v-if="keyboard">
             <button type="button" class="nav-item nav-tool" @click="showShortcuts">
               <NavIcon name="keyboard" />Tastenkürzel
             </button>
@@ -606,7 +689,7 @@ const shellStyle = computed(() => ({
       @keydown="resizeByKey"
     ></div>
 
-    <main class="content">
+    <main class="content" :inert="overlay || undefined">
       <p v-if="revoked" class="notice" role="status" data-testid="access-revoked">
         <strong>Zugriff entzogen.</strong> Du bist kein Mitglied dieses Workspace mehr. Was auf
         diesem Gerät liegt, bleibt lesbar und lässt sich

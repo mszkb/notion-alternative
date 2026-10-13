@@ -18,7 +18,7 @@ Die Produktprinzipien gelten unverändert: Jede Bedienung funktioniert offline, 
 
 | Muster (wie in Notion) | Unsere Umsetzung | Stand |
 | --- | --- | --- |
-| Seitenleiste links: Suche, Favoriten, Seitenbaum, Papierkorb, Einstellungen unten | `WorkspaceLayout.vue`, `composables/sidebar.ts` | umgesetzt: einklappbar (`Strg/⌘ + \`), Breite per Ziehen oder Pfeiltasten am Rand, beides pro Gerät gemerkt; schmal als Overlay (#132). Einstellungen, Mitglieder, Papierkorb, Export & Import und Tastenkürzel als Einträge mit Icon (`NavIcon.vue`, #195) |
+| Seitenleiste links: Suche, Favoriten, Seitenbaum, Papierkorb, Einstellungen unten | `WorkspaceLayout.vue`, `composables/sidebar.ts` | umgesetzt: einklappbar (`Strg/⌘ + \`), Breite per Ziehen oder Pfeiltasten am Rand, beides pro Gerät gemerkt; schmal als Overlay mit Abdunkelung; Tippen daneben, `Esc` oder Wischen nach links schließt, der Fokus bleibt solange in der Seitenleiste (#132, #201). Einstellungen, Mitglieder, Papierkorb, Export & Import und Tastenkürzel als Einträge mit Icon (`NavIcon.vue`, #195) |
 | Workspace-Menü oben links: wechseln, anlegen, Einstellungen, abmelden | `WorkspaceMenu.vue`, `LogoutDialog.vue`; `role="menu"`, Pfeiltasten, `Esc` | umgesetzt (#196); ohne Konto: „Auf diesem Gerät“ und „Anmelden“ |
 | Status unauffällig, Hinweise nur bei Bedarf | `SyncStatus.vue`: **eine** Zeile mit Punkt und Kurztext („Synchronisiert“, „3 Änderungen warten“, „Offline“, „Nur auf diesem Gerät“), Klick öffnet Details und „Jetzt synchronisieren“. Speicherhinweis erst mit Inhalt und einmal wegklickbar; Konflikte und abgelehnte Änderungen bleiben rot sichtbar | umgesetzt (#195) |
 | Seitenbaum mit Auf-/Zuklappen, „+“ bei Hover für eine Unterseite, Ziehen zum Verschieben | `TreeNode.vue` | vorhanden |
@@ -42,7 +42,7 @@ Alle Farben, Abstände, Schriftgrößen, Radien und Schatten sind CSS-Variablen 
 
 | Gruppe | Variablen |
 | --- | --- |
-| Farbe | `--bg`, `--surface`, `--sidebar`, `--text`, `--muted`, `--border`, `--accent`, `--on-accent`, `--error`, `--ok`, `--warn`, `--hover`, `--code-bg` |
+| Farbe | `--bg`, `--surface`, `--sidebar`, `--text`, `--muted`, `--border`, `--accent`, `--on-accent`, `--error`, `--ok`, `--warn`, `--hover`, `--code-bg`, `--backdrop` (hinter Dialogen), `--scrim` (hinter der Seitenleiste auf schmalen Bildschirmen) |
 | Schatten | `--shadow-popover` (Menüs), `--shadow-toast` (Hinweise am Rand) |
 | Abstand | `--space-2xs` (0,15 rem) · `--space-xs` (0,3) · `--space-sm` (0,5) · `--space-md` (0,75) · `--space-lg` (1) · `--space-xl` (1,5) · `--space-2xl` (2) · `--space-3xl` (3) · `--space-4xl` (4) · `--space-5xl` (6) |
 | Schrift | `--font-sans` (Systemschrift), `--text-xs`, `--text-sm`, `--text-lg`, `--text-xl`, `--text-2xl`, `--text-title` |
@@ -83,4 +83,5 @@ Wie in Notion, Übersicht in der App mit `Strg/⌘ + /` (`SHORTCUT_OVERVIEW` in 
 
 - Was nur bei Hover erscheint, erscheint auch bei Tastaturfokus (`:focus-visible`, `:focus-within`).
 - Jede Aktion ist per Tastatur erreichbar; Menüs schließen mit `Esc`.
+- Hinweise auf Tastenkürzel nur auf Geräten mit Maus bzw. Trackpad (`(hover: hover) and (pointer: fine)`, `composables/media.ts`), nicht auf Touch-Geräten (#201).
 - Icons ohne Text haben ein `aria-label`.
