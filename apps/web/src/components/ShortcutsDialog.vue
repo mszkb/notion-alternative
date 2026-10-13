@@ -43,6 +43,11 @@ onMounted(() => closeButton.value?.focus())
         <kbd>1.</kbd> nummeriert, <kbd>[]</kbd> To-do, <kbd>&gt;</kbd> Zitat, <kbd>```</kbd> Code,
         <kbd>---</kbd> Trenner, <kbd>[[</kbd> Seitenlink, <kbd>/</kbd> alle Blocktypen.
       </p>
+      <p class="muted" data-testid="inline-markdown-help">
+        Im Text: <kbd>**fett**</kbd>, <kbd>_kursiv_</kbd> oder <kbd>*kursiv*</kbd>,
+        <kbd>`Code`</kbd> und <kbd>[Text](https://…)</kbd> werden beim Tippen umgewandelt;
+        <kbd>Strg/⌘ + Z</kbd> direkt danach lässt die Zeichen stehen.
+      </p>
     </div>
   </div>
 </template>

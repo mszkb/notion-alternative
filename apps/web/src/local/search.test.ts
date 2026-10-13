@@ -3,7 +3,13 @@ import { newId } from '@notion-alt/shared'
 import { Dexie } from 'dexie'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { LocalDb } from './db'
-import { makeSnippet, SEARCH_INDEX_FORMAT, SearchIndex, WorkspaceSearch } from './search'
+import {
+  makeSnippet,
+  SEARCH_INDEX_FORMAT,
+  SearchIndex,
+  WorkspaceSearch,
+  withoutMarkdownMarkers,
+} from './search'
 import { LocalStore } from './store'
 
 describe('SearchIndex', () => {
@@ -34,6 +40,17 @@ describe('SearchIndex', () => {
     const text = `${'a '.repeat(100)}Treffer ${'b '.repeat(100)}`
     const snippet = makeSnippet(text, ['treffer'], 10)
     expect(snippet).toMatch(/^….*Treffer.*…$/)
+  })
+
+  it('shows literally typed Markdown without markers (#194)', () => {
+    expect(
+      makeSnippet('Ein **fetter** Treffer mit _Stil_, `code` und [Doku](https://x.org)', [
+        'treffer',
+      ]),
+    ).toBe('Ein fetter Treffer mit Stil, code und Doku')
+    expect(withoutMarkdownMarkers('2*3*4 und snake_case_name bleiben')).toBe(
+      '2*3*4 und snake_case_name bleiben',
+    )
   })
 })
 

@@ -26,6 +26,7 @@ Die Produktprinzipien gelten unverändert: Jede Bedienung funktioniert offline, 
 | Kopfzeile mit Breadcrumbs und Seitenmenü | `PageView.vue` | umgesetzt: „Bearbeitet …“, Favorit, Seitenmenü ⋯ (Unterseite, Verlauf, Export, Löschen) (#132) |
 | Steuerelemente erscheinen erst bei Hover bzw. Fokus | Blockgriff ⋮⋮ (Klick: Menü mit Umwandeln, Duplizieren, Link kopieren, Verschieben, Löschen; Ziehen: verschieben), „+“ im Baum | umgesetzt (#132/#133) |
 | `/` öffnet ein Menü für Blocktypen, Markdown-Kürzel beim Tippen | `SlashMenu.vue`: leerer Block wird umgewandelt, sonst neuer Block danach; Kürzel `#`, `-`, `1.`, `>`, ```` ``` ```` | umgesetzt (#133) |
+| Inline-Markdown wird beim Tippen zu Formatierung | `editor/inline-shortcuts.ts`: `**fett**`, `_kursiv_`/`*kursiv*`, `` `Code` ``, `[Text](url)`; ein `Strg/⌘ + Z` direkt danach lässt die Zeichen stehen; gespeichert wird weiter Markdown-Inline (ADR 0008) | umgesetzt (#194) |
 | Schnellsuche mit `Strg/⌘+K` bzw. `Strg/⌘+P` | `CommandPalette.vue`: zuletzt besuchte Seiten, lokale Volltextsuche (offline), Befehle | umgesetzt (#134) |
 | To-do, Toggle, Callout, Trenner | neue Blocktypen ([ADR 0019](../adr/0019-block-types.md)); Kürzel `[] ` und `---`, Toggle eingeklappt pro Gerät | umgesetzt (#135) |
 | Seiten-Icons (Emoji) und Titelbilder | Felder `icon`/`cover` der Seite; Emoji-Auswahl offline (`IconPicker.vue`), Titelbild als Farbverlauf oder Bild-Anhang (`PageCover.vue`) | umgesetzt (#136) |

@@ -40,7 +40,7 @@ import {
   workspaces,
   workspaceSearch,
 } from '../local/context'
-import type { SearchHit } from '../local/search'
+import { type SearchHit, withoutMarkdownMarkers } from '../local/search'
 import { connection, refreshSession } from '../session'
 import { onPushHint } from '../pwa'
 import { onSyncHint, requestSync } from '../sync/engine'
@@ -447,7 +447,9 @@ const shellStyle = computed(() => ({
             <li v-for="hit in extraServerHits" :key="hit.documentId">
               <button type="button" class="nav-item" @click="openServerHit(hit)">
                 <strong>{{ hit.title || 'Unbenannt' }}</strong>
-                <small v-if="hit.snippet" class="muted">{{ hit.snippet }}</small>
+                <small v-if="hit.snippet" class="muted">{{
+                  withoutMarkdownMarkers(hit.snippet)
+                }}</small>
               </button>
             </li>
           </ul>

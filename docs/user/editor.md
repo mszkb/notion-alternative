@@ -20,6 +20,17 @@ Jede Seite besteht aus Blöcken. Neue Blöcke entstehen mit Enter, mit **„+ Bl
 
 Ein leerer Block wird in den gewählten Typ umgewandelt, ein Block mit Text bekommt den neuen Block darunter.
 
+**Formatierung im Text:** Wie in Notion wird Markdown umgewandelt, sobald es geschlossen ist:
+
+| Eingabe | Ergebnis |
+| --- | --- |
+| `**fett**` | **fett** |
+| `_kursiv_` oder `*kursiv*` | _kursiv_ |
+| `` `Code` `` | `Code` |
+| `[Text](https://beispiel.de)` | Link |
+
+`Strg/⌘ + Z` direkt danach macht die Umwandlung rückgängig und lässt die Zeichen stehen. In Code-Blöcken und in Inline-Code wird nichts umgewandelt; ein Backslash davor (`\*`) verhindert die Umwandlung ebenfalls. Alternativ markieren und `Strg/⌘ + B`, `I`, `E` oder `K` drücken.
+
 **Toggle:** Ein einklappbarer Abschnitt. Enter im Toggle legt den ersten Inhalt darin an; Tab rückt einen Block in den Toggle ein, Umschalt+Tab oder Backspace am Anfang wieder heraus. Ob ein Toggle auf- oder zugeklappt ist, merkt sich jedes Gerät selbst.
 
 **Hinweis (Callout):** Ein hervorgehobener Kasten mit Symbol; Klick auf das Symbol ändert es.
