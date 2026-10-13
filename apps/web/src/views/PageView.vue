@@ -20,6 +20,7 @@ import PageEditor from '../editor/PageEditor.vue'
 import { registerPendingEdits } from '../pending-edits'
 import { connection } from '../session'
 import { ensureDocumentLoaded, type OpenOutcome } from '../sync/offline'
+import { formatDateTime } from '../format'
 
 const { store, workspaceId, documentsById, childrenByParent, readOnly } = useWorkspace()
 const route = useRoute()
@@ -189,10 +190,7 @@ async function onCoverFile(event: Event) {
 
 // ---------------------------------------------------------------- header (#132)
 
-const editedFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
-const edited = computed(() =>
-  document.value ? editedFormat.format(new Date(document.value.updatedAt)) : '',
-)
+const edited = computed(() => (document.value ? formatDateTime(document.value.updatedAt) : ''))
 
 const menuOpen = ref(false)
 const shareOpen = ref(false)

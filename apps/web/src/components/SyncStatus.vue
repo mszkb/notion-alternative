@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { persistence, requestPersistence } from '../local/context'
 import { connection, currentUser } from '../session'
 import { syncState } from '../sync/engine'
+import { formatTime } from '../format'
 
 /**
  * One status line at the bottom of the sidebar (#195): a dot and a short text. Details and
@@ -51,8 +52,6 @@ const summary = computed(() => {
   return syncState.value.lastSyncAt ? 'Synchronisiert' : 'Noch nicht synchronisiert'
 })
 
-const timeFormat = new Intl.DateTimeFormat('de-DE', { timeStyle: 'short' })
-
 /** Detail line telling whether local data is on the server. */
 const syncLabel = computed(() => {
   if (connection.value !== 'online') return null
@@ -65,7 +64,7 @@ const syncLabel = computed(() => {
   if (syncState.value.lastError) return 'Synchronisierung fehlgeschlagen – neuer Versuch folgt'
   if (waiting.value) return 'Änderungen ausstehend'
   const at = syncState.value.lastSyncAt
-  return at ? `Synchronisiert um ${timeFormat.format(new Date(at))}` : 'Noch nicht synchronisiert'
+  return at ? `Synchronisiert um ${formatTime(at)}` : 'Noch nicht synchronisiert'
 })
 
 const connectionLabel = computed(

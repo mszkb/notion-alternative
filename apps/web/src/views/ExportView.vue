@@ -16,6 +16,7 @@ import { buildMarkdownExport, saveFile } from '../export/markdown'
 import { refreshWorkspaces, workspaces } from '../local/context'
 import { connection } from '../session'
 import { requestSync } from '../sync/engine'
+import { formatDateTime } from '../format'
 
 const { store, workspaceId } = useWorkspace()
 const workspace = computed(() => ({
@@ -110,7 +111,6 @@ const idsExist = ref(false)
 const importing = ref(false)
 /** Set when the source is a converted Notion export (#137). */
 const notionReport = ref<NotionImportReport | null>(null)
-const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
 
 const importSummary = computed(() => {
   const source = importSource.value
@@ -123,7 +123,7 @@ const importSummary = computed(() => {
     attachments,
     contents: source.attachments.size,
     history: source.data.history?.changes.length ?? null,
-    exportedAt: dateFormat.format(new Date(source.data.exported_at)),
+    exportedAt: formatDateTime(source.data.exported_at),
   }
 })
 

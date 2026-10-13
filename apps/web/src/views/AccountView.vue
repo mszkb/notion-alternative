@@ -23,6 +23,7 @@ import { requestSync, syncState } from '../sync/engine'
 import { setTheme, themePreference, type ThemePreference } from '../theme'
 import { loadAllDocuments, type MakeOfflineProgress, type MakeOfflineResult } from '../sync/offline'
 import type { OfflineMode } from '../local/db'
+import { formatDateTime } from '../format'
 
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -44,8 +45,6 @@ const devices = ref<Device[] | null>(null)
 const deviceError = ref<string | null>(null)
 const editing = ref<string | null>(null)
 const editName = ref('')
-
-const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
 
 async function loadDevices() {
   if (connection.value !== 'online') return
@@ -389,9 +388,7 @@ async function changePassword() {
             <strong>{{ device.name }}</strong>
             <span v-if="device.current" class="muted"> (dieses Gerät)</span>
             <br />
-            <small class="muted"
-              >zuletzt gesehen {{ dateFormat.format(new Date(device.lastSeenAt)) }}</small
-            >
+            <small class="muted">zuletzt gesehen {{ formatDateTime(device.lastSeenAt) }}</small>
           </span>
           <span class="row">
             <button type="button" class="link" @click="startRename(device)">Umbenennen</button>

@@ -7,6 +7,7 @@ import { useLiveQuery } from '../composables/live-query'
 import { displayTitle, useWorkspace } from '../composables/workspace'
 import { diffBlocks } from '../editor/version-diff'
 import { connection } from '../session'
+import { formatDateTime } from '../format'
 
 const { store, workspaceId, documentsById, readOnly } = useWorkspace()
 const route = useRoute()
@@ -19,8 +20,6 @@ const versions = ref<DocumentVersion[] | null>(null)
 const selected = ref<DocumentVersionState | null>(null)
 const deviceNames = ref(new Map<string, string>())
 const error = ref<string | null>(null)
-
-const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
 
 onMounted(async () => {
   if (connection.value !== 'online') return
@@ -118,7 +117,7 @@ const titleChanged = computed(
             :aria-current="selected?.seq === version.seq || undefined"
             @click="select(version)"
           >
-            <strong>{{ dateFormat.format(new Date(version.at)) }}</strong>
+            <strong>{{ formatDateTime(version.at) }}</strong>
             <small class="muted">
               {{ deviceName(version.deviceId) }} · {{ version.changes }} Änderung{{
                 version.changes === 1 ? '' : 'en'
