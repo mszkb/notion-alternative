@@ -2,6 +2,8 @@
 
 Für gewöhnliches Webhosting mit PHP, HTTPS und Cron, ohne Docker ([ADR 0018](../adr/0018-php-backend.md)). Es reichen FTP oder der Dateimanager des Hosters.
 
+Schritt für Schritt: [Hochladen per FTP](ftp-upload.md) (FileZilla, Ordner, Konfiguration, Update) und [Einrichtung bei Hostern](hoster.md) (IONOS, STRATO, ALL-INKL.COM, Hetzner, netcup, Hostinger).
+
 ## Voraussetzungen
 
 - PHP **8.2** oder neuer mit `pdo_sqlite` (SQLite mit FTS5), `mbstring`, `openssl`, `sodium`, `curl`
