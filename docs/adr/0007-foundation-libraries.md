@@ -4,7 +4,7 @@
 - **Datum:** 2026-10-02
 
 
-> **Teilweise ersetzt:** Der Teil „Server-Bibliotheken (Fastify-Umfeld, Kysely, better-sqlite3)“ ist durch [ADR 0018](0018-php-backend.md) (PHP-Backend, angenommen 2026-10-08) ersetzt. Bis zur Umstellung ([#129](https://github.com/mszkb/notion-alternative/issues/129)) läuft weiter der Node-Server.
+> **Teilweise ersetzt:** Der Teil „Server-Bibliotheken (Fastify-Umfeld, Kysely, better-sqlite3)“ ist durch [ADR 0018](0018-php-backend.md) (PHP-Backend, angenommen 2026-10-08) ersetzt. Bis zur Umstellung ([#129](https://github.com/mszkb/notion-alternative/issues/129)) läuft weiter der Node-Server. Datenbankzugriff über Doctrine DBAL, mit MariaDB/MySQL als Option: [ADR 0024](0024-mysql-mariadb-option.md).
 
 ## Kontext
 
