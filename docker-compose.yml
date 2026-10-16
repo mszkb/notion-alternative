@@ -28,6 +28,13 @@ services:
       LOGIN_MAX_FAILURES_PER_EMAIL: ${LOGIN_MAX_FAILURES_PER_EMAIL:-}
       LOGIN_MAX_FAILURES_PER_IP: ${LOGIN_MAX_FAILURES_PER_IP:-}
       REGISTER_MAX_ATTEMPTS_PER_IP: ${REGISTER_MAX_ATTEMPTS_PER_IP:-}
+      # MariaDB/MySQL instead of the SQLite file in the volume (ADR 0024); empty: SQLite.
+      DATABASE_URL: ${DATABASE_URL:-}
+      DB_HOST: ${DB_HOST:-}
+      DB_PORT: ${DB_PORT:-}
+      DB_NAME: ${DB_NAME:-}
+      DB_USER: ${DB_USER:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
     volumes:
       - data:/data
     # Hardening (#74): no root inside, no extra capabilities, nothing writable but /data and /tmp.
