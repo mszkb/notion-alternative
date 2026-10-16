@@ -1,7 +1,7 @@
 # 0024 – MariaDB und MySQL als Option neben SQLite
 
-- **Status:** Proposed
-- **Datum:** 2026-10-13
+- **Status:** Accepted
+- **Datum:** 2026-10-13, angenommen 2026-10-16
 
 ## Kontext
 
@@ -77,7 +77,7 @@ Betroffene Prinzipien und Invarianten:
 
 ## Entscheidung
 
-Vorschlag, Annahme durch den Maintainer steht aus: **A2, B1, C1, D1.**
+**A2, B1, C1, D1** (vom Maintainer angenommen, 2026-10-16).
 
 ### Datenbankzugriff und Konfiguration
 
@@ -131,7 +131,7 @@ Vorschlag, Annahme durch den Maintainer steht aus: **A2, B1, C1, D1.**
 
 ## Konsequenzen
 
-- **Abhängigkeit:** Eine neue Abhängigkeit (`doctrine/dbal`). ADR 0007 und ADR 0018 werden um diesen Eintrag ergänzt, sobald dieses ADR angenommen ist.
+- **Abhängigkeit:** Eine neue Abhängigkeit (`doctrine/dbal`). ADR 0007 und ADR 0018 verweisen auf dieses ADR.
 - **Testaufwand:** Jede Änderung am Server läuft gegen zwei Datenbanken. Neue SQL-Stellen müssen beide Dialekte bedienen oder die DBAL-API nutzen. `CLAUDE.md` erhält dafür einen Hinweis.
 - **Suche:** Auf MariaDB/MySQL findet die Suche keine Wörter unter 3 Zeichen und gewichtet Treffer anders. Die Nutzerdoku sagt das.
 - **Setup:** SQLite bleibt der Weg ohne Einrichtung, die Landing Page wirbt weiter mit „nur PHP nötig“. MariaDB/MySQL erscheint dort als Option für Hoster, die eine Datenbank mitbringen.
@@ -158,7 +158,7 @@ Vorschlag, Annahme durch den Maintainer steht aus: **A2, B1, C1, D1.**
   8. `check.php` und Webspace-Doku.
   9. Landing Page und Nutzerdoku.
 
-### Offen für den Maintainer
+### Entschieden vom Maintainer (2026-10-16)
 
-- Ist die Grenze bei MariaDB 10.11 und MySQL 8.4 richtig, oder müssen ältere Hoster-Versionen (MariaDB 10.6, MySQL 8.0) mit?
-- Sollen Wörter unter 3 Zeichen auf MariaDB/MySQL zusätzlich über eine `LIKE`-Suche gefunden werden? Das wäre langsamer, verhielte sich aber wie FTS5.
+- Unterstützt werden MariaDB ab 10.11 und MySQL ab 8.4. Ältere Versionen (MariaDB 10.6, MySQL 8.0) werden nicht getestet und nicht zugesagt.
+- Keine zusätzliche `LIKE`-Suche für Wörter unter 3 Zeichen. Die Nutzerdoku nennt den Unterschied, die lokale Suche im Client findet solche Wörter.
