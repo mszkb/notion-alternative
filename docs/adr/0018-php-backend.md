@@ -42,9 +42,10 @@ Mit dem Owner abgestimmt ([#116](https://github.com/mszkb/notion-alternative/iss
 | `openssl` | Web Push (ES256, AES-128-GCM, ECDH), S3-Signatur |
 | `sodium` | Zufall, zeitkonstante Vergleiche, Argon2id für `password_hash` |
 | `mbstring`, `json` | Texte, API |
+| `pdo_mysql` (nur mit MariaDB/MySQL) | Datenbank auf MariaDB oder MySQL statt SQLite ([ADR 0024](0024-mysql-mariadb-option.md)) |
 | optional `apcu` | Cache für Rate-Limits und Entprellung; ohne APCu übernimmt die Datenbank |
 
-**Composer-Abhängigkeiten:** `slim/slim` (^4), eine PSR-7-Implementierung (`slim/psr7`). Web Push nach RFC 8291 bauen wir selbst wie im Node-Server (gleiche Testvektoren). `minishlink/web-push` nehmen wir nur, wenn der Port daran scheitert. Validierung: eigene, schmale Schemas je Endpunkt nach dem Vorbild der zod-Schemas in `@notion-alt/shared`. Ein JSON-Schema-Export der zod-Schemas als gemeinsame Quelle wird in #119 geprüft.
+**Composer-Abhängigkeiten:** `slim/slim` (^4), eine PSR-7-Implementierung (`slim/psr7`); dazu `doctrine/dbal` für SQLite und optional MariaDB/MySQL ([ADR 0024](0024-mysql-mariadb-option.md)). Web Push nach RFC 8291 bauen wir selbst wie im Node-Server (gleiche Testvektoren). `minishlink/web-push` nehmen wir nur, wenn der Port daran scheitert. Validierung: eigene, schmale Schemas je Endpunkt nach dem Vorbild der zod-Schemas in `@notion-alt/shared`. Ein JSON-Schema-Export der zod-Schemas als gemeinsame Quelle wird in #119 geprüft.
 
 **Zustand ohne Prozess:**
 

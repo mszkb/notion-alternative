@@ -172,6 +172,13 @@ Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/no
 - [ ] Shared-Hosting-Paket und Docker-Image ([#128](https://github.com/mszkb/notion-alternative/issues/128); ZIP, `.htaccess`, Einrichtungs-Check und PHP-FPM-Image gebaut; Images auf amd64 und arm64 (QEMU) gebaut und mit den Contract-Tests geprüft; ZIP unter Apache mit `mod_php` per `scripts/webspace-test.sh` geprüft; offen: echter Webspace-Test und Gitea-Nightly gegen PHP)
 - [x] Umstellung und Rückbau des Node-Servers ([#129](https://github.com/mszkb/notion-alternative/issues/129); Contract-Tests sind die Spezifikation, Fixtures eingefroren)
 
+## Ohne Phase – MariaDB und MySQL als Option
+
+Neben SQLite (Standard, ohne Einrichtung) optional MariaDB oder MySQL für Hoster mit verwalteter Datenbank ([ADR 0024](docs/adr/0024-mysql-mariadb-option.md)).
+
+- [x] ADR 0024 angenommen (Doctrine DBAL, MariaDB ab 10.11 und MySQL ab 8.4, Sperre für die Sync-Reihenfolge, Suche mit `FULLTEXT`, ein Backup-Format)
+- [ ] Umsetzung (Epic [#208](https://github.com/mszkb/notion-alternative/issues/208))
+
 ## Phase 8 – Collaboration
 
 - [x] Sharing: Workspace mit Mitgliedern, Einladen per E-Mail-Adresse, Verlassen und Entfernen, Zugriff entzogen auf dem Gerät ([ADR 0014](docs/adr/0014-sharing-and-permissions.md), [#78](https://github.com/mszkb/notion-alternative/issues/78), [Anleitung](docs/user/sharing.md))

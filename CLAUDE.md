@@ -28,6 +28,7 @@ Entschieden (`Accepted`):
 - **Teilen und Rechte** ([ADR 0014](docs/adr/0014-sharing-and-permissions.md)): Freigabeeinheit ist der Workspace (`workspace_members`, Rollen `reader`/`commenter`/`editor`/`owner`); mehrere Besitzer, der Ersteller (`owner_id`) trägt das Kontingent und bleibt fest; Rechte nur serverseitig maßgeblich, Operationen ohne Recht → `rejected` `forbidden`.
 - **Lese-Links** ([ADR 0022](docs/adr/0022-read-links.md)): eine Seite pro Link, Gast-Ansicht in der SPA ohne Konto, Token nur als SHA-256 gespeichert, verwalten ab `editor`.
 - **Ohne Konto starten** ([ADR 0023](docs/adr/0023-local-area-without-account.md)): eigene Dexie-DB `notion-alt-local` mit einem lokalen Workspace; beim Login Übernahme per `LocalStore` in die Konto-DB (gleiche IDs, neue Operationen, wiederaufnehmbar), danach normaler Sync; keine neuen Endpunkte.
+- **MariaDB/MySQL als Option** ([ADR 0024](docs/adr/0024-mysql-mariadb-option.md)): SQLite bleibt Standard; Doctrine DBAL als Datenbankschicht, MariaDB ab 10.11 und MySQL ab 8.4 über `DATABASE_URL`; Sync-Reihenfolge per `for update` auf die Workspace-Zeile, Suche mit `FULLTEXT` (keine Wörter unter 3 Zeichen), Backup immer als SQLite-Datei.
 
 Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaffine (`docs/product/vision.md`).
 
