@@ -162,7 +162,7 @@ Self-Hosting per ZIP auf Shared Hosting (Epic [#116](https://github.com/mszkb/no
 Neben SQLite (Standard, ohne Einrichtung) optional MariaDB oder MySQL für Hoster mit verwalteter Datenbank ([ADR 0024](docs/adr/0024-mysql-mariadb-option.md)).
 
 - [x] ADR 0024 angenommen (Doctrine DBAL, MariaDB ab 10.11 und MySQL ab 8.4, Sperre für die Sync-Reihenfolge, Suche mit `FULLTEXT`, ein Backup-Format)
-- [ ] Umsetzung (Issues nach der Annahme)
+- [ ] Umsetzung (Epic [#208](https://github.com/mszkb/notion-alternative/issues/208))
 
 ## Phase 8 – Collaboration
 
