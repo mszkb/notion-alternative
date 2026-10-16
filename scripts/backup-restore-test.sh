@@ -2,10 +2,18 @@
 # T-BAK-01 against the real Docker Compose stack (nightly job "Backup and restore", docs/operations/backup.md):
 # create data, back up while running, wipe everything, restore into an empty volume, verify.
 # MODE=local runs the same steps against the PHP server without Docker (composer install in
-# apps/server).
+# apps/server). There, DATABASE_URL (mysql://…) runs the server on MariaDB/MySQL before the backup,
+# and RESTORE_DATABASE_URL picks the database restored into (default: the same; `sqlite` for the
+# SQLite file), so a backup also moves an installation between the two (ADR 0024). The MariaDB/MySQL
+# databases are emptied; use throwaway ones (scripts/mysql/fresh-database.php).
 set -euo pipefail
 MODE="${MODE:-docker}"
 cd "$(dirname "$0")/.."
+SOURCE_DB="${DATABASE_URL:-}"
+TARGET_DB="${RESTORE_DATABASE_URL:-$SOURCE_DB}"
+[ "$TARGET_DB" = sqlite ] && TARGET_DB=
+# The database of the current phase: the source until the wipe, then the target.
+export DATABASE_URL="$SOURCE_DB"
 
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-notion-alt-backup-test}"
 export ALLOW_REGISTRATION=true
@@ -47,7 +55,17 @@ copy_out() { # backup dir in the backend -> $WORK/backup
 }
 wipe() {
   if [ "$MODE" = docker ]; then docker compose down -v
-  else kill "$SERVER_PID"; wait "$SERVER_PID" || true; SERVER_PID=; rm -rf "$WORK/data"; fi
+  else
+    kill "$SERVER_PID"; wait "$SERVER_PID" || true; SERVER_PID=; rm -rf "$WORK/data"
+    for url in "$SOURCE_DB" "$TARGET_DB"; do [ -n "$url" ] && drop_tables "$url"; done
+    export DATABASE_URL="$TARGET_DB"
+  fi
+}
+drop_tables() { # empties a MariaDB/MySQL database
+  php -r '$u = parse_url($argv[1]);
+    $db = new PDO("mysql:host={$u["host"]};port=" . ($u["port"] ?? 3306) . ";dbname=" . trim($u["path"], "/"), rawurldecode($u["user"]), rawurldecode($u["pass"] ?? ""));
+    $db->exec("set foreign_key_checks = 0");
+    foreach ($db->query("show tables")->fetchAll(PDO::FETCH_COLUMN) as $t) { $db->exec("drop table `$t`"); }' "$1"
 }
 restore() {
   if [ "$MODE" = docker ]; then

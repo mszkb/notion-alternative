@@ -7,6 +7,7 @@ namespace NotionAlt\Cli;
 use NotionAlt\Attachments\VolumeStore;
 use NotionAlt\Config\Config;
 use NotionAlt\Database\Database;
+use NotionAlt\Database\DatabaseCopy;
 use NotionAlt\Database\Migrator;
 use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
@@ -17,6 +18,10 @@ use NotionAlt\Support\Ids;
  * server runs) plus the attachment files of the volume, and `manifest.json` with checksums.
  * Backups of older versions (also of the former Node server) restore and are migrated.
  * Not included: configuration and S3 contents.
+ *
+ * On MariaDB/MySQL the backup has the same format (ADR 0024): the data is copied into a new SQLite
+ * file, and a restore copies it back into the configured database. So a backup also moves an
+ * installation between SQLite and MariaDB/MySQL.
  *
  * @phpstan-type Manifest array{format: string, version: int, createdAt: string, migration: ?string, attachmentStorage: string, files: list<array{path: string, size: int, sha256: string}>, missingAttachments: list<string>}
  */
@@ -47,12 +52,23 @@ final class Backup
         self::mkdir($work);
 
         // 1. Database: a consistent copy even while the server writes.
-        if (!is_file($config->databasePath)) {
-            throw new \RuntimeException("{$config->databasePath} does not exist");
+        if ($config->mysql !== null) {
+            $source = Database::openMysql($config->mysql);
+            (new Migrator($source))->migrateToLatest();
+            $copy = Database::open("{$work}/" . self::DATABASE_FILE);
+            (new Migrator($copy))->migrateToLatest();
+            DatabaseCopy::copy($source, $copy);
+            // One file like `vacuum into` writes: the WAL goes into the database and is removed.
+            $copy->exec('pragma journal_mode = delete');
+            unset($source, $copy);
+        } else {
+            if (!is_file($config->databasePath)) {
+                throw new \RuntimeException("{$config->databasePath} does not exist");
+            }
+            $source = Database::open($config->databasePath);
+            Sql::run($source, 'vacuum into ?', ["{$work}/" . self::DATABASE_FILE]);
+            unset($source);
         }
-        $source = Database::open($config->databasePath);
-        Sql::run($source, 'vacuum into ?', ["{$work}/" . self::DATABASE_FILE]);
-        unset($source);
 
         // 2. Attachment files referenced by the copied database (files never change after upload).
         $copy = new \PDO('sqlite:' . "{$work}/" . self::DATABASE_FILE, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
@@ -149,18 +165,10 @@ final class Backup
     public static function restore(Config $config, string $dir, bool $force = false): array
     {
         $manifest = self::verify($dir);
-        $target = $config->databasePath;
-        if (file_exists($target) && !$force) {
-            throw new \RuntimeException("{$target} exists. Stop the server and pass --force to replace it.");
-        }
-        self::mkdir(\dirname($target));
-        foreach (['', '-wal', '-shm'] as $suffix) {
-            if (file_exists($target . $suffix)) {
-                unlink($target . $suffix);
-            }
-        }
-        if (!copy("{$dir}/" . self::DATABASE_FILE, "{$target}.restoring") || !rename("{$target}.restoring", $target)) {
-            throw new \RuntimeException("Cannot write {$target}");
+        if ($config->mysql !== null) {
+            $db = self::restoreIntoMysql($config, $dir, $force);
+        } else {
+            $db = self::restoreSqlite($config, $dir, $force);
         }
 
         $attachments = 0;
@@ -174,18 +182,81 @@ final class Backup
             ++$attachments;
         }
 
-        $db = Database::open($target);
-        (new Migrator($db))->migrateToLatest();
         Sql::run(
             $db,
-            'update workspaces set compacted_seq = max(
-               compacted_seq,
-               coalesce((select max(seq) from changes where changes.workspace_id = workspaces.id), 0)
-             ) + ?',
+            'update workspaces set compacted_seq = ' . Sql::greatest(
+                $db,
+                'compacted_seq',
+                'coalesce((select max(seq) from changes where changes.workspace_id = workspaces.id), 0)',
+            ) . ' + ?',
             [self::RESTORE_SEQ_GAP],
         );
 
         return ['manifest' => $manifest, 'attachments' => $attachments, 'migratedFrom' => $manifest['migration']];
+    }
+
+    /** Replaces the SQLite file with the backup's and migrates it (T-MIG-01). */
+    private static function restoreSqlite(Config $config, string $dir, bool $force): \PDO
+    {
+        $target = $config->databasePath;
+        if (file_exists($target) && !$force) {
+            throw new \RuntimeException("{$target} exists. Stop the server and pass --force to replace it.");
+        }
+        self::mkdir(\dirname($target));
+        foreach (['', '-wal', '-shm'] as $suffix) {
+            if (file_exists($target . $suffix)) {
+                unlink($target . $suffix);
+            }
+        }
+        if (!copy("{$dir}/" . self::DATABASE_FILE, "{$target}.restoring") || !rename("{$target}.restoring", $target)) {
+            throw new \RuntimeException("Cannot write {$target}");
+        }
+        $db = Database::open($target);
+        (new Migrator($db))->migrateToLatest();
+
+        return $db;
+    }
+
+    /**
+     * Copies the backup's SQLite file into MariaDB/MySQL: a copy of it is migrated first (backups
+     * of older versions), then its data goes into the migrated target. An existing target is
+     * emptied only with `$force`.
+     */
+    private static function restoreIntoMysql(Config $config, string $dir, bool $force): \PDO
+    {
+        \assert($config->mysql !== null);
+        $db = Database::openMysql($config->mysql);
+        (new Migrator($db))->migrateToLatest();
+        $filled = array_values(array_filter(
+            DatabaseCopy::tables($db),
+            static fn(string $table): bool => Sql::rows($db, "select 1 from \"{$table}\" limit 1") !== [],
+        ));
+        if ($filled !== [] && !$force) {
+            throw new \RuntimeException("The database {$config->mysql->database} is not empty. Stop the server and pass --force to replace its content.");
+        }
+
+        $temp = tempnam(sys_get_temp_dir(), 'notion-alt-restore-');
+        if ($temp === false || !copy("{$dir}/" . self::DATABASE_FILE, $temp)) {
+            throw new \RuntimeException('Cannot copy the backup database to a temporary file');
+        }
+        try {
+            // Migrated before anything is deleted: a backup that cannot be opened leaves the data.
+            $backup = Database::open($temp);
+            (new Migrator($backup))->migrateToLatest();
+            $db->exec('set foreign_key_checks = 0');
+            foreach ([...$filled, 'search_index', 'search_documents', 'search_dirty'] as $table) {
+                $db->exec("delete from \"{$table}\"");
+            }
+            $db->exec('set foreign_key_checks = 1');
+            DatabaseCopy::copy($backup, $db);
+            unset($backup);
+        } finally {
+            foreach (['', '-wal', '-shm'] as $suffix) {
+                @unlink($temp . $suffix);
+            }
+        }
+
+        return $db;
     }
 
     /** Like `JSON.stringify(value, null, 2)`. */

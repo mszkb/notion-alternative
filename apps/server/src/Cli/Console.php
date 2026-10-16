@@ -10,7 +10,9 @@ use NotionAlt\Attachments\VolumeStore;
 use NotionAlt\Auth\Password;
 use NotionAlt\Auth\Users;
 use NotionAlt\Config\Config;
+use NotionAlt\Config\ConfigLoader;
 use NotionAlt\Database\Database;
+use NotionAlt\Database\DatabaseCopy;
 use NotionAlt\Database\Migrator;
 use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
@@ -30,6 +32,10 @@ final class Console
           migrate                         apply pending database migrations
           backup [target dir]             back up database and attachments (default: <data>/backups)
           restore <backup dir> [--force]  restore a backup (stop serving the app first)
+          db:copy <source>                copy all data from a SQLite file or a mysql:// URL into the
+                                          configured, empty database (stop serving the app first);
+                                          the source can come from DB_COPY_SOURCE instead (keeps a
+                                          password out of the process list and shell history)
           migrate-attachments-to-s3       copy attachment files from the volume to S3
           reset-password <email>          set a new password (read from stdin, or generated) and end all sessions
           metrics                         print the Prometheus metrics (METRICS_ENABLED)
@@ -68,6 +74,7 @@ final class Console
                 'migrate' => $this->migrate(),
                 'backup' => $this->backup($rest),
                 'restore' => $this->restore($rest),
+                'db:copy' => $this->copyDatabase($rest),
                 'migrate-attachments-to-s3' => $this->migrateToS3(),
                 'reset-password' => $this->resetPassword($rest),
                 'metrics' => $this->metrics(),
@@ -82,8 +89,10 @@ final class Console
 
     private function migrate(): int
     {
-        Database::assertFts5();
-        $applied = (new Migrator(Database::open($this->config->databasePath)))->migrateToLatest();
+        if ($this->config->mysql === null) {
+            Database::assertFts5();
+        }
+        $applied = (new Migrator(Database::connect($this->config)))->migrateToLatest();
 
         return $this->out(['migrations' => $applied]);
     }
@@ -113,6 +122,35 @@ final class Console
         $report = Backup::restore($this->config, $dirs[0], \in_array('--force', $args, true));
 
         return $this->out(['restored' => $dirs[0], 'attachments' => $report['attachments']]);
+    }
+
+    /**
+     * Moves an installation between SQLite and MariaDB/MySQL (ADR 0024): the source is the old
+     * database, the target the configured one. Attachments stay where they are.
+     *
+     * @param list<string> $args
+     */
+    private function copyDatabase(array $args): int
+    {
+        $source = $args[0] ?? (string) getenv('DB_COPY_SOURCE');
+        if ($source === '') {
+            fwrite($this->stderr, "Usage: db:copy <SQLite file | mysql://user:password@host:3306/database>\n");
+
+            return 2;
+        }
+        if (preg_match('#^(mysql|mariadb)://#', $source) === 1) {
+            $mysql = ConfigLoader::load(['DATABASE_URL' => $source], '/')->mysql;
+            \assert($mysql !== null);
+            $from = Database::openMysql($mysql);
+        } elseif (is_file($source)) {
+            $from = Database::open($source);
+        } else {
+            throw new \RuntimeException("{$source} does not exist");
+        }
+        (new Migrator($from))->migrateToLatest();
+        $counts = DatabaseCopy::copy($from, $this->open());
+
+        return $this->out(['copied' => array_sum($counts), 'tables' => $counts]);
     }
 
     /** Copies every stored attachment to S3 and verifies the checksum (#63); idempotent. */
@@ -213,8 +251,10 @@ final class Console
 
     private function open(): \PDO
     {
-        Database::assertFts5();
-        $db = Database::open($this->config->databasePath);
+        if ($this->config->mysql === null) {
+            Database::assertFts5();
+        }
+        $db = Database::connect($this->config);
         (new Migrator($db))->migrateToLatest();
 
         return $db;
