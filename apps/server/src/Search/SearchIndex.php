@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NotionAlt\Search;
 
+use NotionAlt\Database\Database;
 use NotionAlt\Database\Sql;
 use NotionAlt\Database\Transaction;
 use NotionAlt\Text\InlineText;
@@ -13,6 +14,8 @@ use NotionAlt\Workspaces\Workspaces;
  * Server-side full-text search (FTS5) over the title and
  * the plain text of a page's blocks. `search_index` rows are addressed by the rowid kept in
  * `search_documents` (#77); applied operations only mark pages in `search_dirty` (#99).
+ * MariaDB/MySQL use `FULLTEXT` indexes instead (ADR 0024): words need at least 3 characters,
+ * stopwords are not found, and hits are ranked differently.
  */
 final class SearchIndex
 {
@@ -27,6 +30,12 @@ final class SearchIndex
      * input is split into the same words as in the web app.
      */
     private const JS_WHITESPACE = '[\x{9}-\x{d}\x{20}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]';
+
+    /** InnoDB indexes no shorter words (`innodb_ft_min_token_size`, not changeable on shared hosting). */
+    private const MYSQL_MIN_TERM_LENGTH = 3;
+
+    /** Words of the body around the first hit, like FTS5's `snippet(…, 12)`. */
+    private const SNIPPET_WORDS = 12;
 
     /**
      * Plain text of a page's blocks as indexed: Markdown inline normalised, code verbatim.
@@ -50,10 +59,12 @@ final class SearchIndex
     public static function reindexDocument(\PDO $db, string $documentId): void
     {
         // Addressed by rowid: a lookup by the unindexed document_id would scan the whole index (#77).
+        // MariaDB/MySQL have no rowid; their search_index has the column `id` (ADR 0024).
+        $key = Database::isMysql($db) ? 'id' : 'rowid';
         $found = Sql::run($db, 'select id from search_documents where document_id = ?', [$documentId])->fetchColumn();
         $rowid = \is_int($found) ? $found : null;
         if ($rowid !== null) {
-            Sql::run($db, 'delete from search_index where rowid = ?', [$rowid]);
+            Sql::run($db, "delete from search_index where {$key} = ?", [$rowid]);
         }
         /** @var array{id: string, workspace_id: string, title: string, deleted_at: string|null}|false $document */
         $document = Sql::run(
@@ -76,13 +87,12 @@ final class SearchIndex
             [$documentId],
         );
         if ($rowid === null) {
-            $id = Sql::run($db, 'insert into search_documents (document_id) values (?) returning id', [$documentId])->fetchColumn();
-            \assert(\is_int($id));
-            $rowid = $id;
+            Sql::run($db, 'insert into search_documents (document_id) values (?)', [$documentId]);
+            $rowid = (int) $db->lastInsertId();
         }
         Sql::run(
             $db,
-            'insert into search_index (rowid, document_id, workspace_id, title, body) values (?, ?, ?, ?, ?)',
+            "insert into search_index ({$key}, document_id, workspace_id, title, body) values (?, ?, ?, ?, ?)",
             [$rowid, $document['id'], $document['workspace_id'], $document['title'], self::blocksText($blocks)],
         );
     }
@@ -90,7 +100,7 @@ final class SearchIndex
     /** Marks a page's search entry as outdated; called in the transaction that changes the page. */
     public static function markForReindex(\PDO $db, string $documentId): void
     {
-        Sql::run($db, 'insert or ignore into search_dirty (document_id) values (?)', [$documentId]);
+        Sql::insertIfMissing($db, 'insert into search_dirty (document_id) values (?)', 'document_id', [$documentId]);
     }
 
     /**
@@ -104,9 +114,10 @@ final class SearchIndex
             return;
         }
         $work = static function () use ($db): void {
-            // Read inside the write transaction: another worker may have handled some pages.
+            // Read inside the write transaction: another worker may have handled some pages. On
+            // MariaDB/MySQL the rows are locked, so another worker waits and then skips them.
             /** @var list<string> $marked */
-            $marked = Sql::run($db, 'select document_id from search_dirty')->fetchAll(\PDO::FETCH_COLUMN);
+            $marked = Sql::run($db, 'select document_id from search_dirty' . (Database::isMysql($db) ? ' for update' : ''))->fetchAll(\PDO::FETCH_COLUMN);
             foreach ($marked as $documentId) {
                 self::reindexDocument($db, $documentId);
                 Sql::run($db, 'delete from search_dirty where document_id = ?', [$documentId]);
@@ -169,6 +180,9 @@ final class SearchIndex
             return null;
         }
         self::reindexMarked($db);
+        if (Database::isMysql($db)) {
+            return self::searchMysql($db, $workspaceId, $input, $limit);
+        }
         $query = self::toFtsQuery($input);
         if ($query === null) {
             return [];
@@ -189,5 +203,111 @@ final class SearchIndex
 
         /** @var list<array{documentId: string, title: string, snippet: string}> */
         return $statement->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Words of the input as terms of MariaDB/MySQL's boolean mode, used as `+word*` (all must
+     * match). Words are split where InnoDB splits them (anything but letters, digits and `_`), so
+     * operators in the input are never interpreted; words shorter than InnoDB indexes are left out.
+     *
+     * @return list<string>
+     */
+    public static function toMysqlTerms(string $input): array
+    {
+        if (!mb_check_encoding($input, 'UTF-8')) {
+            $input = htmlspecialchars_decode(htmlspecialchars($input, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES);
+        }
+        $words = preg_split('/[^\p{L}\p{N}_]+/u', $input, -1, PREG_SPLIT_NO_EMPTY);
+        $terms = [];
+        foreach ($words === false ? [] : $words as $word) {
+            if (mb_strlen($word) < self::MYSQL_MIN_TERM_LENGTH) {
+                continue;
+            }
+            $terms[] = $word;
+            if (\count($terms) === self::MAX_TERMS) {
+                break;
+            }
+        }
+
+        return $terms;
+    }
+
+    /**
+     * @return list<array{documentId: string, title: string, snippet: string}>
+     */
+    private static function searchMysql(\PDO $db, string $workspaceId, string $input, int $limit): array
+    {
+        $terms = self::toMysqlTerms($input);
+        if ($terms === []) {
+            return [];
+        }
+        $query = implode(' ', array_map(static fn(string $term): string => "+{$term}*", $terms));
+        $statement = Sql::prepare(
+            $db,
+            "select document_id as \"documentId\", title, body\n"
+            . "from search_index\n"
+            . "where match(title, body) against(? in boolean mode) and workspace_id = ?\n"
+            . "order by match(title) against(? in boolean mode) * 10 + match(title, body) against(? in boolean mode) desc\n"
+            . 'limit ?',
+        );
+        $statement->bindValue(1, $query);
+        $statement->bindValue(2, $workspaceId);
+        $statement->bindValue(3, $query);
+        $statement->bindValue(4, $query);
+        $statement->bindValue(5, $limit, \PDO::PARAM_INT);
+        $statement->execute();
+        $hits = [];
+        /** @var array{documentId: string, title: string, body: string} $row */
+        foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+            $hits[] = ['documentId' => $row['documentId'], 'title' => $row['title'], 'snippet' => self::snippet($row['body'], $terms)];
+        }
+
+        return $hits;
+    }
+
+    /**
+     * Up to {@see SNIPPET_WORDS} words of the body around the first word that starts with a term,
+     * `…` where text was cut off; the start of the body if no word matches.
+     *
+     * @param list<string> $terms
+     */
+    public static function snippet(string $body, array $terms): string
+    {
+        $words = preg_split('/' . self::JS_WHITESPACE . '+/u', $body, -1, PREG_SPLIT_NO_EMPTY);
+        if ($words === false || $words === []) {
+            return '';
+        }
+        $prefixes = array_map(self::fold(...), $terms);
+        $hit = 0;
+        foreach ($words as $index => $word) {
+            $parts = preg_split('/[^\p{L}\p{N}_]+/u', self::fold($word), -1, PREG_SPLIT_NO_EMPTY);
+            foreach ($parts === false ? [] : $parts as $part) {
+                foreach ($prefixes as $prefix) {
+                    if (str_starts_with($part, $prefix)) {
+                        $hit = $index;
+                        break 3;
+                    }
+                }
+            }
+        }
+        $count = \count($words);
+        $start = max(0, min($hit - intdiv(self::SNIPPET_WORDS, 2) + 1, $count - self::SNIPPET_WORDS));
+        $end = min($count, $start + self::SNIPPET_WORDS);
+
+        return ($start > 0 ? '…' : '') . implode(' ', \array_slice($words, $start, $end - $start)) . ($end < $count ? '…' : '');
+    }
+
+    /** Lower case without accents (with ext-intl), so a term finds the word as the index did. */
+    private static function fold(string $text): string
+    {
+        $text = mb_strtolower($text);
+        if (class_exists(\Normalizer::class)) {
+            $decomposed = \Normalizer::normalize($text, \Normalizer::FORM_D);
+            if (\is_string($decomposed)) {
+                $text = preg_replace('/\p{Mn}+/u', '', $decomposed) ?? $text;
+            }
+        }
+
+        return $text;
     }
 }

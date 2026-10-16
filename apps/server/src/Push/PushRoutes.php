@@ -119,9 +119,8 @@ final class PushRoutes
         Sql::run(
             $db,
             'insert into push_subscriptions (endpoint, user_id, device_id, p256dh, auth, created_at, last_success_at, failures)
-             values (?, ?, ?, ?, ?, ?, null, 0)
-             on conflict (endpoint) do update set device_id = excluded.device_id, p256dh = excluded.p256dh,
-               auth = excluded.auth, failures = 0',
+             values (?, ?, ?, ?, ?, ?, null, 0)'
+            . Sql::onConflict($db, 'endpoint', 'device_id = excluded.device_id, p256dh = excluded.p256dh, auth = excluded.auth, failures = 0'),
             [$input['endpoint'], $userId, $auth->deviceId, $input['keys']['p256dh'], $input['keys']['auth'], Ids::iso(Ids::nowMs())],
         );
 

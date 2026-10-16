@@ -46,7 +46,7 @@ final class Changes
     {
         Transaction::run($db, static function () use ($db, $workspaceId, $throughSeq): void {
             Sql::run($db, 'delete from changes where workspace_id = ? and seq <= ?', [$workspaceId, $throughSeq]);
-            Sql::run($db, 'update workspaces set compacted_seq = max(compacted_seq, ?) where id = ?', [$throughSeq, $workspaceId]);
+            Sql::run($db, 'update workspaces set compacted_seq = ' . Sql::greatest($db, 'compacted_seq', '?') . ' where id = ?', [$throughSeq, $workspaceId]);
         });
     }
 }

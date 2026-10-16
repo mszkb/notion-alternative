@@ -40,4 +40,43 @@ final class Sql
         /** @var list<array<string, mixed>> */
         return self::run($db, $sql, $params)->fetchAll(\PDO::FETCH_ASSOC);
     }
+
+    /** The larger of two values: `max(a, b)` on SQLite, `greatest(a, b)` on MariaDB/MySQL. */
+    public static function greatest(\PDO $db, string $a, string $b): string
+    {
+        return (Database::isMysql($db) ? 'greatest' : 'max') . "({$a}, {$b})";
+    }
+
+    /**
+     * The conflict clause of an upsert: `on conflict (…) do update set …` on SQLite, `on duplicate
+     * key update …` on MariaDB/MySQL. `$set` refers to the new values as `excluded.<column>`.
+     * MariaDB/MySQL check every unique key, not only `$keys`. The row count differs: MariaDB/MySQL
+     * count an updated row twice.
+     */
+    public static function onConflict(\PDO $db, string $keys, string $set): string
+    {
+        if (!Database::isMysql($db)) {
+            return " on conflict ({$keys}) do update set {$set}";
+        }
+
+        // `values()` is deprecated in MySQL 8 but the only form MariaDB knows as well.
+        return ' on duplicate key update ' . preg_replace('/\bexcluded\.(\w+)/', 'values($1)', $set);
+    }
+
+    /**
+     * Runs `insert into …` unless a row with the same `$keys` exists; rowCount() is 1 for a new
+     * row and 0 otherwise. SQLite: `on conflict (…) do nothing`; MariaDB/MySQL: `insert ignore`,
+     * which turns other errors into warnings as well, so only use it for rows whose values are
+     * known to be valid.
+     *
+     * @param list<mixed> $params
+     */
+    public static function insertIfMissing(\PDO $db, string $insert, string $keys, array $params = []): \PDOStatement
+    {
+        $sql = Database::isMysql($db)
+            ? (preg_replace('/^\s*insert into\b/i', 'insert ignore into', $insert) ?? $insert)
+            : "{$insert} on conflict ({$keys}) do nothing";
+
+        return self::run($db, $sql, $params);
+    }
 }

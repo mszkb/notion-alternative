@@ -38,7 +38,7 @@ final class AttemptLimiter
     /** Seconds until the key may try again, or 0 if it is not blocked. */
     public function retryAfter(string $key): int
     {
-        $rows = Sql::rows($this->db, 'select count, reset_at from auth_attempts where key = ?', [$this->key($key)]);
+        $rows = Sql::rows($this->db, 'select count, reset_at from auth_attempts where "key" = ?', [$this->key($key)]);
         if ($rows === []) {
             return 0;
         }
@@ -58,24 +58,30 @@ final class AttemptLimiter
             // Expired windows are pruned on every write, so the table only holds live keys.
             Sql::run($this->db, 'delete from auth_attempts where reset_at <= ?', [$now]);
             $key = $this->key($key);
-            if (Sql::rows($this->db, 'select 1 from auth_attempts where key = ?', [$key]) === []) {
+            // `key` is quoted: a reserved word on MariaDB/MySQL.
+            if (Sql::rows($this->db, 'select 1 from auth_attempts where "key" = ?', [$key]) === []) {
                 // Keys of this limiter sort between `<name>:` and `<name>;` (the next character).
                 $range = [$this->name . ':', $this->name . ';'];
-                $count = Sql::run($this->db, 'select count(*) from auth_attempts where key >= ? and key < ?', $range)->fetchColumn();
+                $count = Sql::run($this->db, 'select count(*) from auth_attempts where "key" >= ? and "key" < ?', $range)->fetchColumn();
                 $excess = self::int($count) - $this->maxEntries + 1;
                 if ($excess > 0) {
-                    Sql::run(
+                    // Read first: MariaDB/MySQL allow neither `limit` in an `in` subquery nor the
+                    // table itself in the subquery of its delete.
+                    $oldest = Sql::run(
                         $this->db,
-                        'delete from auth_attempts where key in (
-                           select key from auth_attempts where key >= ? and key < ? order by reset_at limit ?)',
+                        'select "key" from auth_attempts where "key" >= ? and "key" < ? order by reset_at limit ?',
                         [...$range, $excess],
-                    );
+                    )->fetchAll(\PDO::FETCH_COLUMN);
+                    $delete = Sql::prepare($this->db, 'delete from auth_attempts where "key" = ?');
+                    foreach ($oldest as $old) {
+                        $delete->execute([$old]);
+                    }
                 }
             }
             Sql::run(
                 $this->db,
-                'insert into auth_attempts (key, count, reset_at) values (?, 1, ?)
-                 on conflict (key) do update set count = count + 1',
+                'insert into auth_attempts ("key", count, reset_at) values (?, 1, ?)'
+                . Sql::onConflict($this->db, '"key"', 'count = count + 1'),
                 [$key, $now + $this->windowMs],
             );
         });
@@ -83,7 +89,7 @@ final class AttemptLimiter
 
     public function reset(string $key): void
     {
-        Sql::run($this->db, 'delete from auth_attempts where key = ?', [$this->key($key)]);
+        Sql::run($this->db, 'delete from auth_attempts where "key" = ?', [$this->key($key)]);
     }
 
     private function key(string $key): string

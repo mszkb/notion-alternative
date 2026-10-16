@@ -91,7 +91,7 @@ final class DeviceRoutes
             $row = Devices::findById($db, $input['id']) ?? throw new \LogicException('device vanished');
 
             return [$row, $existing === null];
-        });
+        }, exclusive: "device:{$input['id']}");
         if ($created) {
             $this->logger->info('device registered', ['userId' => $userId, 'deviceId' => $row['id']]);
         }

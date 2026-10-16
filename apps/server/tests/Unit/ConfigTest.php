@@ -125,6 +125,43 @@ final class ConfigTest extends TestCase
         }
     }
 
+    public function testMysqlFromDatabaseUrlOrSingleFields(): void
+    {
+        self::assertNull(ConfigLoader::load([], self::APP)->mysql);
+
+        $url = ConfigLoader::load(['DATABASE_URL' => 'mariadb://app%40host:p%3Ass@db.example:3307/notion%2Ddata'], self::APP)->mysql;
+        self::assertNotNull($url);
+        self::assertSame(['db.example', 3307, 'notion-data', 'app@host', 'p:ss'], [$url->host, $url->port, $url->database, $url->user, $url->password]);
+        self::assertSame(3306, ConfigLoader::load(['DATABASE_URL' => 'mysql://u@h/d'], self::APP)->mysql?->port);
+
+        // config.php style; the SQLite path stays for the files next to the database (locks, backups).
+        $fields = ConfigLoader::load([], self::APP, ['DB_HOST' => 'localhost', 'DB_NAME' => 'notion', 'DB_USER' => 'web1', 'DB_PASSWORD' => 'geheim']);
+        self::assertNotNull($fields->mysql);
+        self::assertSame(['localhost', 3306, 'notion', 'web1', 'geheim'], [$fields->mysql->host, $fields->mysql->port, $fields->mysql->database, $fields->mysql->user, $fields->mysql->password]);
+        self::assertSame('/srv/app/data/app.sqlite', $fields->databasePath);
+    }
+
+    public function testRejectsIncompleteMysqlSettingsWithoutLeakingThePassword(): void
+    {
+        $cases = [
+            'DATABASE_URL must look like mysql://user:password@host:3306/database' => ['DATABASE_URL' => 'postgres://u:geheim@h/d'],
+            'DATABASE_URL must look like mysql://user:password@host:3306/database ' => ['DATABASE_URL' => 'mysql://u:geheim@h/'],
+            'DB_HOST needs DB_NAME, DB_USER' => ['DB_HOST' => 'h', 'DB_PASSWORD' => 'geheim'],
+            'DB_PASSWORD needs DB_HOST' => ['DB_PASSWORD' => 'geheim'],
+            'Set either DATABASE_URL or DB_HOST, not both' => ['DATABASE_URL' => 'mysql://u:geheim@h/d', 'DB_HOST' => 'h'],
+            'DB_PORT must be an integer between 1 and 65535' => ['DB_HOST' => 'h', 'DB_NAME' => 'd', 'DB_USER' => 'u', 'DB_PORT' => '70000'],
+        ];
+        foreach ($cases as $message => $values) {
+            try {
+                ConfigLoader::load($values, self::APP);
+                self::fail("accepted {$message}");
+            } catch (ConfigException $error) {
+                self::assertSame('Invalid configuration: ' . trim($message), $error->getMessage());
+                self::assertStringNotContainsString('geheim', $error->getMessage());
+            }
+        }
+    }
+
     public function testS3NeedsAllVariablesAndNeverLeaksValues(): void
     {
         try {

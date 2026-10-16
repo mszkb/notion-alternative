@@ -56,10 +56,10 @@ final class Members
     /** False if the user already is a member (not for the creator: callers check that). */
     public static function add(\PDO $db, string $workspaceId, string $userId, string $role): bool
     {
-        return Sql::run(
+        return Sql::insertIfMissing(
             $db,
-            'insert into workspace_members (workspace_id, user_id, role, added_at) values (?, ?, ?, ?)
-             on conflict (workspace_id, user_id) do nothing',
+            'insert into workspace_members (workspace_id, user_id, role, added_at) values (?, ?, ?, ?)',
+            'workspace_id, user_id',
             [$workspaceId, $userId, $role, Ids::iso(Ids::nowMs())],
         )->rowCount() === 1;
     }

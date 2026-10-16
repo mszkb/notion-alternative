@@ -29,10 +29,11 @@ final class PushSettings
      */
     private static function setting(\PDO $db, string $key, \Closure $create): string
     {
-        $rows = Sql::rows($db, 'select value from settings where key = ?', [$key]);
+        // `key` is quoted: a reserved word on MariaDB/MySQL.
+        $rows = Sql::rows($db, 'select value from settings where "key" = ?', [$key]);
         if ($rows === []) {
-            Sql::run($db, 'insert into settings (key, value) values (?, ?) on conflict (key) do nothing', [$key, $create()]);
-            $rows = Sql::rows($db, 'select value from settings where key = ?', [$key]);
+            Sql::insertIfMissing($db, 'insert into settings ("key", value) values (?, ?)', '"key"', [$key, $create()]);
+            $rows = Sql::rows($db, 'select value from settings where "key" = ?', [$key]);
         }
 
         return Row::string($rows[0] ?? [], 'value');

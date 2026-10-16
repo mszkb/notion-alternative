@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace NotionAlt\Tests\Unit;
 
-use NotionAlt\Database\Database;
-use NotionAlt\Database\Migrator;
 use NotionAlt\Database\Sql;
 use NotionAlt\Shared\SyncSchemas;
 use NotionAlt\Support\Ids;
@@ -14,6 +12,7 @@ use NotionAlt\Sync\Changes;
 use NotionAlt\Sync\Operation;
 use NotionAlt\Sync\Snapshot;
 use NotionAlt\Tests\TempDir;
+use NotionAlt\Tests\TestDatabase;
 use NotionAlt\Validation\CoerceNumberSchema;
 use PHPUnit\Framework\TestCase;
 
@@ -32,8 +31,7 @@ final class SyncSnapshotTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::open($this->tempDir() . '/app.sqlite');
-        (new Migrator($this->db))->migrateToLatest();
+        $this->db = TestDatabase::open($this->tempDir() . '/app.sqlite');
         $this->user = Ids::uuid();
         $this->ws = Ids::uuid();
         $this->device = Ids::uuid();

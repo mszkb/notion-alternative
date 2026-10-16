@@ -6,11 +6,10 @@ namespace NotionAlt\Tests\Unit;
 
 use NotionAlt\AppFactory;
 use NotionAlt\Config\ConfigLoader;
-use NotionAlt\Database\Database;
-use NotionAlt\Database\Migrator;
 use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Logging\Logger;
+use NotionAlt\Tests\TestDatabase;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Slim\Psr7\Factory\ServerRequestFactory;
@@ -23,8 +22,7 @@ final class AuthTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::open(':memory:');
-        (new Migrator($this->db))->migrateToLatest();
+        $this->db = TestDatabase::open();
     }
 
     /** Accounts of the former Node server need a new password (ADR 0018, `bin/console reset-password`). */

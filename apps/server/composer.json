@@ -9,6 +9,7 @@
         "ext-mbstring": "*",
         "ext-pdo": "*",
         "ext-pdo_sqlite": "*",
+        "doctrine/dbal": "^4.4",
         "slim/psr7": "^1.7",
         "slim/slim": "^4.14"
     },
@@ -16,6 +17,9 @@
         "friendsofphp/php-cs-fixer": "^3.64",
         "phpstan/phpstan": "^2.0",
         "phpunit/phpunit": "^11.5"
+    },
+    "suggest": {
+        "ext-pdo_mysql": "MariaDB or MySQL instead of SQLite (ADR 0024)"
     },
     "autoload": {
         "psr-4": {

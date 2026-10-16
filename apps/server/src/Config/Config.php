@@ -21,5 +21,7 @@ final class Config
         public readonly AuthRateLimitConfig $authRateLimit,
         /** Take the client address from `X-Forwarded-For` of a private-network proxy (rate limits). */
         public readonly bool $trustProxy = true,
+        /** MariaDB/MySQL instead of the SQLite file at `databasePath` (ADR 0024). */
+        public readonly ?MysqlConfig $mysql = null,
     ) {}
 }

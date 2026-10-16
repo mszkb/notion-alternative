@@ -43,9 +43,13 @@ final class PushNotifier
                  or exists (select 1 from workspace_members
                             where workspace_members.workspace_id = workspaces.id
                               and workspace_members.user_id = push_subscriptions.user_id))
-             on conflict (endpoint) do update set
-               workspace_id = excluded.workspace_id,
-               due_at = coalesce(push_hints.due_at, max(excluded.due_at, coalesce(push_hints.sent_at, 0) + ?))',
+            '
+            . Sql::onConflict(
+                $db,
+                'endpoint',
+                'workspace_id = excluded.workspace_id,
+                 due_at = coalesce(push_hints.due_at, ' . Sql::greatest($db, 'excluded.due_at', 'coalesce(push_hints.sent_at, 0) + ?') . ')',
+            ),
             [$now, $workspaceId, $originDeviceId, self::BUNDLE_MS],
         );
 

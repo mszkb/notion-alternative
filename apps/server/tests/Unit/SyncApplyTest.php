@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace NotionAlt\Tests\Unit;
 
-use NotionAlt\Database\Database;
-use NotionAlt\Database\Migrator;
 use NotionAlt\Database\Sql;
 use NotionAlt\Shared\SyncSchemas;
 use NotionAlt\Support\Ids;
@@ -13,6 +11,7 @@ use NotionAlt\Sync\Apply;
 use NotionAlt\Sync\AttachmentLimits;
 use NotionAlt\Sync\Operation;
 use NotionAlt\Tests\TempDir;
+use NotionAlt\Tests\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /** Savepoints, merge and conflicts of `Apply` beyond the contract tests (#121). */
@@ -32,8 +31,7 @@ final class SyncApplyTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::open($this->tempDir() . '/app.sqlite');
-        (new Migrator($this->db))->migrateToLatest();
+        $this->db = TestDatabase::open($this->tempDir() . '/app.sqlite');
         $this->user = Ids::uuid();
         $this->ws = Ids::uuid();
         $this->deviceA = Ids::uuid();

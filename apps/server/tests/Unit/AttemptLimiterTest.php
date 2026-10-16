@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace NotionAlt\Tests\Unit;
 
 use NotionAlt\Auth\AttemptLimiter;
-use NotionAlt\Database\Database;
-use NotionAlt\Database\Migrator;
 use NotionAlt\Database\Sql;
+use NotionAlt\Tests\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /** Fixed-window limits, also across instances (= PHP processes). */
@@ -19,8 +18,7 @@ final class AttemptLimiterTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::open(':memory:');
-        (new Migrator($this->db))->migrateToLatest();
+        $this->db = TestDatabase::open();
     }
 
     public function testBlocksAfterMaxAttemptsUntilTheWindowEnds(): void
@@ -98,7 +96,7 @@ final class AttemptLimiterTest extends TestCase
         }
         $emails->record('user11@example.com');
 
-        $keys = array_column(Sql::rows($this->db, 'select key from auth_attempts order by key'), 'key');
+        $keys = array_column(Sql::rows($this->db, 'select "key" from auth_attempts order by "key"'), 'key');
         self::assertSame(
             ['login_email:user10@example.com', 'login_email:user11@example.com', 'login_email:user7@example.com', 'login_email:user8@example.com', 'login_email:user9@example.com', 'login_ip:10.0.0.1'],
             $keys,

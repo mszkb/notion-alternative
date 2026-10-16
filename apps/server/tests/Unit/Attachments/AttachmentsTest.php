@@ -11,11 +11,10 @@ use NotionAlt\Attachments\S3Error;
 use NotionAlt\Attachments\S3Store;
 use NotionAlt\Attachments\VolumeStore;
 use NotionAlt\Config\S3Config;
-use NotionAlt\Database\Database;
-use NotionAlt\Database\Migrator;
 use NotionAlt\Database\Sql;
 use NotionAlt\Support\Ids;
 use NotionAlt\Tests\TempDir;
+use NotionAlt\Tests\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /** Attachment storage, purge and headers beyond the contract tests (#124). */
@@ -87,8 +86,7 @@ final class AttachmentsTest extends TestCase
 
     public function testPurgeRemovesOnlyFilesPastTheRetention(): void
     {
-        $db = Database::open($this->tempDir() . '/app.sqlite');
-        (new Migrator($db))->migrateToLatest();
+        $db = TestDatabase::open($this->tempDir() . '/app.sqlite');
         $store = new VolumeStore($this->tempDir() . '/attachments');
         $user = Ids::uuid();
         $ws = Ids::uuid();

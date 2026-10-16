@@ -30,7 +30,7 @@ final class Server
             return;
         }
         $logger = new Logger($config->logLevel);
-        $database = new DatabaseProvider($config->databasePath, $logger);
+        $database = new DatabaseProvider($config, $logger);
         $after = new AfterResponse();
         $app = AppFactory::create($config, $logger, $database->get(...), BasePath::detect($_SERVER), after: $after);
         $response = $app->handle(ServerRequestCreatorFactory::create()->createServerRequestFromGlobals());

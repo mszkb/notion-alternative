@@ -10,6 +10,7 @@ use NotionAlt\Database\Sql;
 use NotionAlt\Search\SearchIndex;
 use NotionAlt\Shared\SearchSchemas;
 use NotionAlt\Tests\TempDir;
+use NotionAlt\Tests\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -30,8 +31,7 @@ final class SearchIndexTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::open($this->tempDir() . '/app.sqlite');
-        (new Migrator($this->db))->migrateToLatest();
+        $this->db = TestDatabase::open($this->tempDir() . '/app.sqlite');
         self::insertOwner($this->db, self::USER, self::WS);
     }
 
@@ -151,6 +151,48 @@ final class SearchIndexTest extends TestCase
         );
         self::assertSame('"a"* "b"*', SearchIndex::toFtsQuery('a "" - b'));
         self::assertSame("\"a\u{fffd}\"*", SearchIndex::toFtsQuery("a\xff"));
+    }
+
+    public function testSplitsMysqlTermsWhereInnodbDoes(): void
+    {
+        // Operators and punctuation separate words; words under three characters are not indexed.
+        self::assertSame(['alpha', 'title', 'NEAR'], SearchIndex::toMysqlTerms('"alpha" OR title:x NEAR('));
+        self::assertSame(['über', 'Straße'], SearchIndex::toMysqlTerms("über\u{a0}Straße"));
+        self::assertSame(['x_1', 'Kuchen'], SearchIndex::toMysqlTerms('x_1 日本 +Kuchen* ab'));
+        self::assertSame([], SearchIndex::toMysqlTerms('ab -- +* ""'));
+        self::assertCount(10, SearchIndex::toMysqlTerms(implode(' ', array_map(static fn(int $i): string => "wort{$i}", range(1, 12)))));
+    }
+
+    public function testBuildsSnippetsAroundTheFirstHit(): void
+    {
+        $words = array_map(static fn(int $i): string => "wort{$i}", range(1, 40));
+        $words[20] = 'Treffer,';
+        $snippet = SearchIndex::snippet(implode(' ', $words), ['treffer']);
+        self::assertStringStartsWith('…', $snippet);
+        self::assertStringEndsWith('…', $snippet);
+        self::assertStringContainsString('Treffer,', $snippet);
+        self::assertCount(12, explode(' ', trim($snippet, '…')));
+
+        // No hit in the body (a title hit): its start.
+        self::assertSame(implode(' ', \array_slice($words, 0, 12)) . '…', SearchIndex::snippet(implode(' ', $words), ['titel']));
+        self::assertSame('Wir fahren über die Alpen', SearchIndex::snippet("Wir fahren\nüber die Alpen", ['alpen']));
+        self::assertSame('', SearchIndex::snippet('', ['alpen']));
+        if (class_exists(\Normalizer::class)) {
+            $words[30] = 'Übergang';
+            self::assertStringContainsString('Übergang', SearchIndex::snippet(implode(' ', $words), ['uber']));
+        }
+    }
+
+    public function testFindsNoWordsShorterThanThreeCharactersOnMysql(): void
+    {
+        if (TestDatabase::mysqlConfig() === null) {
+            self::markTestSkipped('MariaDB/MySQL only; FTS5 finds them');
+        }
+        $this->page('Ab in den Urlaub');
+
+        // Documented difference (ADR 0024): the local search in the app finds such words.
+        self::assertSame([], $this->titles('ab'));
+        self::assertSame(['Ab in den Urlaub'], $this->titles('ab urlaub'));
     }
 
     public function testRanksTitleHitsFirstAndLimitsTheResult(): void

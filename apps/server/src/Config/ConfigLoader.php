@@ -128,6 +128,7 @@ final class ConfigLoader
         $s3ForcePathStyle = $this->boolean('S3_FORCE_PATH_STYLE', true);
         $importMaxMb = $this->number('IMPORT_MAX_MB', 50, false, 1, 4096);
         $pushAllowedHosts = $this->string('PUSH_ALLOWED_HOSTS', self::DEFAULT_PUSH_ALLOWED_HOSTS);
+        $mysql = $this->mysqlConfig();
 
         if ($this->errors !== []) {
             throw new ConfigException('Invalid configuration: ' . implode('; ', $this->errors));
@@ -167,6 +168,64 @@ final class ConfigLoader
                 loginMaxFailuresPerEmail: $loginPerEmail,
                 registerMaxAttemptsPerIp: $registerPerIp,
             ),
+            mysql: $mysql,
+        );
+    }
+
+    /**
+     * MariaDB/MySQL from `DATABASE_URL` (`mysql://user:password@host:3306/database`, `mariadb://`
+     * works as well) or from `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` (handier in
+     * `config.php`). Neither set: SQLite (ADR 0024).
+     */
+    private function mysqlConfig(): ?MysqlConfig
+    {
+        $url = $this->optionalString('DATABASE_URL');
+        $host = $this->optionalString('DB_HOST');
+        if ($url !== null && $host !== null) {
+            $this->errors[] = 'Set either DATABASE_URL or DB_HOST, not both';
+
+            return null;
+        }
+        if ($url !== null) {
+            $parts = parse_url($url);
+            if ($parts === false || !\in_array($parts['scheme'] ?? '', ['mysql', 'mariadb'], true)
+                || !isset($parts['host'], $parts['user'], $parts['path']) || trim($parts['path'], '/') === '') {
+                // Never the value: it holds the password.
+                $this->errors[] = 'DATABASE_URL must look like mysql://user:password@host:3306/database';
+
+                return null;
+            }
+
+            return new MysqlConfig(
+                host: $parts['host'],
+                port: $parts['port'] ?? 3306,
+                database: rawurldecode(trim($parts['path'], '/')),
+                user: rawurldecode($parts['user']),
+                password: rawurldecode($parts['pass'] ?? ''),
+            );
+        }
+        if ($host === null) {
+            foreach (['DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as $name) {
+                if (isset($this->values[$name])) {
+                    $this->errors[] = "{$name} needs DB_HOST";
+                }
+            }
+
+            return null;
+        }
+        $missing = array_values(array_filter(['DB_NAME', 'DB_USER'], fn(string $name): bool => !isset($this->values[$name])));
+        if ($missing !== []) {
+            $this->errors[] = 'DB_HOST needs ' . implode(', ', $missing);
+
+            return null;
+        }
+
+        return new MysqlConfig(
+            host: $host,
+            port: (int) $this->number('DB_PORT', 3306, true, 1, 65535),
+            database: $this->values['DB_NAME'],
+            user: $this->values['DB_USER'],
+            password: $this->values['DB_PASSWORD'] ?? '',
         );
     }
 

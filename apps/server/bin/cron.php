@@ -25,7 +25,7 @@ if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
     exit(0);
 }
 try {
-    $db = (new DatabaseProvider($config->databasePath, $logger))->get();
+    $db = (new DatabaseProvider($config, $logger))->get();
     $logger->info('cron finished', Cron::run($db, $config));
 } catch (Throwable $error) {
     $logger->error('cron failed', ['err' => Logger::serializeError($error)]);

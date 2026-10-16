@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace NotionAlt\Metrics;
 
+use NotionAlt\Database\Database;
 use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
+use NotionAlt\Database\Transaction;
 use NotionAlt\Logging\Logger;
 
 /**
@@ -75,7 +77,9 @@ final class Metrics
 
     public function render(): string
     {
-        $rows = Sql::rows(($this->db)(), 'select name, labels, value from metrics order by rowid');
+        $db = ($this->db)();
+        // Insertion order: SQLite keeps it in the rowid, MariaDB/MySQL in `id` (ADR 0024).
+        $rows = Sql::rows($db, 'select name, labels, value from metrics order by ' . (Database::isMysql($db) ? 'id' : 'rowid'));
         /** @var array<string, list<string>> $lines */
         $lines = [];
         foreach ($rows as $row) {
@@ -88,7 +92,7 @@ final class Metrics
             $value = $row['value'] ?? 0;
             $lines[$family][] = $name . self::labels(\is_array($labels) ? $labels : []) . ' ' . self::format(is_numeric($value) ? (float) $value : 0.0);
         }
-        if ($this->databasePath !== ':memory:') {
+        if ($this->databasePath !== ':memory:' && !Database::isMysql($db)) {
             $lines['sqlite_file_size_bytes'] = [
                 'sqlite_file_size_bytes{file="db"} ' . self::fileSize($this->databasePath),
                 'sqlite_file_size_bytes{file="wal"} ' . self::fileSize($this->databasePath . '-wal'),
@@ -153,10 +157,10 @@ final class Metrics
             $db = ($this->db)();
             $statement = Sql::prepare(
                 $db,
-                'insert into metrics (name, labels, value) values (?, ?, ?)
-                 on conflict (name, labels) do update set value = value + excluded.value',
+                'insert into metrics (name, labels, value) values (?, ?, ?)'
+                . Sql::onConflict($db, 'name, labels', 'value = value + excluded.value'),
             );
-            $db->exec('begin immediate');
+            Transaction::begin($db);
             try {
                 foreach ($series as [$name, $labels, $value]) {
                     ksort($labels, SORT_STRING);

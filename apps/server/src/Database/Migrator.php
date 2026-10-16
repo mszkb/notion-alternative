@@ -21,12 +21,16 @@ use NotionAlt\Database\Migrations\M0014PushHints;
 use NotionAlt\Database\Migrations\M0015Metrics;
 use NotionAlt\Database\Migrations\M0016WorkspaceMembers;
 use NotionAlt\Database\Migrations\M0017ShareLinks;
+use NotionAlt\Database\Migrations\MysqlBase;
 
 /**
  * Runs the migrations. The bookkeeping tables keep their historical names (`kysely_migration`,
  * `kysely_migration_lock`, from the former Node server), so existing databases are continued
  * (ADR 0018). PHP serves requests in parallel processes: the lock row is really taken, and each
  * migration runs in its own transaction together with its bookkeeping row.
+ *
+ * MariaDB/MySQL (ADR 0024) start with {@see MysqlBase}, which creates the schema after 0017 and is
+ * recorded as 0001–0017. DDL commits at once there, so a failed migration is not rolled back.
  */
 final class Migrator
 {
@@ -98,8 +102,13 @@ final class Migrator
         $this->acquireLock();
         try {
             // Another process may have migrated while this one waited for the lock.
+            $pending = $this->pending();
             $applied = [];
-            foreach ($this->pending() as $name) {
+            if (Database::isMysql($this->db) && $pending !== []) {
+                $applied = $this->applyMysqlBase($pending);
+                $pending = \array_slice($pending, \count($applied));
+            }
+            foreach ($pending as $name) {
                 $this->apply($name);
                 $applied[] = $name;
             }
@@ -175,12 +184,55 @@ final class Migrator
         }
     }
 
+    /**
+     * On MariaDB/MySQL the migrations up to {@see MysqlBase::LAST} are one step. A database that
+     * has some of them but not all was not set up by this server.
+     *
+     * @param list<string> $pending
+     *
+     * @return list<string> the names recorded
+     */
+    private function applyMysqlBase(array $pending): array
+    {
+        $names = array_keys($this->migrations);
+        $base = \array_slice($names, 0, (int) array_search(MysqlBase::LAST, $names, true) + 1);
+        if (!\in_array($pending[0], $base, true)) {
+            return [];
+        }
+        if ($pending[0] !== $names[0]) {
+            throw new MigrationException("corrupted migrations: MariaDB/MySQL start with all migrations up to {$this->lastOf($base)} at once, but only some of them were executed");
+        }
+        try {
+            (new MysqlBase())->up($this->db);
+            Transaction::begin($this->db);
+            $insert = Sql::prepare($this->db, 'insert into "kysely_migration" ("name", "timestamp") values (?, ?)');
+            foreach ($base as $name) {
+                $insert->execute([$name, self::isoTimestamp()]);
+            }
+            $this->db->exec('commit');
+        } catch (\Throwable $error) {
+            $this->rollBackOpenTransaction();
+            throw new MigrationException("Migration {$this->lastOf($base)} (MariaDB/MySQL base schema) failed: {$error->getMessage()}", 0, $error);
+        }
+
+        return $base;
+    }
+
+    /**
+     * @param list<string> $names
+     */
+    private function lastOf(array $names): string
+    {
+        return $names[\count($names) - 1];
+    }
+
     /** Bookkeeping tables and lock row (historical DDL, see the class comment). */
     private function ensureMigrationTables(): void
     {
-        $this->db->exec('create table if not exists "kysely_migration" ("name" varchar(255) not null primary key, "timestamp" varchar(255) not null)');
-        $this->db->exec('create table if not exists "kysely_migration_lock" ("id" varchar(255) not null primary key, "is_locked" integer default 0 not null)');
-        $this->db->exec('insert or ignore into "kysely_migration_lock" ("id", "is_locked") values (\'migration_lock\', 0)');
+        $options = Database::isMysql($this->db) ? ' engine = InnoDB default charset = utf8mb4 collate = utf8mb4_bin' : '';
+        $this->db->exec('create table if not exists "kysely_migration" ("name" varchar(255) not null primary key, "timestamp" varchar(255) not null)' . $options);
+        $this->db->exec('create table if not exists "kysely_migration_lock" ("id" varchar(255) not null primary key, "is_locked" integer default 0 not null)' . $options);
+        Sql::insertIfMissing($this->db, 'insert into "kysely_migration_lock" ("id", "is_locked") values (?, 0)', '"id"', [self::LOCK_ID]);
     }
 
     private function acquireLock(): void
@@ -188,7 +240,7 @@ final class Migrator
         $deadline = microtime(true) + $this->lockTimeout;
         $update = Sql::prepare($this->db, 'update "kysely_migration_lock" set "is_locked" = 1 where "id" = ? and "is_locked" = 0');
         while (true) {
-            $this->db->exec('begin immediate');
+            Transaction::begin($this->db);
             try {
                 $update->execute([self::LOCK_ID]);
                 $taken = $update->rowCount() === 1;
@@ -226,7 +278,7 @@ final class Migrator
 
     private function apply(string $name): void
     {
-        $this->db->exec('begin immediate');
+        Transaction::begin($this->db);
         try {
             $this->migrations[$name]->up($this->db);
             Sql::run($this->db, 'insert into "kysely_migration" ("name", "timestamp") values (?, ?)', [$name, self::isoTimestamp()]);
@@ -239,7 +291,8 @@ final class Migrator
 
     /**
      * Transactions are started with `begin immediate` (take the write lock up front), which PDO
-     * does not track, so `PDO::inTransaction()` cannot be used.
+     * does not track, so `PDO::inTransaction()` cannot be used. MariaDB/MySQL accept a rollback
+     * without a transaction.
      */
     private function rollBackOpenTransaction(): void
     {
@@ -258,6 +311,10 @@ final class Migrator
 
     private function tableExists(string $name): bool
     {
-        return Sql::rows($this->db, "select 1 from sqlite_master where type = 'table' and name = ?", [$name]) !== [];
+        $sql = Database::isMysql($this->db)
+            ? 'select 1 from information_schema.tables where table_schema = database() and table_name = ?'
+            : "select 1 from sqlite_master where type = 'table' and name = ?";
+
+        return Sql::rows($this->db, $sql, [$name]) !== [];
     }
 }

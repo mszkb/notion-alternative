@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NotionAlt\Sync;
 
+use NotionAlt\Database\Database;
 use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Database\Transaction;
@@ -58,7 +59,7 @@ final class Apply
     }
 
     /**
-     * Applies a push batch in order, in one SQLite transaction with a savepoint per operation
+     * Applies a push batch in order, in one transaction with a savepoint per operation
      * (#95): one commit per batch instead of per operation. A rejected operation only rolls back
      * its savepoint. An unexpected error commits what was applied before it and is rethrown, as
      * with one transaction per operation (T-OFF-05); a crash before the commit loses the whole
@@ -74,16 +75,18 @@ final class Apply
         $limits ??= AttachmentLimits::none();
         $failure = null;
         $results = Transaction::run($db, static function () use ($db, $userId, $operations, $now, $limits, &$failure): array {
+            // Runs again after a deadlock on MariaDB/MySQL.
+            $failure = null;
             $applied = [];
             foreach ($operations as $op) {
                 $db->exec('savepoint op');
                 try {
                     $applied[] = (new self($db, $limits, $now))->applyIn($userId, $op);
-                    $db->exec('release op');
+                    $db->exec('release savepoint op');
                 } catch (\Throwable $error) {
                     try {
-                        $db->exec('rollback to op');
-                        $db->exec('release op');
+                        $db->exec('rollback to savepoint op');
+                        $db->exec('release savepoint op');
                     } catch (\Throwable) {
                         // SQLite already rolled back the whole transaction (e.g. disk full).
                         throw $error;
@@ -157,6 +160,13 @@ final class Apply
         $member = Workspaces::findWithRole($db, $op->workspaceId, $userId);
         if ($member === null) {
             self::reject('workspace_not_found', 'Workspace not found');
+        }
+        if (Database::isMysql($db)) {
+            // SQLite runs writers one after the other (`begin immediate`); MariaDB/MySQL do not.
+            // Writers of this workspace wait here until this transaction ends, so the duplicate
+            // check, the merge and `nextSeq` see the latest state, and a change with a smaller
+            // seq never becomes visible after one with a larger seq (ADR 0024).
+            Sql::run($db, 'select id from workspaces where id = ? for update', [$op->workspaceId]);
         }
         if (Devices::findActive($db, $userId, $op->deviceId) === null) {
             self::reject('device_not_active', 'Device is not registered or was removed');

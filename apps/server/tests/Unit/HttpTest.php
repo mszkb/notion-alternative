@@ -6,8 +6,6 @@ namespace NotionAlt\Tests\Unit;
 
 use NotionAlt\AppFactory;
 use NotionAlt\Config\ConfigLoader;
-use NotionAlt\Database\Database;
-use NotionAlt\Database\Migrator;
 use NotionAlt\Http\BasePath;
 use NotionAlt\Http\DeferredJson;
 use NotionAlt\Http\HttpError;
@@ -16,6 +14,7 @@ use NotionAlt\Http\JsonBodyMiddleware;
 use NotionAlt\Http\RawBody;
 use NotionAlt\Logging\Logger;
 use NotionAlt\Shared\AuthSchemas;
+use NotionAlt\Tests\TestDatabase;
 use NotionAlt\Validation\Undefined;
 use NotionAlt\Validation\Validation;
 use PHPUnit\Framework\TestCase;
@@ -242,10 +241,7 @@ final class HttpTest extends TestCase
             $this->logs[] = $decoded;
         });
         $db ??= static function (): \PDO {
-            $pdo = Database::open(':memory:');
-            (new Migrator($pdo))->migrateToLatest();
-
-            return $pdo;
+            return TestDatabase::open();
         };
         $app = AppFactory::create(ConfigLoader::load(['DATABASE_PATH' => ':memory:'], __DIR__), $logger, $db, $basePath);
         // Routes for the tests of the shared middleware.

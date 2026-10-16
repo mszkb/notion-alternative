@@ -80,7 +80,7 @@ final class AuthRoutes
             Workspaces::insert($db, $row['id'], self::DEFAULT_WORKSPACE_NAME);
 
             return $row;
-        });
+        }, exclusive: 'register');
 
         $response = $this->startSession($db, $response, $user['id']);
         $this->logger->info('user registered', ['userId' => $user['id']]);

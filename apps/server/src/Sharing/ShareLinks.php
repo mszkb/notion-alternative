@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NotionAlt\Sharing;
 
+use NotionAlt\Database\Database;
 use NotionAlt\Database\Row;
 use NotionAlt\Database\Sql;
 use NotionAlt\Shared\AttachmentSchemas;
@@ -154,11 +155,13 @@ final class ShareLinks
         if ($rows === [] || !\in_array(Row::string($rows[0], 'mime_type'), AttachmentSchemas::INLINE_IMAGE_TYPES, true)) {
             return null;
         }
+        // MariaDB returns JSON strings from json_extract with their quotes.
+        $attachmentOf = Database::isMysql($db) ? "json_unquote(json_extract(attrs, '$.attachmentId'))" : "json_extract(attrs, '$.attachmentId')";
         $shown = Sql::rows(
             $db,
             "select 1 from blocks
              where document_id = ? and workspace_id = ? and deleted_at is null and type = 'image'
-               and json_extract(attrs, '$.attachmentId') = ?
+               and {$attachmentOf} = ?
              union all
              select 1 from documents where id = ? and cover = ?
              limit 1",
