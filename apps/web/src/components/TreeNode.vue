@@ -3,7 +3,8 @@ import type { Document } from '@notion-alt/shared'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { expanded } from '../composables/tree-state'
-import { NO_CHILDREN, pageLabel, useWorkspace } from '../composables/workspace'
+import { displayTitle, NO_CHILDREN, useWorkspace } from '../composables/workspace'
+import NavIcon from './NavIcon.vue'
 
 const props = defineProps<{ document: Document; depth: number }>()
 
@@ -90,29 +91,41 @@ async function onDrop(event: DragEvent) {
     <div
       class="tree-row"
       :class="{ active: isActive, [`drop-${dropZone}`]: dropZone }"
-      :style="{ paddingLeft: `${depth * 0.9 + 0.25}rem` }"
+      :style="{ paddingLeft: `${depth * 0.9 + 0.5}rem` }"
       :draggable="!readOnly"
       @dragstart="onDragStart"
       @dragover="onDragOver"
       @dragleave="dropZone = null"
       @drop="onDrop"
     >
+      <!-- The page icon stands where the arrow goes; the arrow shows on hover or focus, so top
+           level pages line up with the other entries (#203). -->
       <button
+        v-if="children.length"
         type="button"
         class="icon toggle"
-        :class="{ invisible: children.length === 0 }"
         :aria-label="isOpen ? 'Zuklappen' : 'Aufklappen'"
         @click="toggle"
       >
-        {{ isOpen ? '▾' : '▸' }}
+        <span class="tree-icon" aria-hidden="true">
+          <template v-if="document.icon">{{ document.icon }}</template>
+          <NavIcon v-else name="page" />
+        </span>
+        <span class="tree-arrow" aria-hidden="true">{{ isOpen ? '▾' : '▸' }}</span>
       </button>
+      <span v-else class="icon toggle" aria-hidden="true" data-testid="tree-icon">
+        <span class="tree-icon">
+          <template v-if="document.icon">{{ document.icon }}</template>
+          <NavIcon v-else name="page" />
+        </span>
+      </span>
       <a
         class="tree-link"
         :href="pageHref(document.id)"
         :aria-current="isActive ? 'page' : undefined"
         @click="open"
       >
-        {{ pageLabel(document) }}
+        {{ displayTitle(document) }}
       </a>
       <button
         v-if="!readOnly"

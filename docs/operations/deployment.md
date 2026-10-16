@@ -139,7 +139,7 @@ Das Backend loggt Anfragen ohne Query-String (Suchbegriffe sind Inhalte). nginx 
 
 Der Production-Build enthält einen Service Worker (`/sw.js`), der die App-Dateien zwischenspeichert, damit die App auch ohne Netz neu geladen werden kann. Er braucht einen sicheren Kontext: `https://` oder `http://localhost` (z. B. über den SSH-Tunnel). Über eine reine HTTP-LAN-Adresse läuft die App ohne Service Worker weiter, nur das Neuladen offline geht dann nicht ([ADR 0010](../adr/0010-reference-deployment-and-https.md)).
 
-Nach einem Update zeigt die App „Eine neue Version ist verfügbar – Neu laden“; offene Eingaben werden vorher gespeichert. Hängt ein Gerät auf einer alten Version fest: Kontoseite → „App-Cache zurücksetzen“ (lokale Daten bleiben), notfalls in den Browser-Einstellungen die Website-Daten nur für „Cache“/„Service Worker“ löschen.
+Nach einem Update zeigt die App „Eine neue Version ist verfügbar – Neu laden“; offene Eingaben werden vorher gespeichert. Hängt ein Gerät auf einer alten Version fest: Einstellungen → Fehlerbehebung → „App-Cache zurücksetzen“ (lokale Daten bleiben), notfalls in den Browser-Einstellungen die Website-Daten nur für „Cache“/„Service Worker“ löschen.
 
 ## Healthchecks
 

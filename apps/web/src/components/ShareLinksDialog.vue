@@ -3,6 +3,7 @@ import type { ShareLink } from '@notion-alt/shared'
 import { onMounted, ref } from 'vue'
 import { ApiError, api } from '../api'
 import { connection } from '../session'
+import { formatDateTime } from '../format'
 
 /**
  * Read links of a page (ADR 0022): anyone with the link sees the page read-only, without an
@@ -27,8 +28,6 @@ const copied = ref(false)
 const busy = ref(false)
 const error = ref<string | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)
-
-const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
 
 onMounted(async () => {
   closeButton.value?.focus()
@@ -101,9 +100,7 @@ async function revoke(link: ShareLink) {
 
 function expiry(link: ShareLink): string {
   if (link.expired) return 'abgelaufen'
-  return link.expiresAt
-    ? `gültig bis ${dateFormat.format(new Date(link.expiresAt))}`
-    : 'unbefristet'
+  return link.expiresAt ? `gültig bis ${formatDateTime(link.expiresAt)}` : 'unbefristet'
 }
 </script>
 
@@ -165,7 +162,7 @@ function expiry(link: ShareLink): string {
         <ul v-if="links && links.length > 0" class="share-links" aria-label="Lese-Links">
           <li v-for="link in links" :key="link.id" data-testid="share-link">
             <span>
-              Erstellt {{ dateFormat.format(new Date(link.createdAt)) }} ·
+              Erstellt {{ formatDateTime(link.createdAt) }} ·
               <span :class="{ error: link.expired }">{{ expiry(link) }}</span>
             </span>
             <button type="button" class="link danger" @click="revoke(link)">Widerrufen</button>

@@ -20,6 +20,7 @@ import PageEditor from '../editor/PageEditor.vue'
 import { registerPendingEdits } from '../pending-edits'
 import { connection } from '../session'
 import { ensureDocumentLoaded, type OpenOutcome } from '../sync/offline'
+import { formatDateTime } from '../format'
 
 const { store, workspaceId, documentsById, childrenByParent, readOnly } = useWorkspace()
 const route = useRoute()
@@ -189,10 +190,7 @@ async function onCoverFile(event: Event) {
 
 // ---------------------------------------------------------------- header (#132)
 
-const editedFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
-const edited = computed(() =>
-  document.value ? editedFormat.format(new Date(document.value.updatedAt)) : '',
-)
+const edited = computed(() => (document.value ? formatDateTime(document.value.updatedAt) : ''))
 
 const menuOpen = ref(false)
 const shareOpen = ref(false)
@@ -405,7 +403,9 @@ async function deletePage() {
       <template v-if="content === 'offline'">
         Der Inhalt dieser Seite ist nicht auf diesem Gerät. Er wird geladen, sobald der Server
         erreichbar ist. Damit alle Seiten auch ohne Verbindung da sind:
-        <RouterLink :to="{ name: 'account' }">Konto → Offline verfügbar</RouterLink>.
+        <RouterLink :to="{ name: 'account', hash: '#settings-offline' }"
+          >Einstellungen → Offline &amp; Sync</RouterLink
+        >.
       </template>
       <template v-else-if="content === 'missing'">
         Der Inhalt dieser Seite ist auf dem Server nicht verfügbar.
@@ -427,22 +427,29 @@ async function deletePage() {
       </ul>
     </section>
 
-    <section class="page-section" aria-labelledby="backlinks">
-      <h2 id="backlinks">Verlinkt von</h2>
-      <ul v-if="backlinks.length" class="link-list">
-        <li v-for="source in backlinks" :key="source.id">
-          <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: source.id } }">
-            {{ pageLabel(source) }}
-          </RouterLink>
-        </li>
-      </ul>
-      <p v-else class="muted">Keine Seite verlinkt hierher. Mit <kbd>[[</kbd> im Text verlinken.</p>
-      <p v-if="unloadedCount" class="muted" data-testid="backlinks-partial">
-        Berücksichtigt sind Seiten, deren Inhalt auf diesem Gerät ist ({{
-          unloadedCount.toLocaleString('de-DE')
-        }}
-        weitere nicht).
-      </p>
+    <!-- Only when another page links here, folded like in Notion (#199). -->
+    <section v-if="backlinks.length" class="page-section backlinks" aria-labelledby="backlinks">
+      <details>
+        <summary>
+          <h2 id="backlinks">Verlinkt von</h2>
+          <span class="muted" data-testid="backlinks-count">
+            {{ backlinks.length }} Verweis{{ backlinks.length === 1 ? '' : 'e' }}
+          </span>
+        </summary>
+        <ul class="link-list">
+          <li v-for="source in backlinks" :key="source.id">
+            <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: source.id } }">
+              {{ pageLabel(source) }}
+            </RouterLink>
+          </li>
+        </ul>
+        <p v-if="unloadedCount" class="muted" data-testid="backlinks-partial">
+          Berücksichtigt sind Seiten, deren Inhalt auf diesem Gerät ist ({{
+            unloadedCount.toLocaleString('de-DE')
+          }}
+          weitere nicht).
+        </p>
+      </details>
     </section>
   </article>
 

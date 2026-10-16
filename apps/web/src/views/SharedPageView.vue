@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ApiError, api } from '../api'
 import { renderInline } from '../editor/inline-dom'
+import { formatDateTime } from '../format'
 
 /**
  * A page shared by read link (ADR 0022), for guests without an account: online only, read only,
@@ -19,7 +20,6 @@ const blocks = ref<Block[]>([])
 const state = ref<'loading' | 'ready' | 'missing' | 'error'>('loading')
 const collapsed = ref(new Set<number>())
 
-const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
 const imageUrl = (id: string) =>
   `/api/public/shares/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`
 
@@ -137,7 +137,7 @@ const cover = computed(() => {
       </div>
       <p class="shared-notice muted">
         Schreibgeschützte Ansicht · zuletzt geändert
-        {{ dateFormat.format(new Date(page.updatedAt)) }}
+        {{ formatDateTime(page.updatedAt) }}
       </p>
       <p v-if="page.icon" class="page-icon shared-icon" aria-hidden="true">{{ page.icon }}</p>
       <h1 class="page-title">{{ page.title || 'Unbenannt' }}</h1>

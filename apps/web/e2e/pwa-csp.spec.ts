@@ -36,7 +36,7 @@ test('the app works under the CSP without violations', async ({ page }) => {
     )
     .toBe(1)
   await page.getByRole('link', { name: 'Export & Import' }).click()
-  await page.getByRole('link', { name: 'Konto' }).click()
+  await page.getByRole('link', { name: 'Einstellungen' }).click()
 
   expect(
     await page.evaluate(() => (window as unknown as { cspViolations: string[] }).cspViolations),

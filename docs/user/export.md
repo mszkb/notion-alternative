@@ -2,7 +2,9 @@
 
 Der Export ist in der Seitenleiste unter **Export & Import** erreichbar. Er entsteht aus den Daten auf diesem Gerät und funktioniert deshalb auch ohne Server oder Internet.
 
-## Vollständig (ZIP)
+Für eine Sicherung reicht der Knopf **„Alles exportieren“**: Er lädt alle Seiten, Bilder und Dateien als ZIP herunter. Markdown und JSON einzeln stehen unter **„Weitere Formate“**, die technischen Details darunter zum Aufklappen. Ohne Konto gibt es keinen Verlauf auf einem Server; exportiert wird dann der aktuelle Stand.
+
+## Alles exportieren (ZIP)
 
 Empfohlen für Backups. Das ZIP enthält:
 
@@ -35,15 +37,15 @@ Prüfen lässt sich ein Export z. B. mit `unzip export.zip -d export && cd expor
 
 ## Import
 
-Unter **Export & Import** → **Import** lässt sich ein vollständiger Export (ZIP) oder ein JSON-Export wieder herstellen, z. B. nach einem Umzug in eine frische Installation:
+Unter **Export & Import** → **Sicherung wiederherstellen** lässt sich ein vollständiger Export (ZIP) oder ein JSON-Export wieder herstellen, z. B. nach einem Umzug in eine frische Installation:
 
-1. Exportdatei wählen. Vor dem Import werden geprüft: ZIP-Struktur, Größe und SHA-256 jeder Datei laut `manifest.json`, Anhänge gegen ihre Metadaten, das JSON gegen das Schema. Ältere `schema_version`s werden automatisch migriert; Exporte einer neueren App-Version werden abgelehnt.
+1. Sicherungsdatei wählen. Vor dem Import werden geprüft: ZIP-Struktur, Größe und SHA-256 jeder Datei laut `manifest.json`, Anhänge gegen ihre Metadaten, das JSON gegen das Schema. Ältere `schema_version`s werden automatisch migriert; Exporte einer neueren App-Version werden abgelehnt.
 2. Die Seite zeigt eine Zusammenfassung (Seiten, Papierkorb, Anhänge, Verlauf). Namen für den neuen Workspace wählen, **Als neuen Workspace importieren**.
 3. Der Import legt immer einen **neuen** Workspace an und überschreibt nie etwas. Gibt es die IDs auf dem Server schon (z. B. derselbe Export wurde bereits importiert oder der Ursprungs-Workspace liegt noch auf diesem Server), bricht er ohne Änderung ab und bietet **Als Kopie importieren** an: Alle Seiten, Blöcke, Tags und Anhänge bekommen dann neue IDs, Links werden mit umgeschrieben.
 
 Hinweise:
 
-- Der Import braucht eine Verbindung zum Server; die Daten kommen danach wie gewohnt per Sync auf alle Geräte.
+- Der Import braucht ein Konto und eine Verbindung zum Server; die Daten kommen danach wie gewohnt per Sync auf alle Geräte.
 - Anhang-Inhalte aus dem ZIP werden auf dem Gerät abgelegt und beim nächsten Sync hochgeladen. Ein reiner JSON-Export enthält keine Anhang-Inhalte; diese Anhänge erscheinen dann als fehlend.
 - Der Verlauf aus dem Export bleibt in der Versionsansicht erhalten. Offene Konflikte werden nicht exportiert.
 - Ordner mit Markdown-Dateien lassen sich (noch) nicht importieren; dafür ist der JSON-Teil da.
@@ -52,7 +54,7 @@ Format und Hintergründe: [ADR 0004](../adr/0004-export-format.md).
 
 ## Umzug aus Notion
 
-In Notion unter **Einstellungen → Export** das Format **„Markdown & CSV“** wählen, Unterseiten und Dateien einschließen und die ZIP-Datei herunterladen. In dieser App: **Export & Import → Umzug aus Notion**, Datei wählen. Vor dem Import zeigt die App, was übernommen und was vereinfacht wird; importiert wird als neuer Workspace (online).
+In Notion unter **Einstellungen → Export** das Format **„Markdown & CSV“** wählen, Unterseiten und Dateien einschließen und die ZIP-Datei herunterladen. In dieser App: **Export & Import → Aus Notion importieren**, Datei wählen. Vor dem Import zeigt die App, was übernommen und was vereinfacht wird; importiert wird als neuer Workspace (online).
 
 | In Notion | Hier |
 | --- | --- |

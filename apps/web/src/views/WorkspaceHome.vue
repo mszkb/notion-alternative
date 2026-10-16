@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { pageLabel, useWorkspace } from '../composables/workspace'
+import { formatDateTime } from '../format'
 
 const { store, workspaceId, documents, readOnly } = useWorkspace()
 const router = useRouter()
@@ -34,7 +35,7 @@ async function createPage() {
           <RouterLink :to="{ name: 'page', params: { workspaceId, documentId: doc.id } }">
             {{ pageLabel(doc) }}
           </RouterLink>
-          <small class="muted">{{ new Date(doc.updatedAt).toLocaleString() }}</small>
+          <small class="muted">{{ formatDateTime(doc.updatedAt) }}</small>
         </li>
       </ul>
     </section>

@@ -77,6 +77,7 @@ test('page tree, breadcrumbs, links, backlinks, tags, favorites and search', asy
   await waitForSaved(page)
   const link = blocks(page).first().locator('a.page-link')
   await expect(link).toHaveText('Ziel')
+  await expect(page.getByRole('region', { name: 'Verlinkt von' })).toHaveCount(0)
 
   // Tags and favorites.
   await page.getByLabel('Tag hinzufügen').fill('Projekt')
@@ -94,7 +95,11 @@ test('page tree, breadcrumbs, links, backlinks, tags, favorites and search', asy
 
   await link.click()
   await expect(page.getByLabel('Titel')).toHaveValue('Ziel')
-  await expect(page.getByRole('region', { name: 'Verlinkt von' })).toContainText('Quelle')
+  // Backlinks show only when there are some, folded with their number (#199).
+  const backlinks = page.getByRole('region', { name: 'Verlinkt von' })
+  await expect(backlinks.getByTestId('backlinks-count')).toHaveText('1 Verweis')
+  await backlinks.getByText('Verlinkt von').click()
+  await expect(backlinks.getByRole('link', { name: 'Quelle' })).toBeVisible()
 
   // Renaming the target updates the link text, the link keeps working (id-based).
   await page.getByLabel('Titel').fill('Ziel umbenannt')
