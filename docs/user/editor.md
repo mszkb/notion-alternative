@@ -60,6 +60,8 @@ Jeder Schritt lässt sich mit `Strg/⌘ + Z` rückgängig machen.
 | `Strg/⌘ + /` | Übersicht aller Kürzel |
 | `Strg/⌘ + B / I / E` | Fett, kursiv, Code |
 
+Die Schnellsuche sucht zuerst auf dem Gerät. Online ergänzt sie Treffer vom Server, etwa Seiten, deren Inhalt noch nicht geladen ist. Läuft der Server mit MariaDB oder MySQL statt SQLite, findet die Suche dort keine Wörter mit weniger als drei Buchstaben und sortiert Treffer etwas anders ([ADR 0024](../adr/0024-mysql-mariadb-option.md)); die Suche auf dem Gerät findet sie trotzdem.
+
 ## Umzug aus Notion
 
 Siehe [Export und Import → Umzug aus Notion](export.md#umzug-aus-notion) (in der App: **Export & Import → Aus Notion importieren**).

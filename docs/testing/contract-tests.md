@@ -21,6 +21,7 @@ SERVER_URL=http://127.0.0.1:3000 pnpm --filter @notion-alt/contract-tests test
 
 - `pnpm test` im Wurzelverzeichnis führt die Contract-Tests **nicht** aus (`--filter '!@notion-alt/contract-tests'`); die GitHub-CI startet sie im Job `checks` als eigenen Schritt. `pnpm typecheck` prüft das Paket mit.
 - `CONTRACT_SERVER_LOG=1` gibt die Ausgabe des gestarteten Servers mit aus; bricht der Start ab, steht sie ohnehin in der Fehlermeldung.
+- **MariaDB/MySQL** ([ADR 0024](../adr/0024-mysql-mariadb-option.md)): `SERVER_DATABASE_CMD` ist ein Befehl, der vor jedem gestarteten Server eine frische Datenbank anlegt und ihre `DATABASE_URL` ausgibt, z. B. `SERVER_DATABASE_CMD='php scripts/mysql/fresh-database.php mysql://root:root@127.0.0.1:3306'`. Die CI (Job `mysql`) läuft so gegen MariaDB 10.11 und MySQL 8.4. Die Suche prüft nur, was beide Datenbanken garantieren (Treffer, Rechte, Präfixe ab 3 Zeichen, keine fremden Workspaces).
 - Playwright (`apps/web/playwright.config.ts`) startet ebenfalls den PHP-Server (`php -S`, Port `3100`); mit gesetztem `SERVER_CMD` diesen Befehl (`PORT`/`{port}`, Arbeitsverzeichnis: Repo-Wurzel). Mit `BASE_URL` startet es nichts und testet eine laufende Installation.
 
 ### Gegen das Webhosting-Paket unter Apache
@@ -54,6 +55,7 @@ Ein gestarteter Server bekommt genau diese Variablen. Ein externer Server (`SERV
 | --- | --- | --- |
 | `PORT` | freier Port | nur beim Start durch die Suite |
 | `DATA_DIR`, `DATABASE_PATH` | temporäres Verzeichnis, `…/app.sqlite` | frische Datenbank pro Lauf |
+| `DATABASE_URL` | Ausgabe von `SERVER_DATABASE_CMD` | nur damit gesetzt: frische MariaDB/MySQL-Datenbank pro gestartetem Server |
 | `LOG_LEVEL` | `warn` | |
 | `PHP_CLI_SERVER_WORKERS` | `4` | parallele Worker des eingebauten PHP-Servers, damit Anfragen wirklich gleichzeitig laufen (Schreibsperre von SQLite) |
 | `ALLOW_REGISTRATION` | `true` | jeder Test legt eigene Konten an |

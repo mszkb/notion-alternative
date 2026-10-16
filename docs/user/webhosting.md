@@ -5,6 +5,7 @@ Für gewöhnliches Webhosting mit PHP, HTTPS und Cron, ohne Docker ([ADR 0018](.
 ## Voraussetzungen
 
 - PHP **8.2** oder neuer mit `pdo_sqlite` (SQLite mit FTS5), `mbstring`, `openssl`, `sodium`, `curl`
+- optional statt SQLite: eine MariaDB- oder MySQL-Datenbank des Hosters (MariaDB ab 10.11, MySQL ab 8.4) und `pdo_mysql`, siehe [Mit der Datenbank des Hosters](#mit-der-datenbank-des-hosters)
 - Apache oder LiteSpeed mit `.htaccess` (`mod_rewrite`, `mod_headers`)
 - HTTPS für die Domain (bei fast allen Hostern per Let's Encrypt im Kundenmenü)
 - ein Cron-Eintrag (beim Hoster meist „Cronjobs“ oder „Geplante Aufgaben“)
@@ -27,6 +28,18 @@ Getestet ist das Paket mit Apache 2.4, PHP als Apache-Modul (`scripts/webspace-t
 
    Manche Hoster verlangen den vollen Pfad zu PHP, z. B. `/usr/bin/php8.3`.
 7. `https://<Domain>/` öffnen, das erste Konto registrieren, danach `ALLOW_REGISTRATION` wieder auf `false` setzen.
+
+## Mit der Datenbank des Hosters
+
+Ohne weitere Angaben speichert die App alles in einer SQLite-Datei im Datenordner, eine Datenbank muss niemand anlegen. Bietet der Hoster eine MariaDB- oder MySQL-Datenbank an (im Kundenmenü oft „MySQL-Datenbank“, auch wenn MariaDB dahinter läuft), kann die App stattdessen diese nutzen ([ADR 0024](../adr/0024-mysql-mariadb-option.md)). Das hilft z. B., wenn der Hoster Dateien auf Netzlaufwerken ablegt, wo SQLite unzuverlässig ist.
+
+1. Im Kundenmenü eine neue, leere Datenbank anlegen und Name, Benutzer, Passwort und Server notieren.
+2. In `api/app/config.php` die Zeilen `DB_HOST`, `DB_NAME`, `DB_USER` und `DB_PASSWORD` einkommentieren und ausfüllen (`DB_PORT`, falls nicht 3306). Den Datenordner (`DATA_DIR`) braucht die App weiterhin für Anhänge.
+3. `api/check.php` zeigt dann statt SQLite die Verbindung und welche Datenbank in welcher Version tatsächlich läuft.
+
+Die Tabellen legt die App bei der ersten Anfrage selbst an. Unterschied zu SQLite: Die Suche auf dem Server findet keine Wörter mit weniger als drei Buchstaben und sortiert Treffer etwas anders. Die Suche in der App selbst findet sie trotzdem, sie läuft auf dem Gerät.
+
+Umziehen lässt sich jederzeit, in beide Richtungen: mit SSH `php api/app/bin/console db:copy <alte Datenbank>` (Details in [Backup, Restore und Upgrade](../operations/backup.md#umzug-zwischen-sqlite-und-mariadbmysql)), ohne SSH über Export und Import in der App.
 
 ## Update
 

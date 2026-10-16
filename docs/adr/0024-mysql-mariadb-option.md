@@ -158,6 +158,21 @@ Betroffene Prinzipien und Invarianten:
   8. `check.php` und Webspace-Doku.
   9. Landing Page und Nutzerdoku.
 
+### Umsetzung (Epic #208)
+
+Abweichungen und Ergänzungen gegenüber dem Vorschlag oben, festgestellt bei der Umsetzung:
+
+- **DBAL nur für Schema und Plattform:** Die Abfragen laufen weiter über PDO und `Sql`; DBAL liefert die Plattform (`Database::platform`) und erzeugt das Schema (`MysqlBase`, ab 0018 neue Migrationen). Das hält den Diff klein; `Sql` auf eine DBAL-Verbindung umzustellen, hätte jede Abfragestelle berührt, ohne etwas zu gewinnen.
+- **Verbindung:** `sql_mode` mit `ANSI_QUOTES`, damit Bezeichner in `"…"` wie bei SQLite funktionieren; `read committed`; `rowCount()` zählt gefundene Zeilen (`FOUND_ROWS`), sonst wäre z. B. ein Umbenennen auf denselben Namen ein 404.
+- **Migrator:** Die vorhandene Sperrzeile in `kysely_migration_lock` funktioniert auf beiden Datenbanken, `GET_LOCK` ist dafür nicht nötig. Weil DDL auf MariaDB/MySQL sofort festgeschrieben wird, legt `MysqlBase` nach einem Abbruch nur die fehlenden Tabellen an.
+- **Upserts:** `Sql::onConflict` (`on duplicate key update`) und `Sql::insertIfMissing` (`insert ignore`, nur für Zeilen mit bekannten gültigen Werten).
+- **Weitere Sperren:** Außer der Workspace-Zeile in `Apply` (B1) sperrt `reindexMarked` die markierten Seiten (sonst legen zwei Worker denselben Sucheintrag an), und die Registrierung sowie die Geräte-Anmeldung laufen unter einer benannten Sperre (`Transaction::run(…, exclusive:)`), weil sich „es gibt noch kein Konto“ nicht über eine Zeile sperren lässt.
+- **Suche:** `title` und `body` des Suchindex mit `utf8mb4_unicode_ci`, damit Groß- und Kleinschreibung und Akzente wie bei FTS5 nicht zählen; ein `FULLTEXT`-Index über beide Spalten (Wörter dürfen auf Titel und Text verteilt sein) und einer über den Titel (Gewichtung).
+- **Schlüssel:** Push-Endpoints (bis 2000 Zeichen, Primärschlüssel) als ASCII-Spalte wegen der Grenze von 3072 Byte. `metrics` bekommt nur auf MariaDB/MySQL eine Spalte `id` für die Reihenfolge; SQLite behält seine `rowid`, eine Migration 0018 war dafür nicht nötig.
+- **Bewusst offen:** Das Anhang-Kontingent gilt pro Konto über alle Workspaces, die Sperre aber pro Workspace. Zwei gleichzeitige Pushes in verschiedene Workspaces desselben Kontos können das Kontingent knapp überschreiten (unter SQLite nicht möglich). Ebenso wiederholt `Metrics` nach einem Deadlock nicht, sondern verliert die Zähler dieser einen Anfrage mit einer Warnung im Log. Beides betrifft keine Inhalte und keine Sync-Invariante.
+- **`pdo_sqlite` bleibt Pflicht**, auch mit MariaDB/MySQL: Backups sind SQLite-Dateien.
+- **Tests:** PHPUnit mit `TEST_DATABASE_URL`, Contract-Tests mit `SERVER_DATABASE_CMD` (frische Datenbank pro Server, `scripts/mysql/fresh-database.php`), `scripts/backup-restore-test.sh` mit `DATABASE_URL`/`RESTORE_DATABASE_URL`; alles im CI-Job `mysql` gegen MariaDB 10.11 und MySQL 8.4.
+
 ### Entschieden vom Maintainer (2026-10-16)
 
 - Unterstützt werden MariaDB ab 10.11 und MySQL ab 8.4. Ältere Versionen (MariaDB 10.6, MySQL 8.0) werden nicht getestet und nicht zugesagt.

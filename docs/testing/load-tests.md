@@ -11,6 +11,8 @@ Belastbarkeit großer Workspaces ([#77](https://github.com/mszkb/notion-alternat
 | App (Chromium, [#96](https://github.com/mszkb/notion-alternative/issues/96)) | `LOAD_PAGES=1000 pnpm --filter @notion-alt/web exec playwright test e2e/load-app.spec.ts --project chromium` | Die echte App gegen einen echten Server: Seed über ein zweites Gerät; Erstsync als neues Gerät bis „Synchronisiert um“; Kaltstart aus IndexedDB, bis der Seitenbaum sichtbar ist; Öffnen einer Seite mit `LOAD_BIG_BLOCKS` (2 000) Blöcken; Tippen am Ende dieser Seite. Ohne `LOAD_PAGES` wird der Test übersprungen, auch in der CI. Optionen siehe unten. |
 | Client (Node) | `pnpm --filter @notion-alt/web loadtest` | Dasselbe Szenario mit fake-indexeddb. Nur für schnelle Vergleiche: Die IndexedDB-Zeiten sind dort viel zu hoch, weil Index-Cursor quadratisch laufen (10 000 Zeilen per `anyOf`: 51 s statt 0,5 s). |
 
+Gleichzeitige Pushes in **denselben** Workspace prüft `apps/server/tests/Unit/SyncOrderTest.php` (PHPUnit, T-MD-09): vier Prozesse pushen, ein fünfter pullt mit Cursor, auf SQLite und mit `TEST_DATABASE_URL` auf MariaDB/MySQL ([ADR 0024](../adr/0024-mysql-mariadb-option.md)). Er misst nichts, sondern sichert die Reihenfolge der Sync-Nummern.
+
 **Parameter** (Umgebungsvariablen):
 
 - `PAGES` (Standard: Server und Chromium 1 000, Node 200) und `BLOCKS_PER_PAGE` (50).

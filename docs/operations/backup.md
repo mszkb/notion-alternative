@@ -7,6 +7,7 @@ Anleitung für den Docker-Compose-Stack ([Deployment](deployment.md)). Alle Befe
 | Teil | Im Backup | Hinweis |
 | --- | --- | --- |
 | SQLite-Datenbank (`/data/app.sqlite`) | ja | Konten (Passwort-Hashes), Sitzungen, Geräte, Workspaces, Seiten, Blöcke, Tags, Änderungslog, Verlauf, Papierkorb, Konflikte, Anhang-Metadaten, Push-Subscriptions und VAPID-Schlüssel |
+| MariaDB/MySQL (`DATABASE_URL`, [ADR 0024](../adr/0024-mysql-mariadb-option.md)) | ja | dieselben Daten, im Backup ebenfalls als `app.sqlite`; der Suchindex wird nach dem Restore neu aufgebaut |
 | Dateianhänge im Volume (`/data/attachments`) | ja | nur Anhänge, deren Datei vorhanden ist; fehlende stehen in `manifest.json` unter `missingAttachments` |
 | `.env` | **nein** | liegt auf dem Host; separat sichern (enthält ggf. S3-Zugangsdaten) |
 | Anhänge in S3 (`ATTACHMENT_STORAGE=s3`) | **nein** | Bucket selbst sichern (Versionierung, `rclone sync`); möglichst zeitnah zum Datenbank-Backup |
@@ -44,6 +45,8 @@ backup-2026-10-03T18-00-00-000Z/
 ```
 
 Ein Backup wird unter `*.partial` geschrieben und erst am Ende umbenannt; ein Verzeichnis ohne `.partial` ist vollständig.
+
+Mit MariaDB/MySQL sieht das Backup genauso aus: Der Befehl kopiert die Tabellen aus einem konsistenten Stand (auch während Schreibzugriffen) in eine neue `app.sqlite`. `mysqldump` ist nicht nötig. Dafür braucht der Datenordner kurzzeitig Platz für diese Kopie.
 
 ## Automatisieren
 
@@ -138,6 +141,7 @@ docker compose up -d --wait
 
 - **In eine leere Umgebung** (neuer Host, gelöschtes Volume): wie oben; das Volume entsteht beim `run`. Vorher `.env` wiederherstellen und mit `docker compose build` (oder `up -d --build` und danach `stop`) die Images bauen.
 - **Über vorhandene Daten:** Der Restore verweigert das Überschreiben einer vorhandenen Datenbank. Bewusst ersetzen mit `restore /restore --force`. Vorher von den aktuellen Daten ein Backup ziehen, falls noch möglich.
+- **Mit MariaDB/MySQL:** Der Restore spielt die `app.sqlite` des Backups in die konfigurierte Datenbank ein; Backups älterer Versionen werden dabei zuerst migriert. Eine Datenbank mit Inhalt ersetzt er nur mit `--force`. Woher das Backup stammt (SQLite oder MariaDB/MySQL), spielt keine Rolle.
 - **Mit S3:** Der Restore schreibt nur die Datenbank (das Backup enthält keine Anhänge). Den Bucket auf den passenden Stand bringen; fehlende Objekte zeigt die App als „nicht verfügbar“ an.
 - **Fehler** (`Checksum mismatch`, `File missing`, `no valid backup`): Das Backup ist beschädigt; nichts wurde verändert. Ein anderes Backup verwenden.
 
@@ -161,6 +165,21 @@ Die Geräte haben meist einen neueren Stand als das Backup. Der Restore hebt die
 3. Anhänge, die der Server nicht mehr kennt, meldet das Gerät erneut an und lädt die Datei hoch, sofern es sie lokal hat.
 
 Damit kommt der Stand nach dem Backup von den Geräten zurück, sobald jedes Gerät einmal online war. Geräte, deren lokale Daten gelöscht wurden, können nichts beitragen. Die Seitenleiste zeigt nach dem Neu-Synchronisieren eventuell Konflikte zur Entscheidung an.
+
+## Umzug zwischen SQLite und MariaDB/MySQL
+
+In beide Richtungen mit `db:copy`: Quelle ist die bisherige Datenbank, Ziel die konfigurierte, die leer sein muss. Anhänge bleiben, wo sie sind. Während des Umzugs darf niemand die App benutzen.
+
+```sh
+# SQLite -> MariaDB/MySQL: DATABASE_URL (bzw. DB_*) setzen, dann
+php bin/console db:copy /data/app.sqlite
+# MariaDB/MySQL -> SQLite: DATABASE_URL entfernen, dann (Passwort nicht in der Befehlszeile)
+read -rs DB_COPY_SOURCE   # mysql://benutzer:passwort@host:3306/datenbank
+DB_COPY_SOURCE="$DB_COPY_SOURCE" php bin/console db:copy
+# {"copied":1234,"tables":{"blocks":800,…}}
+```
+
+Danach die App wieder freigeben. Die Sync-Nummern bleiben gleich, die Geräte synchronisieren normal weiter. Ein Backup mit Restore in die neue Datenbank geht ebenfalls (`scripts/backup-restore-test.sh` prüft beide Wege mit `DATABASE_URL` und `RESTORE_DATABASE_URL`); dann synchronisieren alle Geräte einmal vollständig neu.
 
 ## Upgrade
 

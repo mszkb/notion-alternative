@@ -1,11 +1,11 @@
 # Server (PHP, Slim 4)
 
-Das Backend für Webhosting und Docker ([ADR 0018](../../docs/adr/0018-php-backend.md)): HTTP-API unter `/api`, SQLite mit FTS5, Anhänge im Volume oder in S3, Web Push. Die Spezifikation des API sind die Contract-Tests ([`docs/testing/contract-tests.md`](../../docs/testing/contract-tests.md)); die Vue-SPA in `apps/web` ist der einzige Client.
+Das Backend für Webhosting und Docker ([ADR 0018](../../docs/adr/0018-php-backend.md)): HTTP-API unter `/api`, SQLite mit FTS5 (optional MariaDB/MySQL, [ADR 0024](../../docs/adr/0024-mysql-mariadb-option.md)), Anhänge im Volume oder in S3, Web Push. Die Spezifikation des API sind die Contract-Tests ([`docs/testing/contract-tests.md`](../../docs/testing/contract-tests.md)); die Vue-SPA in `apps/web` ist der einzige Client.
 
 ## Voraussetzungen
 
 - PHP **≥ 8.2**
-- Extensions: `pdo_sqlite` (SQLite **mit FTS5**), `mbstring`, `json`, `openssl`, `sodium`, `curl` (Web Push, S3)
+- Extensions: `pdo_sqlite` (SQLite **mit FTS5**), `mbstring`, `json`, `openssl`, `sodium`, `curl` (Web Push, S3); `pdo_mysql` nur mit MariaDB/MySQL
 - Composer (nur für die Entwicklung; das Release-ZIP enthält `vendor/`)
 
 FTS5 wird beim ersten Datenbankzugriff geprüft. Fehlt es, antwortet `/api/ready` mit 503 und im Log steht `SQLite of this PHP installation has no FTS5 …`.
@@ -81,6 +81,8 @@ Ungültige Werte führen zu einer Fehlermeldung, die nur Variablennamen nennt (z
 - **Validierung:** kleiner Nachbau von zod in `src/Validation` (`V::object`, `V::string()->trim()->min()…`, `Validation::parseInput`), Fehler 400 `invalid_input` mit `issues[{path,message}]`. Die Schemas in `src/Shared` entsprechen den zod-Schemas in `packages/shared`, die der Client nutzt; Pfade und Codes stimmen überein, Meldungstexte folgen zod.
 - **Logs:** eine JSON-Zeile pro Ereignis im pino-Format (`level` numerisch, `time` in ms, `msg`) auf stderr bzw. `error_log()`. Pro Anfrage `request completed` mit Methode, Pfad **ohne Query-String**, Status und `responseTime`; `/api/health` und `/api/ready` erscheinen erst ab `warn`. `LOG_LEVEL` gilt.
 - **SQLite:** Verzeichnis wird angelegt, `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`. Schreibende Transaktionen beginnen mit `begin immediate` (parallele Anfragen).
+- **MariaDB/MySQL** (`DATABASE_URL` oder `DB_*`, ADR 0024): Verbindung mit `utf8mb4`/`utf8mb4_bin` (Vergleiche Byte für Byte wie SQLite), `sql_mode` mit `ANSI_QUOTES` (Bezeichner in `"…"` wie bei SQLite), `read committed`, `rowCount()` zählt gefundene Zeilen. Transaktionen laufen parallel; was SQLite durch `begin immediate` nacheinander erledigt, sichern Sperren: `Apply` sperrt die Zeile des Workspace (Reihenfolge der Sync-Nummern), `reindexMarked` die markierten Seiten, die Registrierung eine benannte Sperre (`Transaction::run(…, exclusive:)`). Ein Deadlock wiederholt die Transaktion einmal.
+- **SQL für beide Datenbanken:** Upserts über `Sql::onConflict` bzw. `Sql::insertIfMissing`, `Sql::greatest` statt zweistelligem `max`, Spalte `key` in Anführungszeichen (reserviert in MySQL), `release savepoint`, kein `returning`, kein `limit` in `in (…)`. `Database::isMysql` für den Rest. PHPUnit mit `TEST_DATABASE_URL` prüft das.
 - **Sessions:** Cookie `session` (`HttpOnly`, `SameSite=Strict`, `Path=/api`, `Expires`, `Secure` nach `COOKIE_SECURE`), Token aus 32 Zufallsbytes (base64url), in der Datenbank nur der SHA-256-Hash; Laufzeit `SESSION_TTL_DAYS`. IDs sind UUID v4, Zeitstempel ISO 8601 mit Millisekunden.
 - **Client-Adresse** (Rate-Limits pro IP): Kommt die Verbindung (`REMOTE_ADDR`) von einer privaten oder Loopback-Adresse, gilt der letzte Eintrag von `X-Forwarded-For` (genau ein Proxy), sonst `REMOTE_ADDR`.
 - **Arbeit nach der Antwort** (`Http/AfterResponse`: Push-Hinweise, Metriken): unter PHP-FPM nach `fastcgi_finish_request()`, sonst mit `Content-Length` und geleerter Ausgabe, damit der Client nicht wartet.
@@ -98,6 +100,8 @@ Ungültige Werte führen zu einer Fehlermeldung, die nur Variablennamen nennt (z
 PHP-Anfragen laufen parallel: Der Migrator setzt den Lock-Eintrag wirklich (`is_locked = 1`) und führt jede Migration samt Buchungszeile in einer eigenen Transaktion aus. Bleibt der Lock nach einem Absturz stehen, nennt die Fehlermeldung das SQL zum Freigeben.
 
 **Neue Migration:** Klasse in `src/Database/Migrations` anlegen, in `Migrator::all()` eintragen, im `MigratorTest` die Liste `ALL` ergänzen und die neuen Tabellen und Indizes in `tests/fixtures/node-schema.json` nachtragen (erwartetes `sqlite_master` nach allen Migrationen). Bestehende Migrationen nie ändern (T-MIG-01).
+
+**MariaDB/MySQL** (ADR 0024) bekommen statt 0001–0017 die Basis-Migration `MysqlBase` (DBAL-Schema-API, Stand nach 0017); der Migrator trägt sie als 0001–0017 ein. Ab 0018 gilt eine Migration für beide Datenbanken: Schema-Änderungen mit der DBAL-Schema-API (`Database::platform($db)`), Eigenes je Datenbank über `Database::isMysql`. DDL schreibt MariaDB/MySQL sofort fest, eine abgebrochene Migration bleibt also halb angewendet; Migrationen deshalb so schreiben, dass ein zweiter Lauf den Rest erledigt. `MysqlSchemaTest` vergleicht das Schema mit dem von SQLite.
 
 Die Fixtures in `tests/fixtures/` sind eingefroren und belegen, dass Datenbanken aus der Zeit vor ADR 0018 weiterlaufen: `node-schema.json`, `node-0004.sqlite` und `node-latest.sqlite` stammen vom früheren Node-Server (Datenbank mit Inhalt vor und nach den Migrationen 0005–0015), `inline-plaintext.json` sind die Erwartungswerte für `InlineText::toPlainText` (Migration 0005), `search.json` die erwarteten Suchtreffer.
 
@@ -131,7 +135,7 @@ ADR 0005. Abos mit den Fehlercodes `device_not_registered`, `endpoint_not_allowe
 ## Sync und Suche
 
 - `src/Sync`: `Apply::batch` wendet einen Push in einer Transaktion mit einem Savepoint je Operation an (#95): Revisionen, Tombstones, Block-Merge und Konfliktobjekte nach ADR 0003, Einträge in `changes`, Markierung für den Suchindex. Payloads bleiben `stdClass`, damit `{}` als `{}` gespeichert wird. `Mapping` macht aus Zeilen API-Objekte, `Snapshot` liefert den Zustand für einen Re-Sync (seitenweise, #97). Nach dem Batch plant `PushRoutes::afterChanges` die Hinweise an die anderen Geräte.
-- `src/Search/SearchIndex.php` (#123): `reindexDocument` (Zeile über die Rowid aus `search_documents`), `markForReindex`/`reindexMarked` (`search_dirty`, #99), `toFtsQuery` und `searchWorkspace` (nur Workspaces des Owners).
+- `src/Search/SearchIndex.php` (#123): `reindexDocument` (Zeile über die Rowid aus `search_documents`), `markForReindex`/`reindexMarked` (`search_dirty`, #99), `toFtsQuery` und `searchWorkspace` (nur Workspaces des Owners). Auf MariaDB/MySQL `FULLTEXT` im Boolean-Modus (`toMysqlTerms`, Wörter ab drei Zeichen), `title`/`body` mit `utf8mb4_unicode_ci` (Groß- und Kleinschreibung und Akzente egal), Ausschnitt in PHP (`snippet`).
 
 ## Cron und Kommandozeile
 
@@ -148,8 +152,9 @@ Ein Lauf löscht abgelaufene Sitzungen und Rate-Limit-Zähler, baut veraltete Su
 | Befehl | Zweck |
 | --- | --- |
 | `migrate` | ausstehende Migrationen anwenden (sonst macht das die erste Anfrage) |
-| `backup [Zielordner]` | Datenbank (`VACUUM INTO`, konsistent im laufenden Betrieb) und Anhänge des Volumes nach `backup-<Zeit>/` mit `manifest.json`; Standardziel `<Datenverzeichnis>/backups` |
-| `restore <Backup-Ordner> [--force]` | Backup prüfen und zurückspielen, danach migrieren und die Sequenznummern anheben (alle Geräte synchronisieren neu). Vorher die App vom Netz nehmen; `--force` ersetzt eine vorhandene Datenbank |
+| `backup [Zielordner]` | Datenbank (`VACUUM INTO`, konsistent im laufenden Betrieb; MariaDB/MySQL als Kopie in eine neue `app.sqlite`) und Anhänge des Volumes nach `backup-<Zeit>/` mit `manifest.json`; Standardziel `<Datenverzeichnis>/backups` |
+| `restore <Backup-Ordner> [--force]` | Backup prüfen und in die konfigurierte Datenbank zurückspielen, danach migrieren und die Sequenznummern anheben (alle Geräte synchronisieren neu). Vorher die App vom Netz nehmen; `--force` ersetzt eine vorhandene Datenbank |
+| `db:copy <Quelle>` | alle Daten aus einer SQLite-Datei oder einer `mysql://`-URL in die konfigurierte, leere Datenbank kopieren (Umzug SQLite ↔ MariaDB/MySQL, ADR 0024); Suchindex wird neu aufgebaut |
 | `migrate-attachments-to-s3` | Anhänge aus dem Volume nach S3 kopieren und prüfen (#63), wiederholbar |
 | `reset-password <E-Mail>` | neues Passwort setzen und alle Sitzungen beenden. Das Passwort kommt von stdin (`echo '…' \| bin/console reset-password a@b.de`); im Terminal ohne Eingabe wird eines erzeugt und ausgegeben |
 | `metrics` | Prometheus-Metriken ausgeben (mit `METRICS_ENABLED`) |
@@ -164,9 +169,19 @@ Mit `METRICS_ENABLED=true` gibt es `GET /api/metrics` im Prometheus-Textformat (
 
 | Befehl | Zweck |
 | --- | --- |
-| `composer test` | PHPUnit (`tests/`) |
+| `composer test` | PHPUnit (`tests/`) gegen SQLite; mit `TEST_DATABASE_URL=mysql://…` gegen MariaDB/MySQL (die Datenbank wird geleert, z. B. eine frische von `php ../../scripts/mysql/fresh-database.php mysql://root:root@127.0.0.1:3306`) |
 | `composer analyse` | PHPStan, **Level max** (`phpstan.neon.dist`) |
 | `composer cs` / `composer cs:fix` | PHP-CS-Fixer (PER-CS 2.0, `declare(strict_types=1)`) prüfen / korrigieren |
 | `pnpm --filter @notion-alt/contract-tests test` (im Wurzelverzeichnis) | Contract-Tests gegen diesen Server |
 
-Die CI (`.github/workflows/ci.yml`) führt PHPUnit, PHPStan und PHP-CS-Fixer auf PHP 8.2 und 8.3 aus (Job `php`) und die Contract-Tests im Job `checks`.
+Die CI (`.github/workflows/ci.yml`) führt PHPUnit, PHPStan und PHP-CS-Fixer auf PHP 8.2 und 8.3 aus (Job `php`), die Contract-Tests im Job `checks` und PHPUnit, Contract-Tests und Backup-Test gegen MariaDB 10.11 und MySQL 8.4 im Job `mysql`.
+
+Lokal gegen MariaDB/MySQL, z. B. mit Containern:
+
+```sh
+docker run -d --name na-mariadb -e MARIADB_ROOT_PASSWORD=root -p 127.0.0.1:33061:3306 mariadb:10.11
+TEST_DATABASE_URL="$(php ../../scripts/mysql/fresh-database.php mysql://root:root@127.0.0.1:33061)" composer test
+SERVER_DATABASE_CMD='php scripts/mysql/fresh-database.php mysql://root:root@127.0.0.1:33061' \
+  pnpm --filter @notion-alt/contract-tests test   # im Wurzelverzeichnis
+php ../../scripts/mysql/fresh-database.php mysql://root:root@127.0.0.1:33061 --drop-all   # aufräumen
+```

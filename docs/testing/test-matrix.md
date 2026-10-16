@@ -44,6 +44,7 @@ Die serverseitigen Fälle prüfen zusätzlich die [Contract-Tests](contract-test
 | T-MD-06 | Drei Geräte, zufällige Offline-Änderungen, verlorene Antworten | Alle konvergieren zum Serverstand, keine Änderung geht still verloren | AC-02, AC-03 | ☑ ¹¹ |
 | T-MD-07 | Re-Sync seitenweise: Abbruch mitten im Re-Sync, Neustart; Entitäten entstehen oder werden gelöscht zwischen zwei Seiten | Kein Cursor nach Abbruch, Re-Sync wird vollständig wiederholt; Endstand gleich dem Serverstand, nichts doppelt oder fälschlich neu angelegt | AC-02 | ☑ ⁵ |
 | T-MD-08 | Gerät wird in der Geräteliste entfernt, arbeitet lokal weiter und meldet sich neu an ([#46](https://github.com/mszkb/notion-alternative/issues/46)) | Synchronisiert als neues Gerät weiter, die Warteschlange wird gesendet, nichts geht verloren; die alte ID bleibt entfernt; eine Session von vor der Entfernung endet | AC-02 | ☑ ¹⁸ |
+| T-MD-09 | Mehrere Geräte pushen gleichzeitig in denselben Workspace, ein weiteres pullt währenddessen mit Cursor (SQLite, MariaDB, MySQL; [ADR 0024](../adr/0024-mysql-mariadb-option.md)) | Sync-Nummern lückenlos und eindeutig; der Pull sieht jede Änderung, keine wird nach einer mit größerer Nummer sichtbar | AC-02 | ☑ ²⁷ |
 
 ⁴ Pull (`GET /api/sync/pull`): zwei lokale Datenbanken gegen ein Änderungslog in `apps/web/src/sync/pull.test.ts` (inkl. Teilbaum, Tags, Backlinks, Abbruch mitten im Paging), zwei Browser-Kontexte in `apps/web/e2e/multi-device.spec.ts`.
 
@@ -175,3 +176,5 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ²⁵ `apps/web/e2e/without-account.spec.ts`, Offline-Start der installierten App in `e2e/pwa-offline.spec.ts`; Startmodus in `src/session.test.ts`, lokaler Workspace in `src/local/store.test.ts`.
 
 ²⁶ `apps/web/e2e/takeover.spec.ts` (Registrierung mit zweitem Gerät, bestehendes Konto, neuer Workspace, ohne lokale Seiten); Wiederaufnahme, ID-Kollision, Tags, Anhänge, Leserechte, Bestätigung und Kontingent in `src/local/takeover.test.ts`.
+
+²⁷ `apps/server/tests/Unit/SyncOrderTest.php`: vier Prozesse pushen je 100 Operationen, ein fünfter pullt; mit `TEST_DATABASE_URL` gegen MariaDB/MySQL (CI-Job `mysql`). Ohne die Sperre auf die Workspace-Zeile vergeben zwei Schreiber dieselbe Nummer (zweiter Test, gegengeprüft).

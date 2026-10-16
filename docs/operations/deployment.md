@@ -92,7 +92,7 @@ Die Images bauen auch für `linux/arm64`; die CI prüft das bei jedem Push. Auf 
 | `PUSH_SUBJECT` | `mailto:admin@localhost` | Kontakt für Web Push (VAPID); eine echte Adresse eintragen, manche Push-Dienste lehnen Platzhalter ab |
 | `PUSH_ALLOWED_HOSTS` | Google, Mozilla, Apple, Microsoft | Push-Dienste, an die der Server senden darf (kommagetrennt, `*.` für Subdomains) |
 
-Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`, `ATTACHMENTS_DIR`): siehe `apps/server/src/Config/ConfigLoader.php`. Statt Umgebungsvariablen geht auch eine `config.php` ([`apps/server/README.md`](../../apps/server/README.md#konfiguration)).
+Weitere Backend-Variablen (`SESSION_TTL_DAYS`, `DATA_DIR`, `DATABASE_PATH`, `ATTACHMENTS_DIR`): siehe `apps/server/src/Config/ConfigLoader.php`. Datenbank: siehe [MariaDB oder MySQL statt SQLite](#mariadb-oder-mysql-statt-sqlite). Statt Umgebungsvariablen geht auch eine `config.php` ([`apps/server/README.md`](../../apps/server/README.md#konfiguration)).
 
 ### Login-Rate-Limiting
 
@@ -193,6 +193,30 @@ docker compose exec -T backend php bin/console metrics
 ```
 
 Einen Prometheus-Server betreibt das Projekt bewusst nicht (genau zwei Container, ADR 0006). Für einen vorhandenen Prometheus die Ausgabe z. B. per Cron auf dem Host in das Verzeichnis des Textfile-Collectors von `node_exporter` schreiben.
+
+## MariaDB oder MySQL statt SQLite
+
+Standard ist eine SQLite-Datei im Volume, ohne Einrichtung. Optional nutzt das Backend eine vorhandene MariaDB- oder MySQL-Datenbank ([ADR 0024](../adr/0024-mysql-mariadb-option.md)): unterstützt sind **MariaDB ab 10.11** und **MySQL ab 8.4**.
+
+| Variable | Bedeutung |
+| --- | --- |
+| `DATABASE_URL` | `mysql://benutzer:passwort@host:3306/datenbank` (auch `mariadb://`); Sonderzeichen im Passwort URL-kodieren (`%40` für `@`) |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | dasselbe als Einzelwerte, praktisch in `config.php`; nicht zusammen mit `DATABASE_URL` |
+
+- Die Datenbank muss leer sein und existieren; die Tabellen (InnoDB, `utf8mb4`) legt das Backend beim ersten Start selbst an. Der Benutzer braucht Rechte zum Anlegen von Tabellen und Indexen.
+- `DATA_DIR` bleibt nötig: Anhänge, Backups und Sperrdateien liegen dort.
+- Docker Compose bleibt bei zwei Containern ([ADR 0010](../adr/0010-reference-deployment-and-https.md)). Eine eigene MariaDB läuft außerhalb dieses Stacks, z. B. als eigenes Compose-Projekt im selben Docker-Netz:
+
+  ```sh
+  docker network create notion-db
+  docker run -d --name notion-mariadb --network notion-db --restart unless-stopped \
+    -e MARIADB_ROOT_PASSWORD=… -e MARIADB_DATABASE=notion -e MARIADB_USER=notion -e MARIADB_PASSWORD=… \
+    -v notion-mariadb:/var/lib/mysql mariadb:10.11
+  ```
+
+  Dann den Backend-Container mit diesem Netz verbinden (`networks:` in einer `docker-compose.override.yml`) und `DATABASE_URL=mysql://notion:…@notion-mariadb:3306/notion` setzen.
+- Unterschied zu SQLite: Die serverseitige Suche findet keine Wörter unter drei Buchstaben und gewichtet Treffer anders (InnoDB `FULLTEXT`). Die lokale Suche der App ist davon nicht betroffen.
+- Umzug zwischen SQLite und MariaDB/MySQL: [`backup.md`](backup.md#umzug-zwischen-sqlite-und-mariadbmysql).
 
 ## Migrationen
 
