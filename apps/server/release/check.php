@@ -33,6 +33,7 @@ function notionAltBytes(string $value): int
 
 $modernPhp = version_compare(PHP_VERSION, '8.2.0', '>=');
 notionAltCheck($checks, 'PHP 8.2 oder neuer', $modernPhp, 'In der Verwaltung des Hosters die PHP-Version umstellen.');
+// pdo_sqlite also with MariaDB/MySQL: backups are SQLite files (ADR 0024).
 foreach (['pdo_sqlite', 'mbstring', 'json', 'openssl', 'sodium', 'curl'] as $extension) {
     notionAltCheck($checks, "PHP-Erweiterung {$extension}", extension_loaded($extension), 'Beim Hoster aktivieren lassen.');
 }
@@ -43,22 +44,55 @@ $config = null;
 if ($modernPhp && is_file($autoload)) {
     require $autoload;
     try {
-        NotionAlt\Database\Database::assertFts5();
-        notionAltCheck($checks, 'SQLite mit Volltextsuche (FTS5)', true);
-    } catch (Throwable $error) {
-        notionAltCheck($checks, 'SQLite mit Volltextsuche (FTS5)', false, 'Diese PHP-Installation hat SQLite ohne FTS5; den Hoster fragen.');
-    }
-    try {
         $config = NotionAlt\Config\ConfigLoader::fromEnvironment(__DIR__ . '/app');
         notionAltCheck($checks, 'Konfiguration gültig (app/config.php)', true);
     } catch (Throwable $error) {
         notionAltCheck($checks, 'Konfiguration gültig (app/config.php)', false, 'Die Werte in app/config.php prüfen (siehe config.example.php).');
     }
 }
-if ($config !== null && is_file($config->databasePath)) {
+// The database: SQLite (default) or MariaDB/MySQL (DB_HOST or DATABASE_URL, ADR 0024).
+$existing = null;
+if ($config !== null && $config->mysql !== null) {
     try {
-        $existing = NotionAlt\Database\Database::open($config->databasePath);
-        $tables = $existing->query("select 1 from sqlite_master where type = 'table' and name = 'users'");
+        if (!extension_loaded('pdo_mysql')) {
+            throw new RuntimeException('pdo_mysql missing');
+        }
+        $existing = NotionAlt\Database\Database::openMysql($config->mysql);
+    } catch (Throwable $error) {
+        // Without the database it is unknown whether the app is in use (unlike a missing SQLite
+        // file): only this hint, none of the other checks, for anonymous visitors.
+        http_response_code(503);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo "Keine Verbindung zur Datenbank. PHP-Erweiterung pdo_mysql sowie DB_HOST, DB_NAME, DB_USER und DB_PASSWORD in app/config.php prüfen.\n";
+
+        exit;
+    }
+    notionAltCheck($checks, 'PHP-Erweiterung pdo_mysql', true);
+    notionAltCheck($checks, 'Verbindung zur Datenbank', true);
+    $version = $existing->query('select version()');
+    $server = NotionAlt\Database\Database::mysqlServer($version !== false ? (string) $version->fetchColumn() : '');
+    notionAltCheck(
+        $checks,
+        "Datenbank: {$server['name']} {$server['version']}",
+        $server['supported'],
+        'Unterstützt sind MariaDB ab 10.11 und MySQL ab 8.4; den Hoster nach einer neueren Version fragen.',
+    );
+} elseif ($config !== null) {
+    try {
+        NotionAlt\Database\Database::assertFts5();
+        notionAltCheck($checks, 'SQLite mit Volltextsuche (FTS5)', true);
+    } catch (Throwable $error) {
+        notionAltCheck($checks, 'SQLite mit Volltextsuche (FTS5)', false, 'Diese PHP-Installation hat SQLite ohne FTS5; den Hoster fragen.');
+    }
+}
+if ($config !== null && ($existing !== null || is_file($config->databasePath))) {
+    try {
+        $mysql = $existing !== null;
+        $existing = $existing ?? NotionAlt\Database\Database::open($config->databasePath);
+        $tables = $existing->query($mysql
+            ? "select 1 from information_schema.tables where table_schema = database() and table_name = 'users'"
+            : "select 1 from sqlite_master where type = 'table' and name = 'users'");
         $users = $tables !== false && $tables->fetchColumn() !== false ? $existing->query('select count(*) from users') : null;
         $setUp = $users !== null && ($users === false || (int) $users->fetchColumn() > 0);
     } catch (Throwable $error) {

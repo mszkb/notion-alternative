@@ -7,6 +7,12 @@ declare(strict_types=1);
 return [
     // Outside the web root, e.g. next to public_html. Holds the database and attachments.
     'DATA_DIR' => '/home/USER/notion-data',
+    // Optional: the host's MariaDB/MySQL database instead of the SQLite file in DATA_DIR
+    // (MariaDB 10.11 or MySQL 8.4 and newer). Attachments stay in DATA_DIR.
+    // 'DB_HOST' => 'localhost',
+    // 'DB_NAME' => 'notion',
+    // 'DB_USER' => 'notion',
+    // 'DB_PASSWORD' => '',
     // HTTPS only (every web host offers it): the session cookie is sent over HTTPS only.
     'COOKIE_SECURE' => true,
     // Open registration for the first account, then set back to false.
