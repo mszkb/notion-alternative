@@ -17,6 +17,17 @@ services:
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      # Empty means unset: the backend's defaults apply (apps/server/src/Config/ConfigLoader.php).
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-}
+      ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-}
+      ATTACHMENT_RETENTION_DAYS: ${ATTACHMENT_RETENTION_DAYS:-}
+      WORKSPACE_STORAGE_MB: ${WORKSPACE_STORAGE_MB:-}
+      IMPORT_MAX_MB: ${IMPORT_MAX_MB:-}
+      PUSH_ALLOWED_HOSTS: ${PUSH_ALLOWED_HOSTS:-}
+      AUTH_RATE_LIMIT_WINDOW_MINUTES: ${AUTH_RATE_LIMIT_WINDOW_MINUTES:-}
+      LOGIN_MAX_FAILURES_PER_EMAIL: ${LOGIN_MAX_FAILURES_PER_EMAIL:-}
+      LOGIN_MAX_FAILURES_PER_IP: ${LOGIN_MAX_FAILURES_PER_IP:-}
+      REGISTER_MAX_ATTEMPTS_PER_IP: ${REGISTER_MAX_ATTEMPTS_PER_IP:-}
     volumes:
       - data:/data
     # Hardening (#74): no root inside, no extra capabilities, nothing writable but /data and /tmp.
