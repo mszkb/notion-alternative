@@ -7,7 +7,7 @@ import {
 } from '@notion-alt/shared'
 import { randomUUID } from 'node:crypto'
 import { expect } from 'vitest'
-import { type Client, expectStatus, query } from './client'
+import { type Client, expectStatus, query, type Response } from './client'
 
 export async function snapshot(client: Client, workspaceId: string): Promise<SyncSnapshotResponse> {
   return expectStatus(await client.get(`/api/sync/snapshot?${query({ workspaceId })}`), 200).json()
@@ -40,12 +40,29 @@ export async function exportWorkspace(
 }
 
 /**
+ * `POST /api/import`. One import runs at a time per server (429 `import_running`), and the test
+ * files run in parallel, so a busy server is asked again.
+ */
+export async function postImport(client: Client, body: unknown): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    const response = await client.post('/api/import', body)
+    if (
+      response.status !== 429 ||
+      response.json().error?.code !== 'import_running' ||
+      attempt === 50
+    )
+      return response
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+/**
  * Imports a copy with new ids (the server keeps ids, so the original cannot be imported twice
  * into the same server); returns the new workspace id and the id mapping.
  */
 export async function importCopy(client: Client, data: JsonExport, name = 'Importiert') {
   const copy = remapExportIds(data, randomUUID)
-  const response = expectStatus(await client.post('/api/import', { name, data: copy.data }), 201)
+  const response = expectStatus(await postImport(client, { name, data: copy.data }), 201)
   return { workspaceId: response.json().workspace.id as string, ...copy }
 }
 

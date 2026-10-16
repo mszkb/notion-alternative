@@ -3,12 +3,13 @@ import { type JsonExport, remapExportIds } from '@notion-alt/shared'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type Account, Client, expectStatus, op, push, query, signUp } from '../src/client'
 import { LIMITS } from '../src/config'
-import { exportWorkspace, expectSameContent, snapshot } from '../src/workspace-data'
+import { exportWorkspace, expectSameContent, postImport, snapshot } from '../src/workspace-data'
 
 /**
  * `POST /api/import` (ADR 0004). Ids are unique per server, so the "fresh installation" is a
  * copy with new ids in another account; refusing existing ids is tested with the original.
- * The one-import-at-a-time lock (429 import_running) is not reproducible over HTTP reliably.
+ * The one-import-at-a-time lock (429 import_running) is not reproducible over HTTP reliably;
+ * `postImport` asks again while another test file imports.
  */
 
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')
@@ -64,7 +65,7 @@ beforeEach(async () => {
 })
 
 const importInto = (account: Account, data: unknown, name = 'Importiert') =>
-  account.client.post('/api/import', { name, data })
+  postImport(account.client, { name, data })
 
 const workspaceCount = async (account: Account) =>
   (await account.client.get('/api/workspaces')).json().workspaces.length
@@ -185,7 +186,7 @@ describe('POST /api/import', () => {
     const wrongVersion = await importInto(target, { ...data, schema_version: 2 })
     expect(wrongVersion.status).toBe(400)
     expect(wrongVersion.json().error.code).toBe('invalid_input')
-    expect((await target.client.post('/api/import', { data })).status).toBe(400)
+    expect((await postImport(target.client, { data })).status).toBe(400)
 
     const huge = {
       ...data,

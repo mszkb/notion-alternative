@@ -15,7 +15,7 @@ import {
 import { describe, expect, it } from 'vitest'
 import { type Account, expectStatus, push, query, signUp } from '../src/client'
 import { EXPORT_FIXTURES } from '../src/config'
-import { changeLog, expectSameContent, snapshot } from '../src/workspace-data'
+import { changeLog, expectSameContent, postImport, snapshot } from '../src/workspace-data'
 
 /**
  * T-EXP-02 (#72): a workspace with everything the data model has is exported as ZIP, imported
@@ -173,7 +173,7 @@ async function importArchive(a: Account, archive: Uint8Array) {
   const { data: original, attachments } = await verifyExportArchive(archive)
   const { data, idMap } = remapExportIds(original, randomUUID)
   const response = expectStatus(
-    await a.client.post('/api/import', { name: data.workspace.name, data }),
+    await postImport(a.client, { name: data.workspace.name, data }),
     201,
   )
   const contents = new Map<string, Uint8Array>()

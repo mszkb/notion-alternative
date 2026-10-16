@@ -66,3 +66,59 @@ jobs:
       - run: composer cs
       - run: composer analyse
       - run: composer test
+
+  # MariaDB and MySQL as an option next to SQLite (ADR 0024): PHPUnit, the contract tests and the
+  # backup test against each, in service containers.
+  mysql:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - db: mariadb
+            image: mariadb:10.11
+          - db: mysql
+            image: mysql:8.4
+    services:
+      db:
+        image: ${{ matrix.image }}
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MYSQL_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "${{ matrix.db == 'mariadb' && 'healthcheck.sh --connect --innodb_initialized' || 'mysqladmin ping -h 127.0.0.1 -proot' }}"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      MYSQL_ADMIN_URL: mysql://root:root@127.0.0.1:3306
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, pdo_mysql, mbstring, curl, openssl, sodium, intl
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --no-progress --prefer-dist
+        working-directory: apps/server
+      - run: pnpm install --frozen-lockfile
+      - name: PHPUnit
+        working-directory: apps/server
+        run: TEST_DATABASE_URL="$(php ../../scripts/mysql/fresh-database.php "$MYSQL_ADMIN_URL")" composer test
+      - name: Contract tests (a fresh database per started server)
+        run: pnpm --filter @notion-alt/contract-tests test
+        env:
+          SERVER_DATABASE_CMD: php scripts/mysql/fresh-database.php mysql://root:root@127.0.0.1:3306
+      - name: Backup and restore, also moving from and to SQLite
+        run: |
+          fresh() { php scripts/mysql/fresh-database.php "$MYSQL_ADMIN_URL"; }
+          MODE=local DATABASE_URL="$(fresh)" scripts/backup-restore-test.sh
+          MODE=local RESTORE_DATABASE_URL="$(fresh)" scripts/backup-restore-test.sh
+          MODE=local DATABASE_URL="$(fresh)" RESTORE_DATABASE_URL=sqlite scripts/backup-restore-test.sh

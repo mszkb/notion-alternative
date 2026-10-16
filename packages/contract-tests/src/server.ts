@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from 'node:child_process'
+import { type ChildProcess, execSync, spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -61,6 +61,17 @@ function stopProcess(child: ChildProcess): Promise<void> {
 }
 
 /**
+ * A fresh MariaDB/MySQL database per server (ADR 0024): SERVER_DATABASE_CMD prints its
+ * DATABASE_URL, e.g. `php scripts/mysql/fresh-database.php mysql://root:root@127.0.0.1:3306`.
+ * Without it the server uses a fresh SQLite file in its data directory.
+ */
+function databaseEnv(): Record<string, string> {
+  const command = process.env.SERVER_DATABASE_CMD
+  if (!command) return {}
+  return { DATABASE_URL: execSync(command, { cwd: REPO_ROOT, encoding: 'utf8' }).trim() }
+}
+
+/**
  * Starts the server under test with a fresh data directory on a free port and waits for
  * `/api/ready`. The command comes from SERVER_CMD (default: the PHP server); it runs in the
  * repository root through the shell, gets the port as `PORT` and `{port}` is replaced by it.
@@ -86,6 +97,7 @@ export async function startServer(extraEnv: Record<string, string> = {}): Promis
       ...SERVER_SETTINGS,
       // The server must trust the fake push service (default command: `php -d curl.cainfo=…`).
       PUSH_RECEIVER_CA: PUSH_RECEIVER_CERT,
+      ...databaseEnv(),
       ...extraEnv,
     },
   })
