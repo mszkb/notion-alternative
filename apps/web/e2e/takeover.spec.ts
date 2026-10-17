@@ -20,7 +20,7 @@ async function signOut(page: Page) {
   await page.goto('/?choose=1')
   await page.getByRole('button', { name: 'Abmelden', exact: true }).click()
   await page
-    .getByRole('region', { name: 'Abmelden' })
+    .getByRole('dialog', { name: 'Abmelden' })
     .getByRole('button', { name: 'Abmelden', exact: true })
     .click()
   await expect(page).toHaveURL(/\/login$/)
@@ -41,6 +41,13 @@ test('registering takes the local pages along without asking; a second device se
   await submitForm(page, email, 'register')
 
   await expect(page.getByRole('heading', { name: '1 Seite übernommen' })).toBeVisible()
+  // #204: online, the text follows the sync instead of waiting for a connection.
+  const status = page.getByTestId('takeover-status')
+  await expect(status).not.toContainText('sobald eine Verbindung besteht')
+  await expect(status).toHaveText(
+    'Sie ist jetzt in deinem Konto und auf allen deinen Geräten verfügbar.',
+    { timeout: 15_000 },
+  )
   await page.getByTestId('takeover-open').click()
   await expect(page.getByTestId('connection')).toContainText('Server verbunden')
   await expect(page.getByRole('tree')).toContainText('Lokale Notiz')
