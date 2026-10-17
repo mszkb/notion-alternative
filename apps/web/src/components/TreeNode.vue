@@ -96,9 +96,16 @@ async function removePage() {
     ? `„${displayTitle(props.document)}“ und alle Unterseiten löschen?`
     : `„${displayTitle(props.document)}“ löschen?`
   if (!window.confirm(message)) return
-  const wasOpen = activeDocumentId.value === props.document.id
-  await store.deleteDocument(props.document.id)
-  if (wasOpen) await router.push({ name: 'workspace', params: { workspaceId: workspaceId.value } })
+  const parentId = props.document.parentId
+  const deleted = await store.deleteDocument(props.document.id)
+  // The open page went along (itself or below it): to the parent, as the page's own delete does.
+  if (activeDocumentId.value && deleted.includes(activeDocumentId.value)) {
+    await router.push(
+      parentId
+        ? { name: 'page', params: { workspaceId: workspaceId.value, documentId: parentId } }
+        : { name: 'workspace', params: { workspaceId: workspaceId.value } },
+    )
+  }
 }
 
 const DRAG_TYPE = 'application/x-notion-alt-page'

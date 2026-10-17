@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
 import { deviceStatus } from '../device'
@@ -45,8 +45,7 @@ const online = computed(() => connection.value === 'online')
 const synced = ref(false)
 const doneText = computed(() => {
   const [subject, verb] = pages.value === 1 ? ['Sie ist', 'wird'] : ['Sie sind', 'werden']
-  if (synced.value)
-    return `${subject} jetzt in deinem Konto und auf allen deinen Geräten verfügbar.`
+  if (synced.value) return `${subject} jetzt in deinem Konto und auf dem Server gesichert.`
   if (online.value) return `${subject} jetzt in deinem Konto und ${verb} gerade synchronisiert.`
   return `${subject} jetzt in deinem Konto und ${verb} synchronisiert, sobald eine Verbindung besteht.`
 })
@@ -149,6 +148,14 @@ async function run(next: TakeoverState) {
 async function finish() {
   try {
     await requestSync(account)
+  } catch {
+    // Checked again after the next sync.
+  }
+  await confirm()
+}
+
+async function confirm() {
+  try {
     const completed = local && (await readTakeover(local))
     if (local && completed && (await takeoverConfirmed(local, account, completed))) {
       synced.value = true
@@ -159,6 +166,14 @@ async function finish() {
     // Left the view meanwhile: the next start checks again.
   }
 }
+
+// One sync may not be enough (attachments, an error, several rounds): every later sync checks.
+watch(
+  () => syncState.value.lastSyncAt,
+  () => {
+    if (phase.value === 'done' && !synced.value) void confirm()
+  },
+)
 
 /** Way out when the takeover keeps failing; it continues at the next sign-in. */
 async function signOut() {

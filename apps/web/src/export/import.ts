@@ -7,6 +7,7 @@ import {
   type NotionImportReport,
   readNotionArchive,
   remapExportIds,
+  newId,
   verifyExportArchive,
   type Workspace,
 } from '@notion-alt/shared'
@@ -99,43 +100,66 @@ export async function importIntoWorkspace(
   source: ImportSource,
   options: { workspaceId: string; title: string },
 ): Promise<string> {
-  const { data, idMap } = remapExportIds(source.data, () => crypto.randomUUID())
+  // newId: crypto.randomUUID is missing outside secure contexts (plain http on the LAN).
+  const { data, idMap } = remapExportIds(source.data, newId)
   const contents = new Map(
     [...source.attachments].map(([id, content]) => [idMap.get(id.toLowerCase()) ?? id, content]),
   )
-  const holder = await store.createDocument({
-    workspaceId: options.workspaceId,
-    title: options.title,
-  })
+  // Grouped once: filtering per page is quadratic and froze the tab on large exports.
+  const group = <T extends { documentId: string; deletedAt?: string | null }>(items: T[]) => {
+    const byDocument = new Map<string, T[]>()
+    for (const item of items) {
+      if (item.deletedAt) continue
+      const list = byDocument.get(item.documentId)
+      if (list) list.push(item)
+      else byDocument.set(item.documentId, [item])
+    }
+    return byDocument
+  }
+  const blocksByDocument = group(data.blocks)
+  const tagsByDocument = group(data.document_tags)
+  const attachmentsByDocument = group(data.attachments)
+  const tagsById = new Map(data.tags.map((tag) => [tag.id, tag]))
+
   const active = data.documents.filter((document) => !document.deletedAt)
   const byId = new Map(active.map((document) => [document.id, document]))
   const depth = (id: string | null): number => {
+    // Bounded: a parent cycle in a damaged file must not hang the tab.
     let level = 0
-    for (let parent = id; parent && byId.has(parent); parent = byId.get(parent)!.parentId) level++
+    for (let parent = id; parent && byId.has(parent) && level <= byId.size; level++) {
+      parent = byId.get(parent)!.parentId
+    }
     return level
   }
   // Parents first: a page keeps its parent only if that one is already there.
   active.sort((a, b) => depth(a.parentId) - depth(b.parentId))
-  for (const document of active) {
-    const documentTags = data.document_tags.filter(
-      (assignment) => assignment.documentId === document.id && !assignment.deletedAt,
-    )
-    await store.takeOverPage(
-      {
-        document,
-        blocks: data.blocks.filter((b) => b.documentId === document.id && !b.deletedAt),
-        tags: data.tags.filter((tag) => documentTags.some((a) => a.tagId === tag.id)),
-        documentTags,
-        attachments: data.attachments
-          .filter((a) => a.documentId === document.id && !a.deletedAt)
-          .map((attachment) => ({
+
+  const holder = await store.createDocument({
+    workspaceId: options.workspaceId,
+    title: options.title,
+  })
+  try {
+    for (const document of active) {
+      const documentTags = tagsByDocument.get(document.id) ?? []
+      await store.takeOverPage(
+        {
+          document,
+          blocks: blocksByDocument.get(document.id) ?? [],
+          tags: documentTags.flatMap((assignment) => tagsById.get(assignment.tagId) ?? []),
+          documentTags,
+          attachments: (attachmentsByDocument.get(document.id) ?? []).map((attachment) => ({
             attachment,
             data: contents.get(attachment.id)?.slice().buffer ?? null,
           })),
-      },
-      options.workspaceId,
-      holder.id,
-    )
+        },
+        options.workspaceId,
+        holder.id,
+      )
+    }
+  } catch (error) {
+    // No half import left in the tree: the partial copy goes to the trash, the error stays.
+    await store.deleteDocument(holder.id).catch(() => undefined)
+    throw error
   }
   return holder.id
 }

@@ -48,11 +48,15 @@ test('Shift+F10 opens the block menu by keyboard; arrows move, Esc closes', asyn
   await expect(menu.getByRole('menuitem', { name: 'Duplizieren' })).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(menu).toHaveCount(0)
+  // The caret is back in the block, where it was: typing goes on at its end.
+  await expect(blockInput(page, 0)).toBeFocused()
+  await page.keyboard.type('!')
+  await expect(blockInput(page, 0)).toHaveText('Einzeiler!')
 
   await blockInput(page, 0).click({ button: 'right' })
   await menu.getByRole('menuitem', { name: 'Duplizieren' }).click()
   await expect(blocks(page)).toHaveCount(2)
-  await expect(blockInput(page, 1)).toHaveText('Einzeiler')
+  await expect(blockInput(page, 1)).toHaveText('Einzeiler!')
 })
 
 test('right click in the page tree: subpage, favorite and delete', async ({ signedIn: page }) => {
@@ -92,4 +96,35 @@ test('undo of formatting after the block was saved on blur restores the plain te
   await page.keyboard.press('ControlOrMeta+z')
   await expect(blockInput(page, 0).locator('strong, b')).toHaveCount(0)
   await expect(blockInput(page, 0)).toHaveText('Ein Wort')
+})
+
+test('deleting a parent in the tree while a subpage is open leaves the deleted page', async ({
+  signedIn: page,
+}) => {
+  await newPage(page, 'Oben')
+  await waitForSaved(page)
+  const tree = page.getByRole('tree')
+  const menu = page.getByRole('menu', { name: 'Kontextmenü' })
+  await tree.getByRole('link', { name: 'Oben' }).click({ button: 'right' })
+  await menu.getByRole('menuitem', { name: 'Unterseite anlegen' }).click()
+  await expect(page.getByLabel('Titel')).toHaveValue('')
+  await page.getByLabel('Titel').fill('Darunter')
+  await waitForSaved(page)
+
+  page.once('dialog', (dialog) => dialog.accept())
+  await tree.getByRole('link', { name: 'Oben' }).click({ button: 'right' })
+  await menu.getByRole('menuitem', { name: 'Löschen' }).click()
+  await expect(tree).not.toContainText('Oben')
+  // Not left on the deleted subpage.
+  await expect(page.getByLabel('Titel')).toHaveCount(0)
+  await expect(page).not.toHaveURL(/\/p\//)
+
+  // Keyboard: after Esc the tree link has the focus again.
+  await newPage(page, 'Fokus')
+  await waitForSaved(page)
+  await tree.getByRole('link', { name: 'Fokus' }).focus()
+  await page.keyboard.press('Shift+F10')
+  await expect(menu.getByRole('menuitem').first()).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(tree.getByRole('link', { name: 'Fokus' })).toBeFocused()
 })

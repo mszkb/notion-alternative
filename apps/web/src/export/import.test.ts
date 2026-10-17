@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { newId } from '@notion-alt/shared'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocalDb } from '../local/db'
 import { LocalStore } from '../local/store'
 import { importIntoWorkspace, readImportFile } from './import'
@@ -82,4 +82,69 @@ describe('importIntoWorkspace (import without an account, ADR 0023)', () => {
     expect(reisen.map((d) => d.parentId).sort()).toEqual([first, second].sort())
     expect(new Set(reisen.map((d) => d.id)).size).toBe(2)
   })
+
+  it('a failure halfway leaves no partial copy in the tree and keeps the error', async () => {
+    const { file } = await exportFile()
+    const takeOver = target.takeOverPage.bind(target)
+    let calls = 0
+    vi.spyOn(target, 'takeOverPage').mockImplementation(async (...args) => {
+      if (++calls === 2) throw new Error('Speicher voll')
+      return takeOver(...args)
+    })
+
+    await expect(
+      importIntoWorkspace(target, file, { workspaceId: targetWs, title: 'Halb' }),
+    ).rejects.toThrow('Speicher voll')
+
+    const titles = (await target.listDocuments(targetWs)).map((d) => d.title)
+    expect(titles).not.toContain('Halb')
+    expect(titles).not.toContain('Reisen')
+  })
+
+  it('a parent cycle in a damaged file does not hang; the pages still come in', async () => {
+    const { file } = await exportFile()
+    const [a, b] = file.data.documents.filter((d) => !d.deletedAt)
+    a!.parentId = b!.id
+    b!.parentId = a!.id
+
+    const holderId = await importIntoWorkspace(target, file, {
+      workspaceId: targetWs,
+      title: 'Zyklus',
+    })
+
+    const documents = await target.listDocuments(targetWs)
+    expect(documents.map((d) => d.title)).toEqual(expect.arrayContaining(['Reisen', 'Wien']))
+    // At least one page of the cycle hangs under the new page, so all are reachable.
+    expect(documents.some((d) => d.parentId === holderId)).toBe(true)
+  })
+
+  it('imports a few thousand pages without per-page scans of the whole file', async () => {
+    const { file } = await exportFile()
+    const template = file.data.documents.find((d) => d.title === 'Wien')!
+    const block = file.data.blocks.find((b) => b.documentId === template.id)!
+    for (let i = 0; i < 2000; i++) {
+      const id = newId()
+      file.data.documents.push({ ...template, id, title: `Seite ${i}`, parentId: null })
+      for (let j = 0; j < 5; j++) {
+        file.data.blocks.push({ ...block, id: newId(), documentId: id })
+      }
+    }
+    // Counts full scans of the block list (10 000 entries), the cost that grew with each page.
+    const filter = Array.prototype.filter
+    let scans = 0
+    const spy = vi.spyOn(Array.prototype, 'filter').mockImplementation(function (
+      this: unknown[],
+      ...args: Parameters<typeof filter>
+    ) {
+      if (this.length >= 10_000) scans++
+      return filter.apply(this, args)
+    })
+
+    await importIntoWorkspace(target, file, { workspaceId: targetWs, title: 'Groß' }).finally(() =>
+      spy.mockRestore(),
+    )
+
+    expect(scans).toBeLessThan(10)
+    expect((await target.listDocuments(targetWs)).length).toBeGreaterThan(2000)
+  }, 120_000)
 })

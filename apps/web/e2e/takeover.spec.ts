@@ -44,10 +44,9 @@ test('registering takes the local pages along without asking; a second device se
   // #204: online, the text follows the sync instead of waiting for a connection.
   const status = page.getByTestId('takeover-status')
   await expect(status).not.toContainText('sobald eine Verbindung besteht')
-  await expect(status).toHaveText(
-    'Sie ist jetzt in deinem Konto und auf allen deinen Geräten verfügbar.',
-    { timeout: 15_000 },
-  )
+  await expect(status).toHaveText('Sie ist jetzt in deinem Konto und auf dem Server gesichert.', {
+    timeout: 15_000,
+  })
   await page.getByTestId('takeover-open').click()
   await expect(page.getByTestId('connection')).toContainText('Server verbunden')
   await expect(page.getByRole('tree')).toContainText('Lokale Notiz')
