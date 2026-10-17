@@ -25,7 +25,15 @@ final class Sql
     public static function run(\PDO $db, string $sql, array $params = []): \PDOStatement
     {
         $statement = self::prepare($db, $sql);
-        $statement->execute($params);
+        // Integers as integers: with emulated prepares (MariaDB/MySQL) `limit ?` needs `10`, not '10'.
+        foreach ($params as $index => $value) {
+            $statement->bindValue($index + 1, $value, match (true) {
+                \is_int($value) => \PDO::PARAM_INT,
+                $value === null => \PDO::PARAM_NULL,
+                default => \PDO::PARAM_STR,
+            });
+        }
+        $statement->execute();
 
         return $statement;
     }

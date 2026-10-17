@@ -45,8 +45,10 @@ final class Database
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
             \PDO::ATTR_STRINGIFY_FETCHES => false,
-            // Real prepared statements: `limit ?` gets an integer, and integers come back as int.
-            \PDO::ATTR_EMULATE_PREPARES => false,
+            // Emulated prepares: one round trip per statement instead of two (prepare, execute),
+            // which made pushes many times slower over a network. Integers still come back as int
+            // (PHP 8.1+); `Sql::run` binds integer parameters as such for `limit ?`.
+            \PDO::ATTR_EMULATE_PREPARES => true,
             // rowCount() counts matched rows like SQLite, not only changed ones (an update to the
             // same value is still a hit).
             self::mysqlAttribute('FOUND_ROWS') => true,
