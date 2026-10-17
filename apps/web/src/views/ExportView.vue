@@ -6,6 +6,7 @@ import { useWorkspace } from '../composables/workspace'
 import { buildArchiveExport } from '../export/archive'
 import { buildJsonExport } from '../export/json'
 import {
+  importIntoWorkspace,
   importWorkspace,
   readImportFile,
   readNotionImportFile,
@@ -165,6 +166,27 @@ async function chooseImportFile(event: Event) {
   }
 }
 
+/** Without an account: into this local area, under a new page (ADR 0023). */
+async function runLocalImport() {
+  if (!importSource.value) return
+  importing.value = true
+  importError.value = null
+  try {
+    const pageId = await importIntoWorkspace(store, importSource.value, {
+      workspaceId: workspaceId.value,
+      title: importName.value.trim() || importSource.value.data.workspace.name,
+    })
+    await router.push({
+      name: 'page',
+      params: { workspaceId: workspaceId.value, documentId: pageId },
+    })
+  } catch (cause) {
+    importError.value = `Import fehlgeschlagen: ${cause instanceof Error ? cause.message : String(cause)}`
+  } finally {
+    importing.value = false
+  }
+}
+
 async function runImport(newIds: boolean) {
   if (!importSource.value) return
   importing.value = true
@@ -284,7 +306,8 @@ async function runImport(newIds: boolean) {
     <section class="page-section import" aria-labelledby="import">
       <h2 id="import">Import</h2>
       <p v-if="!withAccount" class="hint muted" data-testid="import-account-hint">
-        Ein Import legt einen neuen Workspace auf dem Server an und braucht daher ein Konto.
+        Ohne Konto kommen die Seiten in diesen Bereich auf diesem Gerät, unter eine neue Seite. Mit
+        Konto wird ein eigener Workspace auf dem Server angelegt.
         <RouterLink :to="{ name: 'login' }">Anmelden</RouterLink>
       </p>
       <p v-else-if="!online" class="hint muted">
@@ -363,11 +386,14 @@ async function runImport(newIds: boolean) {
           }}
         </p>
         <label>
-          Name des neuen Workspaces
+          {{ withAccount ? 'Name des neuen Workspaces' : 'Name der neuen Seite' }}
           <input v-model="importName" maxlength="100" />
         </label>
+        <button v-if="!withAccount" type="button" :disabled="importing" @click="runLocalImport">
+          In diesen Bereich importieren
+        </button>
         <button
-          v-if="!idsExist"
+          v-else-if="!idsExist"
           type="button"
           :disabled="importing || !online"
           @click="runImport(false)"

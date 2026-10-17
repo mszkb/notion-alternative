@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { blockInput, expect, newPage, test, waitForSaved } from './fixtures'
 
 /** Starting without an account (ADR 0023, #181): no login, no form, no server needed. */
@@ -68,7 +69,7 @@ test('exports the local pages without an account (Export first)', async ({ page 
   await expect(page.getByTestId('export-history-hint')).toHaveText(
     'Ohne Konto gibt es keinen Verlauf auf einem Server; exportiert wird der aktuelle Stand.',
   )
-  await expect(page.getByTestId('import-account-hint')).toBeVisible()
+  await expect(page.getByTestId('import-account-hint')).toContainText('in diesen Bereich')
   await expect(page.getByRole('button', { name: 'Alles exportieren' })).toBeVisible()
   await page.getByText('Weitere Formate').click()
   const downloadPromise = page.waitForEvent('download')
@@ -76,4 +77,27 @@ test('exports the local pages without an account (Export first)', async ({ page 
   const download = await downloadPromise
   const data = JSON.parse(readFileSync((await download.path())!, 'utf8'))
   expect(data.documents.map((d: { title: string }) => d.title)).toContain('Exportiert ohne Konto')
+})
+
+test('imports a backup without an account into the local area (ADR 0023)', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('connection')).toContainText('Nur auf diesem Gerät')
+  await page.getByRole('link', { name: 'Export & Import' }).click()
+  await page
+    .getByTestId('import-file')
+    .setInputFiles(
+      path.join(import.meta.dirname, '../../../packages/contract-tests/fixtures/exports/v3.zip'),
+    )
+  await expect(page.getByTestId('import-summary')).toBeVisible()
+  await page.getByLabel('Name der neuen Seite').fill('Aus der Sicherung')
+  await page.getByRole('button', { name: 'In diesen Bereich importieren' }).click()
+
+  await expect(page.getByLabel('Titel')).toHaveValue('Aus der Sicherung')
+  const tree = page.getByRole('tree')
+  const holder = tree.getByRole('treeitem').filter({ hasText: 'Aus der Sicherung' })
+  await holder.getByRole('button', { name: 'Aufklappen' }).first().click()
+  await expect(holder).toContainText('Projekte 2026')
+  await expect(holder).toContainText('Projekte')
+  // Still only on this device: nothing was sent.
+  await expect(page.getByTestId('connection')).toContainText('Nur auf diesem Gerät')
 })

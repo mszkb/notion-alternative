@@ -88,3 +88,54 @@ export async function importWorkspace(
   }
   return workspace
 }
+
+/**
+ * Import without an account (ADR 0023): the active pages go into a workspace on this device, as
+ * copies with new ids under a new page `title`, through the same path as the takeover. Nothing is
+ * sent until an account exists. Returns the id of the new page.
+ */
+export async function importIntoWorkspace(
+  store: LocalStore,
+  source: ImportSource,
+  options: { workspaceId: string; title: string },
+): Promise<string> {
+  const { data, idMap } = remapExportIds(source.data, () => crypto.randomUUID())
+  const contents = new Map(
+    [...source.attachments].map(([id, content]) => [idMap.get(id.toLowerCase()) ?? id, content]),
+  )
+  const holder = await store.createDocument({
+    workspaceId: options.workspaceId,
+    title: options.title,
+  })
+  const active = data.documents.filter((document) => !document.deletedAt)
+  const byId = new Map(active.map((document) => [document.id, document]))
+  const depth = (id: string | null): number => {
+    let level = 0
+    for (let parent = id; parent && byId.has(parent); parent = byId.get(parent)!.parentId) level++
+    return level
+  }
+  // Parents first: a page keeps its parent only if that one is already there.
+  active.sort((a, b) => depth(a.parentId) - depth(b.parentId))
+  for (const document of active) {
+    const documentTags = data.document_tags.filter(
+      (assignment) => assignment.documentId === document.id && !assignment.deletedAt,
+    )
+    await store.takeOverPage(
+      {
+        document,
+        blocks: data.blocks.filter((b) => b.documentId === document.id && !b.deletedAt),
+        tags: data.tags.filter((tag) => documentTags.some((a) => a.tagId === tag.id)),
+        documentTags,
+        attachments: data.attachments
+          .filter((a) => a.documentId === document.id && !a.deletedAt)
+          .map((attachment) => ({
+            attachment,
+            data: contents.get(attachment.id)?.slice().buffer ?? null,
+          })),
+      },
+      options.workspaceId,
+      holder.id,
+    )
+  }
+  return holder.id
+}

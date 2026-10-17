@@ -3,7 +3,8 @@
 Die App lässt sich sofort benutzen, ohne Konto und ohne Anmeldung ([ADR 0023](../adr/0023-local-area-without-account.md)). Beim ersten Öffnen landest du direkt im Bereich **„Auf diesem Gerät“** und kannst Seiten anlegen und schreiben.
 
 - Die Seiten liegen nur im Browser dieses Geräts. Unten in der Seitenleiste steht **„Nur auf diesem Gerät“**.
-- Alles Lokale funktioniert: Seitenbaum, Editor, Tags, Favoriten, Backlinks, Suche, Papierkorb und Export (Markdown, JSON, ZIP).
+- Alles Lokale funktioniert: Seitenbaum, Editor, Tags, Favoriten, Backlinks, Suche, Papierkorb, Export (Markdown, JSON, ZIP) und Import.
+- **Import ohne Konto:** Eine Sicherung (ZIP oder JSON) oder ein Notion-Export kommt unter **Export & Import** in diesen Bereich, unter eine neue Seite mit wählbarem Namen. Die Seiten sind Kopien mit neuen IDs; Papierkorb und Verlauf der Sicherung kommen nicht mit. Beim späteren Anmelden werden sie wie alle anderen Seiten übernommen.
 - Die App lässt sich auch ohne Konto installieren und startet offline.
 - Ohne Konto gibt es kein Synchronisieren, keine weiteren Geräte, kein Teilen und keinen Verlauf auf dem Server. Dafür meldest du dich an.
 
