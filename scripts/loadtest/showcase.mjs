@@ -32,6 +32,16 @@ const PAGES = Number(env('PAGES', 50_000))
 const DEPTH = Math.max(2, Number(env('DEPTH', 4)))
 const BLOCKS = Number(env('BLOCKS', 6))
 const SEED = env('SEED', '1')
+for (const [name, value] of Object.entries({ PAGES, DEPTH, BLOCKS })) {
+  if (!Number.isInteger(value) || value < 0) throw new Error(`${name} must be a whole number`)
+}
+// A known password on a reachable server is an open account: only on purpose.
+if (
+  !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(BASE_URL).hostname) &&
+  !process.env.CONFIRM
+) {
+  throw new Error(`${BASE_URL} is not this machine: set CONFIRM=1 (and your own PASSWORD)`)
+}
 const BATCH = 500 // SYNC_PUSH_MAX_OPERATIONS
 const BATCH_BYTES = 800_000 // below the server's 1 MiB body limit
 
@@ -260,10 +270,14 @@ async function request(method, path, body) {
     headers: { cookie, ...(body ? { 'content-type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   })
-  const setCookie = response.headers.get('set-cookie')
-  if (setCookie?.startsWith('session=')) cookie = setCookie.split(';')[0]
+  const session = response.headers.getSetCookie().find((c) => c.startsWith('session='))
+  if (session) cookie = session.split(';')[0]
   const text = await response.text()
-  return { status: response.status, json: text ? JSON.parse(text) : null }
+  try {
+    return { status: response.status, json: text ? JSON.parse(text) : null }
+  } catch {
+    throw new Error(`${method} ${path}: ${response.status}, no JSON (${text.slice(0, 80)})`)
+  }
 }
 
 async function signIn() {

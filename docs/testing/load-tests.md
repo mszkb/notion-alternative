@@ -44,7 +44,7 @@ LOAD_SHOWCASE=1 BASE_URL=http://localhost:5182 pnpm --filter @notion-alt/web exe
   playwright test e2e/load-showcase.spec.ts --project chromium
 ```
 
-- **Parameter:** `PAGES` (50 000), `DEPTH` (4), `BLOCKS` (6 im Schnitt pro Seite), `SEED`, `EMAIL`, `PASSWORD`, `WORKSPACE` („Showcase“).
+- **Parameter:** `PAGES` (50 000), `DEPTH` (4), `BLOCKS` (6 im Schnitt pro Seite), `SEED`, `EMAIL`, `PASSWORD`, `WORKSPACE` („Showcase“). Ein Server, der nicht auf diesem Rechner läuft, braucht `CONFIRM=1` und ein eigenes `PASSWORD`, sonst entstünde dort ein Konto mit bekanntem Passwort.
 - **Wiederholbar:** IDs und Operations-IDs hängen am `SEED`. Ein abgebrochener Lauf setzt beim nächsten Start fort (der Server bestätigt Vorhandenes als `duplicate`). Für einen zweiten Showcase auf demselben Server einen anderen `SEED` nehmen.
 - **Vorführen:** Anmelden mit `showcase@example.com` / `showcase password 123`, Workspace „Showcase“. Suchbegriffe, die genau einmal vorkommen: Quokka, Zeppelinhafen, Kaktusblüte, Mondfinsternis, Gürteltier, Bernsteinzimmer. Häufige: Übersicht, Prüfung, Gemüsebeet, Wien, Steuererklärung.
 
