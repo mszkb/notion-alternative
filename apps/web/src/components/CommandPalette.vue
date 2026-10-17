@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import type { ServerSearchHit } from '@notion-alt/shared'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { api } from '../api'
 import { recentPages } from '../composables/recent-pages'
 import { pageLabel, useWorkspace } from '../composables/workspace'
 import { workspaceSearch } from '../local/context'
 import type { SearchHit } from '../local/search'
+import { connection } from '../session'
+import { requestSync } from '../sync/engine'
 import { toggleTheme } from '../theme'
 
 /**
  * Quick search and commands (#134), opened with Ctrl/⌘+K or Ctrl/⌘+P. Searches the local index
- * (MiniSearch), so it works offline like the rest of the app.
+ * (MiniSearch), so it works offline like the rest of the app. Online it adds the server's hits
+ * for pages whose content is not on this device yet (ADR 0017, #219), like the sidebar search.
  */
 const emit = defineEmits<{ close: []; newPage: []; shortcuts: [] }>()
 
@@ -25,6 +30,7 @@ interface Item {
 
 const query = ref('')
 const hits = ref<SearchHit[]>([])
+const serverHits = ref<ServerSearchHit[]>([])
 const active = ref(0)
 const input = ref<HTMLInputElement | null>(null)
 
@@ -60,6 +66,12 @@ const actions: Item[] = [
 const openPage = (id: string) =>
   router.push({ name: 'page', params: { workspaceId: workspaceId.value, documentId: id } })
 
+async function openServerHit(id: string) {
+  // Not on this device yet: fetch it first.
+  if (!documentsById.value.has(id)) await requestSync(store)
+  await openPage(id)
+}
+
 const items = computed<Item[]>(() => {
   const q = query.value.trim().toLowerCase()
   if (!q) {
@@ -82,7 +94,18 @@ const items = computed<Item[]>(() => {
     hint: hit.snippet,
     run: () => openPage(hit.id),
   }))
-  return [...pages, ...actions.filter((a) => a.label.toLowerCase().includes(q))]
+  const local = new Set(hits.value.map((hit) => hit.id))
+  const fromServer = serverHits.value
+    .filter((hit) => !local.has(hit.documentId))
+    .map((hit) => ({
+      key: `server:${hit.documentId}`,
+      label: documentsById.value.has(hit.documentId)
+        ? pageLabel(documentsById.value.get(hit.documentId))
+        : hit.title || 'Unbenannt',
+      hint: hit.snippet ? `Vom Server · ${hit.snippet}` : 'Vom Server',
+      run: () => openServerHit(hit.documentId),
+    }))
+  return [...pages, ...fromServer, ...actions.filter((a) => a.label.toLowerCase().includes(q))]
 })
 
 let searchRun = 0
@@ -97,6 +120,25 @@ watch(query, async (value) => {
   await search.flush()
   if (run === searchRun) hits.value = search.index.search(value, 10)
 })
+let serverTimer: ReturnType<typeof setTimeout> | null = null
+watch(query, (value) => {
+  if (serverTimer) clearTimeout(serverTimer)
+  serverHits.value = []
+  const q = value.trim()
+  if (q.length < 2 || connection.value !== 'online') return
+  serverTimer = setTimeout(async () => {
+    try {
+      const { hits: found } = await api.search(workspaceId.value, q)
+      if (query.value.trim() === q) serverHits.value = found
+    } catch {
+      // Server unreachable: local results stand on their own.
+    }
+  }, 300)
+})
+onUnmounted(() => {
+  if (serverTimer) clearTimeout(serverTimer)
+})
+
 watch(items, () => {
   if (active.value >= items.value.length) active.value = Math.max(0, items.value.length - 1)
 })

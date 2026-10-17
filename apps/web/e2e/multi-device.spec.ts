@@ -221,3 +221,39 @@ test('server search complements local search with pages not on this device yet',
   await expect(blockInput(other, 0)).toHaveText('Gesuchter Begriff Zwiebelkuchen')
   await context.close()
 })
+
+test('#219: the quick search adds the server hits too, and stays local offline', async ({
+  page,
+  browser,
+}) => {
+  const email = await signIn(page)
+  const context = await browser.newContext()
+  const other = await context.newPage()
+  await other.route('**/api/sync/**', (route) => route.abort('connectionrefused'))
+  await other.request.post('/api/auth/login', { data: { email, password: PASSWORD } })
+  await other.goto('/')
+  await expect(other).toHaveURL(/\/w\/[0-9a-f-]+$/)
+
+  await newPage(page, 'Nur auf dem Server')
+  await page.keyboard.type('Gesuchter Begriff Zwiebelkuchen')
+  await waitForSaved(page)
+  await synced(page)
+
+  await other.keyboard.press('ControlOrMeta+p')
+  await other.getByPlaceholder('Seiten suchen oder Befehl eingeben…').fill('zwiebel')
+  const option = other.getByRole('option', { name: /Nur auf dem Server/ })
+  await expect(option).toBeVisible({ timeout: 10_000 })
+  await expect(option).toContainText('Vom Server')
+
+  await other.unroute('**/api/sync/**')
+  await option.click()
+  await expect(other.getByLabel('Titel')).toHaveValue('Nur auf dem Server', { timeout: 10_000 })
+  await expect(blockInput(other, 0)).toHaveText('Gesuchter Begriff Zwiebelkuchen')
+
+  // Offline only the local index answers; no error.
+  await context.setOffline(true)
+  await other.keyboard.press('ControlOrMeta+p')
+  await other.getByPlaceholder('Seiten suchen oder Befehl eingeben…').fill('kein-solches-wort')
+  await expect(other.getByRole('listbox', { name: 'Ergebnisse' })).toContainText('Keine Treffer')
+  await context.close()
+})
