@@ -111,6 +111,7 @@ Entscheidungen: [ADR 0008](docs/adr/0008-block-editor.md) (eigener Block-Editor,
 - [x] Backup/Restore automatisiert getestet
 - [x] Backup-/Restore-Dokumentation ([`backup.md`](docs/operations/backup.md); auf frischem Host (Raspberry Pi, arm64) durchgespielt)
 - [x] Lasttests ([`load-tests.md`](docs/testing/load-tests.md); offen: Messung auf dem Raspberry Pi)
+- [x] Showcase und Stresstest mit 50 000 Seiten in vier Ebenen ([#218](https://github.com/mszkb/notion-alternative/issues/218), `scripts/loadtest/showcase.mjs`, Messung auf SQLite und MariaDB)
 - [x] Re-Sync großer Workspaces seitenweise mit Fortschritt ([#97](https://github.com/mszkb/notion-alternative/issues/97))
 - [x] Lokaler Suchindex in IndexedDB gespeichert ([#98](https://github.com/mszkb/notion-alternative/issues/98))
 - [x] App bei 10 000 Seiten im Ziel: Kaltstart, Öffnen, Tippen ([#102](https://github.com/mszkb/notion-alternative/issues/102))

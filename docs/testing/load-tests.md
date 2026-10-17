@@ -32,6 +32,40 @@ Gleichzeitige Pushes in **denselben** Workspace prüft `apps/server/tests/Unit/S
 
 Die Zielgröße aus dem Issue ist `PAGES=10000`, also 10 000 Seiten und 500 000 Blöcke.
 
+## Showcase mit 50 000 Seiten (#218)
+
+`scripts/loadtest/showcase.mjs` füllt ein Konto mit einem großen, lesbaren Workspace: 50 000 Seiten in vier Ebenen (Bereiche → Projekte → Notizen → Details), deutsche Texte mit Umlauten, gemischte Blocktypen, Seitenlinks, Tags, Favoriten, ein paar Seiten im Papierkorb. Es schreibt über den normalen Sync-Push wie ein Client. Danach meldet man sich mit dem Konto an und zeigt Suche, Seitenbaum und Erstsync.
+
+```sh
+# Server mit ALLOW_REGISTRATION=true, z. B. pnpm dev; Standard: 50 000 Seiten
+BASE_URL=http://127.0.0.1:3000 node scripts/loadtest/showcase.mjs
+# Messung in der App als neues Gerät (Production-Build mit vite preview, Proxy auf den Server)
+LOAD_SHOWCASE=1 BASE_URL=http://localhost:5182 pnpm --filter @notion-alt/web exec \
+  playwright test e2e/load-showcase.spec.ts --project chromium
+```
+
+- **Parameter:** `PAGES` (50 000), `DEPTH` (4), `BLOCKS` (6 im Schnitt pro Seite), `SEED`, `EMAIL`, `PASSWORD`, `WORKSPACE` („Showcase“).
+- **Wiederholbar:** IDs und Operations-IDs hängen am `SEED`. Ein abgebrochener Lauf setzt beim nächsten Start fort (der Server bestätigt Vorhandenes als `duplicate`). Für einen zweiten Showcase auf demselben Server einen anderen `SEED` nehmen.
+- **Vorführen:** Anmelden mit `showcase@example.com` / `showcase password 123`, Workspace „Showcase“. Suchbegriffe, die genau einmal vorkommen: Quokka, Zeppelinhafen, Kaktusblüte, Mondfinsternis, Gürteltier, Bernsteinzimmer. Häufige: Übersicht, Prüfung, Gemüsebeet, Wien, Steuererklärung.
+
+Gemessen am 2026-10-17 auf einem MacBook (Apple Silicon), PHP 8.5 mit `php -S` (ein Worker), Chromium headless, Production-Build:
+
+| | SQLite | MariaDB 10.11 (Docker Desktop) |
+| --- | --- | --- |
+| Seed: 50 000 Seiten, 365 608 Blöcke, 434 861 Operationen | 122 s (rund 3 600 Ops/s), Datenbank 480 MB | 1 498 s (rund 290 Ops/s, durch die Latenz begrenzt, #220), Datenbank 658 MB |
+| Erstsync neues Gerät (Seitenbaum und Metadaten, ADR 0017) | 9,2 s | 9,3 s |
+| Ast bis zur 4. Ebene aufklappen | 0,12 s | 0,10 s |
+| Suche in der Seitenleiste, Wort auf genau einer Seite (lokal + Server) | 0,8 s (davon 0,4 s Entprellung) | 0,8 s |
+| Schnellsuche (`Strg/⌘ + P`) nach einem Titel | 0,3 s | 0,8 s |
+| Schnellsuche nach dem Wort auf genau einer Seite (Server-Treffer, #219) | 0,8 s | 0,5 s |
+| Kaltstart aus IndexedDB bis zum Seitenbaum | 0,4 s | 0,4 s |
+| JS-Heap danach (schwankt mit der Garbage Collection) | 148 MB | 40 MB |
+
+Gefunden dabei:
+
+- **Schnellsuche ohne Server-Treffer** (#219, behoben): Auf einem neuen Gerät fand `Strg/⌘ + K` ein Wort im Inhalt nicht geladener Seiten nicht, die Suche in der Seitenleiste schon.
+- **Zwei Round-Trips pro Abfrage auf MariaDB/MySQL** (behoben): Echte Prepared Statements kosten `prepare` und `execute`; emulierte halbieren die Wege. Pushes bleiben auf MariaDB/MySQL durch die Latenz begrenzt (rund 16 Abfragen pro Operation), siehe #220.
+
 ## Ergebnisse (2026-10-03)
 
 **Testumgebung:** Cloud-Container mit 4 vCPU (Xeon, 2,1 GHz) und 16 GB RAM, Node 22.22, Chromium 141 headless. Ein Raspberry Pi 4 ist grob um den Faktor 3–4 langsamer. Messungen dort stehen noch aus.
