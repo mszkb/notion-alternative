@@ -8,7 +8,7 @@ COPY apps/server/composer.json apps/server/composer.lock ./
 COPY apps/server/src ./src
 RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader --ignore-platform-reqs
 
-FROM php:8.3-fpm-bookworm
+FROM php:8.5-fpm-bookworm
 RUN docker-php-ext-enable opcache \
   && mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY apps/server/docker/php.ini "$PHP_INI_DIR/conf.d/zz-notion-alt.ini"
