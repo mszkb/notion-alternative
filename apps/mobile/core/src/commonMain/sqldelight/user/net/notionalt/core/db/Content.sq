@@ -1,0 +1,297 @@
+-- One database per user (ADR 0009, ADR 0020). Field names follow the web client (camelCase).
+
+CREATE TABLE workspace (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    ownerId TEXT NOT NULL,
+    createdAt TEXT NOT NULL
+);
+
+CREATE TABLE document (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    parentId TEXT,
+    title TEXT NOT NULL,
+    sortKey TEXT NOT NULL,
+    favorite INTEGER NOT NULL,
+    icon TEXT,
+    cover TEXT,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL,
+    revision INTEGER,
+    deletedAt TEXT
+);
+
+CREATE INDEX document_workspace ON document (workspaceId);
+
+CREATE TABLE block (
+    id TEXT NOT NULL PRIMARY KEY,
+    documentId TEXT NOT NULL,
+    type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    -- JSON object, kept verbatim (ADR 0019 attributes).
+    attrs TEXT NOT NULL,
+    sortKey TEXT NOT NULL,
+    revision INTEGER,
+    deletedAt TEXT
+);
+
+CREATE INDEX block_document ON block (documentId);
+
+-- Conflict objects created by the server (ADR 0003); `json` is the full entity.
+CREATE TABLE conflict (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    documentId TEXT,
+    json TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    resolvedAt TEXT,
+    revision INTEGER
+);
+
+-- Offline queue: one row per local change, sent idempotently by opId (ADR 0002).
+CREATE TABLE operation (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    opId TEXT NOT NULL UNIQUE,
+    deviceId TEXT NOT NULL,
+    workspaceId TEXT NOT NULL,
+    entity TEXT NOT NULL,
+    entityId TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    baseRevision INTEGER,
+    payload TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    -- Set when the server rejected the operation; it stays queued and visible.
+    issueCode TEXT,
+    issueMessage TEXT
+);
+
+CREATE INDEX operation_entity ON operation (entityId);
+
+-- Pages whose blocks are not on this device yet (ADR 0017).
+CREATE TABLE unloadedDocument (
+    documentId TEXT NOT NULL PRIMARY KEY,
+    workspaceId TEXT NOT NULL
+);
+
+CREATE TABLE meta (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- workspaces
+
+workspaces:
+SELECT * FROM workspace ORDER BY name;
+
+putWorkspace:
+INSERT OR REPLACE INTO workspace VALUES ?;
+
+deleteWorkspacesExcept:
+DELETE FROM workspace WHERE id NOT IN ?;
+
+-- documents
+
+documentsOfWorkspace:
+SELECT * FROM document WHERE workspaceId = ? AND deletedAt IS NULL;
+
+allDocumentIdsOfWorkspace:
+SELECT id FROM document WHERE workspaceId = ?;
+
+document:
+SELECT * FROM document WHERE id = ?;
+
+putDocument:
+INSERT OR REPLACE INTO document VALUES ?;
+
+deleteDocument:
+DELETE FROM document WHERE id = ?;
+
+setDocumentRevision:
+UPDATE document SET revision = :revision WHERE id = :id AND (revision IS NULL OR revision < :revision);
+
+-- blocks
+
+blocksOfDocument:
+SELECT * FROM block WHERE documentId = ? AND deletedAt IS NULL;
+
+allBlockIdsOfDocument:
+SELECT id FROM block WHERE documentId = ?;
+
+allBlockIdsOfWorkspace:
+SELECT block.id FROM block JOIN document ON document.id = block.documentId WHERE document.workspaceId = ?;
+
+block:
+SELECT * FROM block WHERE id = ?;
+
+putBlock:
+INSERT OR REPLACE INTO block VALUES ?;
+
+deleteBlock:
+DELETE FROM block WHERE id = ?;
+
+setBlockRevision:
+UPDATE block SET revision = :revision WHERE id = :id AND (revision IS NULL OR revision < :revision);
+
+-- conflicts
+
+openConflicts:
+SELECT * FROM conflict WHERE workspaceId = ? AND resolvedAt IS NULL ORDER BY createdAt DESC;
+
+conflict:
+SELECT * FROM conflict WHERE id = ?;
+
+putConflict:
+INSERT OR REPLACE INTO conflict VALUES ?;
+
+allConflictIdsOfWorkspace:
+SELECT id FROM conflict WHERE workspaceId = ?;
+
+deleteConflict:
+DELETE FROM conflict WHERE id = ?;
+
+-- operations
+
+insertOperation:
+INSERT INTO operation (opId, deviceId, workspaceId, entity, entityId, kind, baseRevision, payload, createdAt)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+queuedOperations:
+SELECT * FROM operation WHERE seq > ? ORDER BY seq LIMIT ?;
+
+operationByOpId:
+SELECT * FROM operation WHERE opId = ?;
+
+operationCount:
+SELECT count(*) FROM operation;
+
+operationCountForEntity:
+SELECT count(*) FROM operation WHERE entityId = ?;
+
+operationsWithIssues:
+SELECT * FROM operation WHERE issueCode IS NOT NULL ORDER BY seq;
+
+deleteOperation:
+DELETE FROM operation WHERE seq = ?;
+
+markOperation:
+UPDATE operation SET issueCode = ?, issueMessage = ? WHERE seq = ?;
+
+renameOperationDevice:
+UPDATE operation SET deviceId = :new, issueCode = NULL, issueMessage = NULL WHERE deviceId = :old;
+
+-- content on demand
+
+unloaded:
+SELECT * FROM unloadedDocument WHERE documentId = ?;
+
+putUnloaded:
+INSERT OR REPLACE INTO unloadedDocument VALUES (?, ?);
+
+deleteUnloaded:
+DELETE FROM unloadedDocument WHERE documentId = ?;
+
+-- meta
+
+metaValue:
+SELECT value FROM meta WHERE key = ?;
+
+putMeta:
+INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);
+
+deleteMeta:
+DELETE FROM meta WHERE key = ?;
+
+unloadedOfWorkspace:
+SELECT documentId FROM unloadedDocument WHERE workspaceId = ?;
+
+unloadedCount:
+SELECT count(*) FROM unloadedDocument;
+
+-- Local search (titles and block text); FTS5 is not available on every Android SQLite.
+searchDocuments:
+SELECT DISTINCT document.id FROM document
+LEFT JOIN block ON block.documentId = document.id AND block.deletedAt IS NULL
+WHERE document.workspaceId = :workspaceId AND document.deletedAt IS NULL
+  AND (document.title LIKE :pattern ESCAPE '\' OR block.content LIKE :pattern ESCAPE '\')
+LIMIT 50;
+
+-- Cached attachment contents (ADR 0012); added by migration 1.sqm.
+CREATE TABLE attachmentContent (
+    id TEXT NOT NULL PRIMARY KEY,
+    data BLOB NOT NULL
+);
+
+attachmentData:
+SELECT data FROM attachmentContent WHERE id = ?;
+
+putAttachmentData:
+INSERT OR REPLACE INTO attachmentContent (id, data) VALUES (?, ?);
+
+allDocumentsOfWorkspace:
+SELECT * FROM document WHERE workspaceId = ?;
+
+-- Tags (added by migration 2.sqm).
+CREATE TABLE tag (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    revision INTEGER,
+    deletedAt TEXT
+);
+
+CREATE TABLE documentTag (
+    id TEXT NOT NULL PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    documentId TEXT NOT NULL,
+    tagId TEXT NOT NULL,
+    revision INTEGER,
+    deletedAt TEXT
+);
+
+CREATE INDEX documentTag_document ON documentTag (documentId);
+
+tagsOfWorkspace:
+SELECT * FROM tag WHERE workspaceId = ? AND deletedAt IS NULL ORDER BY name;
+
+tagById:
+SELECT * FROM tag WHERE id = ?;
+
+putTag:
+INSERT OR REPLACE INTO tag VALUES ?;
+
+deleteTagRow:
+DELETE FROM tag WHERE id = ?;
+
+allTagIdsOfWorkspace:
+SELECT id FROM tag WHERE workspaceId = ?;
+
+setTagRevision:
+UPDATE tag SET revision = :revision WHERE id = :id AND (revision IS NULL OR revision < :revision);
+
+assignmentsOfDocument:
+SELECT * FROM documentTag WHERE documentId = ? AND deletedAt IS NULL;
+
+documentTagById:
+SELECT * FROM documentTag WHERE id = ?;
+
+putDocumentTag:
+INSERT OR REPLACE INTO documentTag VALUES ?;
+
+deleteDocumentTagRow:
+DELETE FROM documentTag WHERE id = ?;
+
+allDocumentTagIdsOfWorkspace:
+SELECT id FROM documentTag WHERE workspaceId = ?;
+
+setDocumentTagRevision:
+UPDATE documentTag SET revision = :revision WHERE id = :id AND (revision IS NULL OR revision < :revision);
+
+-- Pages with an active block linking to `target` (`[Titel](page:<uuid>)`).
+backlinks:
+SELECT DISTINCT document.id FROM block
+JOIN document ON document.id = block.documentId
+WHERE block.deletedAt IS NULL AND document.deletedAt IS NULL AND block.content LIKE :pattern AND document.id != :target;
+
+blockRowsOfDocument:
+SELECT * FROM block WHERE documentId = ?;

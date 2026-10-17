@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only: plain HTTP is allowed so the app can reach a server in the home network
+  (http://192.168.x.y:8080) or over Tailscale without a certificate. Release builds stay HTTPS-only.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

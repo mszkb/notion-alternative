@@ -1,0 +1,5 @@
+-- Version 1 → 2: cached attachment contents (images shown offline, ADR 0012).
+CREATE TABLE attachmentContent (
+    id TEXT NOT NULL PRIMARY KEY,
+    data BLOB NOT NULL
+);

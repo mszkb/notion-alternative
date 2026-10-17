@@ -16,6 +16,8 @@ Danach erscheint die App im Startmenü bzw. Dock. Firefox und Safari (macOS) bie
 - In der Seitenleiste **„App installieren“** antippen, oder
 - Menü (⋮) → **„App installieren“** bzw. **„Zum Startbildschirm hinzufügen“**.
 
+**Native Android-App (Vorschau):** Es gibt zusätzlich eine native App ([ADR 0020](../adr/0020-native-apps-kmp.md)), derzeit als Entwicklerversion zum Herunterladen (APK). Sie speichert die Seiten in einer eigenen Datenbank auf dem Telefon und synchronisiert mit demselben Server. Installation, Server-Adresse und bekannte Einschränkungen: [`apps/mobile/README.md`](../../apps/mobile/README.md).
+
 ## iPhone und iPad (Safari)
 
 iOS zeigt keinen Installations-Dialog an. Die App blendet deshalb einen Hinweis in der Seitenleiste ein (ausblendbar):
