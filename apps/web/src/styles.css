@@ -1109,6 +1109,14 @@ kbd {
   left: -1.9rem;
 }
 
+/* Own context menu (#191): at the pointer, above everything else. */
+.block-menu.context-menu {
+  position: fixed;
+  z-index: 60;
+  max-height: calc(100vh - 8px);
+  overflow-y: auto;
+}
+
 .block-menu button {
   width: 100%;
   padding: var(--space-xs) var(--space-sm);

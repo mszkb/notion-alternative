@@ -22,6 +22,7 @@ import {
   setCaretOffset,
   textLength,
 } from './caret'
+import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu.vue'
 import { maxFileBytes } from '../limits'
 import { formatBytes } from '../local/persistence'
 import { registerPendingEdits } from '../pending-edits'
@@ -185,10 +186,16 @@ async function restoreStep(direction: 'undo' | 'redo') {
     if (recreated) history.rename(recreated)
     blocks.value = await store.listBlocks(props.documentId)
     await nextTick()
-    // Also re-render the focused block: its content is replaced, not edited.
+    // Also re-render the focused block: its content is replaced, not edited. Compared with what
+    // is on screen too: after a save on blur, an unsaved format change differs only there.
     for (const block of blocks.value) {
       const el = elements.get(block.id)
-      if (el && rendered.get(block.id) !== block.content) renderBlock(block, el)
+      if (
+        el &&
+        (rendered.get(block.id) !== block.content || readContent(block, el) !== block.content)
+      ) {
+        renderBlock(block, el)
+      }
     }
     const focusId = changed ? (recreated?.get(changed) ?? changed) : null
     if (focusId && elements.has(focusId)) focusBlock(focusId, 'end')
@@ -1098,6 +1105,11 @@ function onKeydown(block: Block, event: KeyboardEvent) {
   if (event.isComposing) return
   const mod = event.metaKey || event.ctrlKey
 
+  if ((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu') {
+    if (openContextMenuByKey(block, el)) event.preventDefault()
+    return
+  }
+
   const undo = isUndoKey(event)
   if (undo) {
     event.preventDefault()
@@ -1557,6 +1569,132 @@ async function deleteAttachmentBlock(block: Block) {
   await remove(block)
 }
 
+// ------------------------------------------------------------------ context menu (#191)
+
+const contextMenu = shallowRef<{ x: number; y: number; items: ContextMenuItem[] } | null>(null)
+
+/**
+ * Right click in a block: entries for selected text, a link or the block. Shift+right click and
+ * read-only workspaces keep the browser's menu (spelling, paste, translate).
+ */
+function onContextMenu(block: Block, event: MouseEvent) {
+  if (event.shiftKey || readOnly.value) return
+  const el = event.currentTarget as HTMLElement
+  event.preventDefault()
+  contextMenu.value = {
+    x: event.clientX,
+    y: event.clientY,
+    items: contextItems(block, el, event.target),
+  }
+}
+
+/** Shift+F10 or the context menu key: the menu at the caret or selection. */
+function openContextMenuByKey(block: Block, el: HTMLElement): boolean {
+  if (readOnly.value) return false
+  const selection = document.getSelection()
+  const box =
+    selection?.rangeCount && el.contains(selection.anchorNode)
+      ? selection.getRangeAt(0).getBoundingClientRect()
+      : el.getBoundingClientRect()
+  const anchor = box.width || box.height ? box : el.getBoundingClientRect()
+  contextMenu.value = { x: anchor.left, y: anchor.bottom, items: contextItems(block, el, null) }
+  return true
+}
+
+function contextItems(
+  block: Block,
+  el: HTMLElement,
+  target: EventTarget | null,
+): ContextMenuItem[] {
+  const link = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null
+  if (link && el.contains(link)) return linkItems(link)
+  if (!isTextarea(el) && hasTextSelection(el)) return selectionItems(block, el)
+  return blockItems(block)
+}
+
+function selectionItems(block: Block, el: HTMLElement): ContextMenuItem[] {
+  const range = document.getSelection()!.getRangeAt(0).cloneRange()
+  // The menu takes the focus: the selection comes back before anything changes it.
+  const restoreSelection = () => {
+    el.focus({ preventScroll: true })
+    const selection = document.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  }
+  // The same paths as the shortcuts, with an undo step (ADR 0008).
+  const format = (apply: () => void) => () => {
+    restoreSelection()
+    checkpoint()
+    apply()
+    scheduleSave(block.id)
+  }
+  return [
+    { label: 'Fett', run: format(() => document.execCommand('bold')) },
+    { label: 'Kursiv', run: format(() => document.execCommand('italic')) },
+    { label: 'Code', run: format(() => toggleInlineCode(el)) },
+    {
+      label: 'Link einfügen …',
+      run: () => {
+        restoreSelection()
+        openPicker(block, el, 'link', 0)
+      },
+    },
+    { label: 'Ausschneiden', separated: true, run: format(() => document.execCommand('cut')) },
+    {
+      label: 'Kopieren',
+      run: () => {
+        restoreSelection()
+        document.execCommand('copy')
+      },
+    },
+  ]
+}
+
+function blockItems(block: Block): ContextMenuItem[] {
+  const items: ContextMenuItem[] = []
+  if (!isAtom(block)) {
+    items.push({ label: 'Blocktyp ändern …', run: () => (menuFor.value = block.id) })
+    items.push({ label: 'Duplizieren', run: () => menuAction(() => duplicate(block)) })
+  }
+  items.push(
+    { label: 'Link zum Block kopieren', run: () => copyBlockLink(block) },
+    { label: 'Nach oben', run: () => menuAction(() => move(block, -1)) },
+    { label: 'Nach unten', run: () => menuAction(() => move(block, 1)) },
+    {
+      label: 'Block löschen',
+      danger: true,
+      separated: true,
+      run: () => menuAction(() => remove(block)),
+    },
+  )
+  return items
+}
+
+function linkItems(link: HTMLAnchorElement): ContextMenuItem[] {
+  const url = new URL(link.getAttribute('href') ?? '', window.location.href)
+  const internal = url.origin === window.location.origin
+  return [
+    {
+      label: 'Öffnen',
+      run: () =>
+        internal
+          ? router.push(url.pathname + url.search + url.hash)
+          : window.open(url.href, '_blank', 'noopener'),
+    },
+    { label: 'In neuem Tab öffnen', run: () => window.open(url.href, '_blank', 'noopener') },
+    {
+      label: 'Link kopieren',
+      run: async () => {
+        try {
+          await navigator.clipboard.writeText(url.href)
+        } catch {
+          window.prompt('Link', url.href)
+        }
+      },
+    },
+  ]
+}
+
 // ------------------------------------------------------------------ block menu
 
 const menuFor = ref<string | null>(null)
@@ -1876,6 +2014,7 @@ function blockLabel(block: Block): string {
         @input="onInput(block, $event)"
         @keydown="onKeydown(block, $event)"
         @blur="onBlur(block)"
+        @contextmenu="onContextMenu(block, $event)"
       ></textarea>
       <div
         v-else
@@ -1897,6 +2036,7 @@ function blockLabel(block: Block): string {
         @paste="onPaste"
         @drop="onDrop"
         @click="onClick"
+        @contextmenu="onContextMenu(block, $event)"
       ></div>
 
       <ul v-if="menuFor === block.id" class="block-menu" role="menu" @keydown="onMenuKeydown">
@@ -1990,6 +2130,13 @@ function blockLabel(block: Block): string {
       @select="choose"
       @close="closePicker(true)"
       @dismiss="closePicker(false)"
+    />
+    <ContextMenu
+      v-if="contextMenu"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :items="contextMenu.items"
+      @close="contextMenu = null"
     />
   </div>
 </template>

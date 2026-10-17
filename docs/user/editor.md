@@ -59,6 +59,9 @@ Jeder Schritt lässt sich mit `Strg/⌘ + Z` rückgängig machen.
 | `Strg/⌘ + Umschalt + L` | Hell/Dunkel umschalten (auch unter Einstellungen → Allgemein → Darstellung) |
 | `Strg/⌘ + /` | Übersicht aller Kürzel |
 | `Strg/⌘ + B / I / E` | Fett, kursiv, Code |
+| Rechtsklick oder `Umschalt + F10` | Kontextmenü (siehe unten) |
+
+**Kontextmenü:** Ein Rechtsklick auf markierten Text bietet Fett, Kursiv, Code, Link einfügen, Ausschneiden und Kopieren; auf einen Block ohne Markierung Blocktyp ändern, Duplizieren, Verschieben, Link zum Block und Löschen; auf einen Link Öffnen, In neuem Tab öffnen und Link kopieren; im Seitenbaum Unterseite anlegen, Favorit, In neuem Tab öffnen, Link kopieren und Löschen. `Umschalt + F10` oder die Kontextmenü-Taste öffnen es an der Schreibmarke, die Pfeiltasten wählen, `Esc` schließt. Rechtschreibvorschläge, Einfügen und Übersetzen bleiben im Menü des Browsers: **Umschalt + Rechtsklick**. In schreibgeschützten Workspaces erscheint im Text das Browser-Menü.
 
 Die Schnellsuche sucht zuerst auf dem Gerät. Online ergänzt sie Treffer vom Server, etwa Seiten, deren Inhalt noch nicht geladen ist. Läuft der Server mit MariaDB oder MySQL statt SQLite, findet die Suche dort keine Wörter mit weniger als drei Buchstaben und sortiert Treffer etwas anders ([ADR 0024](../adr/0024-mysql-mariadb-option.md)); die Suche auf dem Gerät findet sie trotzdem.
 

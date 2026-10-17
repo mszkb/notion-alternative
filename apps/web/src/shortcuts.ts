@@ -35,5 +35,9 @@ export const SHORTCUT_OVERVIEW: { keys: string; action: string }[] = [
   { keys: 'Strg/⌘ + K (Text markiert)', action: 'Markierten Text verlinken (Seite oder URL)' },
   { keys: 'Strg/⌘ + Z / Umschalt + Z', action: 'Rückgängig / Wiederholen' },
   { keys: '/ (im Text)', action: 'Block einfügen oder umwandeln' },
+  {
+    keys: 'Rechtsklick oder Umschalt + F10',
+    action: 'Kontextmenü (Umschalt + Rechtsklick: Browser-Menü)',
+  },
   { keys: 'Esc', action: 'Menü schließen, Blöcke auswählen' },
 ]

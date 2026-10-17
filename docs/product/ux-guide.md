@@ -70,6 +70,7 @@ Wie in Notion, Übersicht in der App mit `Strg/⌘ + /` (`SHORTCUT_OVERVIEW` in 
 | `Strg/⌘ + Umschalt + L` | Hell/Dunkel | Safari: Seitenleiste des Browsers – die App übernimmt es |
 | `Strg/⌘ + /` | Übersicht der Kürzel | keiner |
 | `Strg/⌘ + B`, `I`, `E` | Fett, kursiv, Code | Firefox: `B` öffnet sonst die Lesezeichen-Seitenleiste – im Text übernimmt es die App |
+| Rechtsklick, `Umschalt + F10` | Eigenes Kontextmenü in Text, Blöcken, Links und Seitenbaum (#191, `ContextMenu.vue`; eigene kleine Komponente statt Bibliothek, also keine neue Abhängigkeit) | Browser-Menü (Rechtschreibung, Einfügen, Übersetzen) mit Umschalt + Rechtsklick; Eingabefelder außerhalb des Editors behalten es |
 | `Strg/⌘ + U` | – | Unterstreichen gibt es nicht (kein Markdown); das Kürzel bleibt beim Browser (Quelltext) |
 
 ## Barrierefreiheit

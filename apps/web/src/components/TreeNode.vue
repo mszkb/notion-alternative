@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { Document } from '@notion-alt/shared'
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { expanded } from '../composables/tree-state'
+import ContextMenu, { type ContextMenuItem } from './ContextMenu.vue'
 import { displayTitle, NO_CHILDREN, useWorkspace } from '../composables/workspace'
 import NavIcon from './NavIcon.vue'
 
@@ -43,6 +44,61 @@ function open(event: MouseEvent) {
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
   event.preventDefault()
   void router.push(pageHref(props.document.id))
+}
+
+// Own context menu (#191); Shift+right click keeps the browser's.
+const contextMenu = shallowRef<{ x: number; y: number; items: ContextMenuItem[] } | null>(null)
+
+function menuItems(): ContextMenuItem[] {
+  const url = new URL(pageHref(props.document.id), window.location.href).href
+  const items: ContextMenuItem[] = []
+  if (!readOnly.value) {
+    items.push({ label: 'Unterseite anlegen', run: addChild })
+    items.push({
+      label: props.document.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen',
+      run: () => store.setFavorite(props.document.id, !props.document.favorite),
+    })
+  }
+  items.push(
+    { label: 'In neuem Tab öffnen', run: () => window.open(url, '_blank', 'noopener') },
+    {
+      label: 'Link kopieren',
+      run: async () => {
+        try {
+          await navigator.clipboard.writeText(url)
+        } catch {
+          window.prompt('Link', url)
+        }
+      },
+    },
+  )
+  if (!readOnly.value)
+    items.push({ label: 'Löschen', danger: true, separated: true, run: removePage })
+  return items
+}
+
+function onContextMenu(event: MouseEvent) {
+  if (event.shiftKey) return
+  event.preventDefault()
+  contextMenu.value = { x: event.clientX, y: event.clientY, items: menuItems() }
+}
+
+function onLinkKeydown(event: KeyboardEvent) {
+  if ((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu') {
+    event.preventDefault()
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    contextMenu.value = { x: box.left, y: box.bottom, items: menuItems() }
+  }
+}
+
+async function removePage() {
+  const message = children.value.length
+    ? `„${displayTitle(props.document)}“ und alle Unterseiten löschen?`
+    : `„${displayTitle(props.document)}“ löschen?`
+  if (!window.confirm(message)) return
+  const wasOpen = activeDocumentId.value === props.document.id
+  await store.deleteDocument(props.document.id)
+  if (wasOpen) await router.push({ name: 'workspace', params: { workspaceId: workspaceId.value } })
 }
 
 const DRAG_TYPE = 'application/x-notion-alt-page'
@@ -97,6 +153,7 @@ async function onDrop(event: DragEvent) {
       @dragover="onDragOver"
       @dragleave="dropZone = null"
       @drop="onDrop"
+      @contextmenu="onContextMenu"
     >
       <!-- The page icon stands where the arrow goes; the arrow shows on hover or focus, so top
            level pages line up with the other entries (#203). -->
@@ -124,6 +181,7 @@ async function onDrop(event: DragEvent) {
         :href="pageHref(document.id)"
         :aria-current="isActive ? 'page' : undefined"
         @click="open"
+        @keydown="onLinkKeydown"
       >
         {{ displayTitle(document) }}
       </a>
@@ -138,6 +196,13 @@ async function onDrop(event: DragEvent) {
         +
       </button>
     </div>
+    <ContextMenu
+      v-if="contextMenu"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :items="contextMenu.items"
+      @close="contextMenu = null"
+    />
     <ul v-if="isOpen && children.length" role="group">
       <TreeNode v-for="child in children" :key="child.id" :document="child" :depth="depth + 1" />
     </ul>
