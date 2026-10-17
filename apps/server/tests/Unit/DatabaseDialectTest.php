@@ -44,6 +44,20 @@ final class DatabaseDialectTest extends TestCase
         self::assertSame([['g' => 7]], Sql::rows($this->db, 'select ' . Sql::greatest($this->db, '3', '7') . ' as g'));
     }
 
+    public function testBindsIntegersAsNumbersForLimitsComparisonsAndResults(): void
+    {
+        foreach (['a', 'b', 'c'] as $key) {
+            Sql::run($this->db, 'insert into settings ("key", value) values (?, ?)', [$key, $key]);
+        }
+
+        // Emulated prepares (MariaDB/MySQL) wrote `limit '2'` with a string: a syntax error.
+        self::assertSame([['key' => 'a'], ['key' => 'b']], Sql::rows($this->db, 'select "key" from settings order by "key" limit ? offset ?', [2, 0]));
+        // Bound as text, SQLite ranked '10' above 20 and the compaction cursor went backwards.
+        self::assertSame([['g' => 20]], Sql::rows($this->db, 'select ' . Sql::greatest($this->db, '20', '?') . ' as g', [10]));
+        // Results stay typed: integers, not strings; null stays null.
+        self::assertSame([['n' => 3, 'v' => null]], Sql::rows($this->db, 'select count(*) as n, ? as v from settings', [null]));
+    }
+
     public function testRowCountCountsMatchedRowsNotOnlyChangedOnes(): void
     {
         $user = Ids::uuid();
