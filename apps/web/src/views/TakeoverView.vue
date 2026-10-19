@@ -36,6 +36,8 @@ const error = ref<string | null>(null)
 const choice = ref<string>('new')
 const newName = ref('Von diesem Gerät')
 const state = ref<TakeoverState | null>(null)
+/** The server confirmed all taken-over pages (#204). */
+const synced = ref(false)
 
 const targets = computed(() =>
   workspaces.value.filter((w) => !w.local && !w.revoked && !account.isReadOnly(w.id)),
@@ -144,6 +146,7 @@ async function finish() {
     if (local && completed && (await takeoverConfirmed(local, account, completed))) {
       await discardLocalArea(local)
       local = null
+      synced.value = true
     }
   } catch {
     // Left the view meanwhile: the next start checks again.
@@ -223,8 +226,16 @@ function open() {
 
     <template v-else-if="phase === 'done'">
       <h1>{{ pages === 1 ? '1 Seite übernommen' : `${pages} Seiten übernommen` }}</h1>
-      <p class="muted">
-        Sie sind jetzt in deinem Konto und werden synchronisiert, sobald eine Verbindung besteht.
+      <p class="muted" data-testid="takeover-done">
+        <template v-if="synced">
+          Sie sind jetzt in deinem Konto und auf allen deinen Geräten verfügbar.
+        </template>
+        <template v-else-if="online">
+          Sie sind jetzt in deinem Konto und werden gerade synchronisiert.
+        </template>
+        <template v-else>
+          Sie sind jetzt in deinem Konto und werden synchronisiert, sobald eine Verbindung besteht.
+        </template>
       </p>
       <button type="button" data-testid="takeover-open" @click="open">Zu den Seiten</button>
     </template>

@@ -103,7 +103,11 @@ onBeforeUnmount(() => window.removeEventListener('pointerdown', closeOutside))
 </script>
 
 <template>
-  <div ref="root" class="sync-status-root" @keydown.escape="open && close()">
+  <div
+    ref="root"
+    class="sync-status-root"
+    @keydown.escape="open && ($event.preventDefault(), close())"
+  >
     <p class="status-line">
       <button
         ref="trigger"
