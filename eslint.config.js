@@ -33,6 +33,7 @@ export default tseslint.config(
       'packages/contract-tests/**/*.ts',
       'apps/*/scripts/**/*.{js,mjs}',
       'scripts/**/*.mjs',
+      'docs/.vitepress/**/*.mts',
       '*.js',
     ],
     languageOptions: { globals: globals.node },

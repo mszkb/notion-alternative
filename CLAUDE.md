@@ -28,6 +28,7 @@ Entschieden (`Accepted`):
 - **Teilen und Rechte** ([ADR 0014](docs/adr/0014-sharing-and-permissions.md)): Freigabeeinheit ist der Workspace (`workspace_members`, Rollen `reader`/`commenter`/`editor`/`owner`); mehrere Besitzer, der Ersteller (`owner_id`) trägt das Kontingent und bleibt fest; Rechte nur serverseitig maßgeblich, Operationen ohne Recht → `rejected` `forbidden`.
 - **Lese-Links** ([ADR 0022](docs/adr/0022-read-links.md)): eine Seite pro Link, Gast-Ansicht in der SPA ohne Konto, Token nur als SHA-256 gespeichert, verwalten ab `editor`.
 - **Ohne Konto starten** ([ADR 0023](docs/adr/0023-local-area-without-account.md)): eigene Dexie-DB `notion-alt-local` mit einem lokalen Workspace; beim Login Übernahme per `LocalStore` in die Konto-DB (gleiche IDs, neue Operationen, wiederaufnehmbar), danach normaler Sync; keine neuen Endpunkte.
+- **Doku-Website** ([ADR 0025](docs/adr/0025-documentation-site.md)): VitePress in `docs/` (Paket `@notion-alt/docs`), GitHub Pages aus `main`; Markdown bleibt ohne Front Matter und auf GitHub lesbar.
 
 Phase 0 abgeschlossen; Zielgruppe: Umsteiger von Notion, auch weniger technikaffine (`docs/product/vision.md`).
 
@@ -101,6 +102,7 @@ Node 22 und pnpm (`corepack enable`) für Web-App und Tests; PHP ≥ 8.2 mit Com
 | `pnpm --filter @notion-alt/contract-tests test` | HTTP-Contract-Tests (Spezifikation des Servers) gegen den PHP-Server (startet ihn selbst); anderer Server per `SERVER_CMD` oder `SERVER_URL`, nicht Teil von `pnpm test`, siehe `docs/testing/contract-tests.md` |
 | `pnpm --filter @notion-alt/web test:e2e` | Playwright (startet Server + Vite selbst); lokal ohne Browser-Download: `PW_CHROMIUM_PATH=/pfad/zu/chromium` |
 | `pnpm build` | SPA bauen |
+| `pnpm --filter @notion-alt/docs dev` / `build` | Doku-Website (VitePress, ADR 0025) aus `docs/`; der Build scheitert an toten Links |
 | `scripts/build-php-release.sh` | Release-ZIP für Webhosting (SPA + `api/`), siehe `docs/user/webhosting.md` |
 | `docker compose up -d --build` | Produktiv-Stack auf `:8080` |
 | `composer test` / `analyse` / `cs` (in `apps/server`) | Server: PHPUnit, PHPStan (Level max), PHP-CS-Fixer; `bin/console` (Backup, Restore, Passwort) und `bin/cron.php`, siehe `apps/server/README.md` |

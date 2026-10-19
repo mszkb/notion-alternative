@@ -2,6 +2,14 @@
 
 Abgeleitet aus der ursprünglichen Roadmap-Spezifikation („Roadmap: Self-hosted Notion-Alternative mit offline-first PWA“).
 
+Online lesbar unter <https://mszkb.github.io/notion-alternative/> ([ADR 0025](adr/0025-documentation-site.md)). Lokal: `pnpm --filter @notion-alt/docs dev`.
+
+## Anleitungen
+
+- [Installation auf Webspace](user/webhosting.md), [Hochladen per FTP](user/ftp-upload.md), [Einrichtung bei Hostern](user/hoster.md)
+- [App installieren](user/installation.md), [Ohne Konto loslegen](user/without-account.md)
+- [Seiten bearbeiten](user/editor.md), [Workspaces teilen](user/sharing.md), [Export und Import](user/export.md)
+
 ## Produkt
 
 - [Vision, Zielgruppen, Prinzipien & Scope](product/vision.md)
