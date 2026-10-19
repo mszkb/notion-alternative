@@ -28,13 +28,19 @@ const PATTERNS: [InlineShortcut['kind'], RegExp][] = [
 ]
 const LINK = /(^|[^\\])\[([^[\]]+)\]\(([^()\s]+)\)$/u
 
+/** A closing marker right after an odd number of backslashes is escaped (`*foo\*`). */
+function escapesClosing(inner: string): boolean {
+  const backslashes = /\\*$/.exec(inner)![0].length
+  return backslashes % 2 === 1
+}
+
 /** The shortcut closed at the end of `before` (the text before the caret), or null. */
 export function matchInlineShortcut(before: string): InlineShortcut | null {
   const last = before[before.length - 1]
   if (!last || !CLOSING_CHARACTERS.has(last)) return null
   if (last === ')') {
     const match = LINK.exec(before)
-    if (!match || !isSafeHref(match[3]!)) return null
+    if (!match || escapesClosing(match[2]!) || !isSafeHref(match[3]!)) return null
     return {
       kind: 'link',
       start: match.index + match[1]!.length,
@@ -44,7 +50,9 @@ export function matchInlineShortcut(before: string): InlineShortcut | null {
   }
   for (const [kind, pattern] of PATTERNS) {
     const match = pattern.exec(before)
-    if (match) return { kind, start: match.index + match[1]!.length, text: match[2]! }
+    if (match && !escapesClosing(match[2]!)) {
+      return { kind, start: match.index + match[1]!.length, text: match[2]! }
+    }
   }
   return null
 }

@@ -51,6 +51,13 @@ describe('inline Markdown while typing (#194)', () => {
     expect(matchInlineShortcut('\\_nicht_')).toBeNull()
     expect(matchInlineShortcut('\\`nicht`')).toBeNull()
     expect(matchInlineShortcut('\\[nicht](https://example.com)')).toBeNull()
+    // Escaped closing markers, too; an escaped backslash before it does not escape it.
+    expect(matchInlineShortcut('*foo\\*')).toBeNull()
+    expect(matchInlineShortcut('**foo\\**')).toBeNull()
+    expect(matchInlineShortcut('_foo\\_')).toBeNull()
+    expect(matchInlineShortcut('`foo\\`')).toBeNull()
+    expect(matchInlineShortcut('[foo\\](https://example.com)')).toBeNull()
+    expect(matchInlineShortcut('*foo\\\\*')).toEqual({ kind: 'italic', start: 0, text: 'foo\\\\' })
   })
 
   it('only links safe targets', () => {
