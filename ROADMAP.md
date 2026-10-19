@@ -141,7 +141,7 @@ UX-Rundgang Oktober 2026 (Epic [#205](https://github.com/mszkb/notion-alternativ
 - [x] Schmale Ansicht: Seitenleiste mit Abdunkelung ([#201](https://github.com/mszkb/notion-alternative/issues/201))
 - [x] Einstellungen gegliedert, Fehlerbehebung eingeklappt ([#202](https://github.com/mszkb/notion-alternative/issues/202))
 - [x] Seitenbaum: Icon-Spalte statt Einrückung ([#203](https://github.com/mszkb/notion-alternative/issues/203))
-- [ ] Übernahme: Abschlusstext online ([#204](https://github.com/mszkb/notion-alternative/issues/204), braucht [#193](https://github.com/mszkb/notion-alternative/pull/193))
+- [x] Übernahme: Abschlusstext online ([#204](https://github.com/mszkb/notion-alternative/issues/204))
 
 ## Ohne Phase – Opt-in-Telemetrie
 
