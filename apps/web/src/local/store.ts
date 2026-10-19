@@ -109,6 +109,21 @@ interface WriteContext {
 /** Name of the workspace in the local area without an account (ADR 0023). */
 export const LOCAL_WORKSPACE_NAME = 'Auf diesem Gerät'
 
+/**
+ * Key in `meta` of the local area while its pages move into an account (ADR 0023). From then
+ * on the local area is read-only in every tab: a later edit there would never reach the account.
+ */
+export const TAKEOVER_META_KEY = 'takeover'
+
+/** A page of the local area with everything that belongs to it, to take over on login (ADR 0023). */
+export interface TakeoverPage {
+  document: Document
+  blocks: Block[]
+  tags: Tag[]
+  documentTags: DocumentTag[]
+  attachments: { attachment: Attachment; data: ArrayBuffer | null }[]
+}
+
 const CONTENT_TABLES = [
   'documents',
   'blocks',
@@ -219,7 +234,10 @@ export class LocalStore {
     const ctx: WriteContext = { touched: new Map() }
     // The scope must be an `async` function: Dexie only then tracks native awaits and keeps the
     // transaction alive across them (otherwise it may commit early).
-    const result = await this.db.transaction('rw', CONTENT_TABLES, async () => {
+    const result = await this.db.transaction('rw', [...CONTENT_TABLES, 'meta'], async () => {
+      if (await this.db.meta.get(TAKEOVER_META_KEY)) {
+        throw new ReadOnlyWorkspaceError('These pages are being moved into an account')
+      }
       const value = await fn(ctx)
       await this.persistTouched(ctx)
       return value
@@ -397,6 +415,8 @@ export class LocalStore {
 
   /** Creates a page with one empty paragraph so the editor always has a block to type into. */
   async createDocument(input: {
+    /** Client-chosen id, e.g. so an interrupted takeover creates its parent page once (ADR 0023). */
+    id?: string
     workspaceId: string
     parentId?: string | null
     title?: string
@@ -412,7 +432,7 @@ export class LocalStore {
       }
       const now = this.now()
       const document = documentSchema.parse({
-        id: newId(),
+        id: input.id ?? newId(),
         workspaceId: input.workspaceId,
         parentId,
         title: input.title ?? '',
@@ -1997,6 +2017,111 @@ export class LocalStore {
         return { documents, blocks, tags, documentTags, attachments }
       },
     )
+  }
+
+  /**
+   * Takes over a page of the local area into a workspace of this account (ADR 0023): same ids,
+   * new operations of this device, in one transaction. A page of the local area's root goes
+   * below `parentId`. Returns false when the page is already here (interrupted takeover resumed).
+   */
+  async takeOverPage(
+    page: TakeoverPage,
+    workspaceId: string,
+    parentId: string | null,
+  ): Promise<boolean> {
+    return this.write(async (ctx) => {
+      if (await this.db.documents.get(page.document.id)) return false
+      const { cover, ...source } = page.document
+      const document = documentSchema.parse({
+        ...source,
+        workspaceId,
+        // A parent that did not come along (not active in the local area) is replaced too.
+        parentId:
+          source.parentId && (await this.db.documents.get(source.parentId))
+            ? source.parentId
+            : parentId,
+        revision: null,
+        deletedAt: null,
+      } satisfies Document)
+      await this.db.documents.add(document)
+      await this.enqueue(workspaceId, 'document', document.id, 'create', null, {
+        parentId: document.parentId,
+        title: document.title,
+        sortKey: document.sortKey,
+        favorite: document.favorite,
+        ...(document.icon ? { icon: document.icon } : {}),
+        createdAt: document.createdAt,
+      })
+      for (const { attachment: item, data } of page.attachments) {
+        const attachment = attachmentSchema.parse({
+          ...item,
+          workspaceId,
+          revision: null,
+          deletedAt: null,
+        })
+        await this.db.attachments.add(attachment)
+        if (data) await this.db.attachmentContents.put({ id: attachment.id, data, uploaded: false })
+        await this.enqueue(workspaceId, 'attachment', attachment.id, 'create', null, {
+          documentId: attachment.documentId,
+          name: attachment.name,
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+          sha256: attachment.sha256,
+          createdAt: attachment.createdAt,
+        })
+      }
+      // The server accepts a cover image only once its attachment exists (#136).
+      if (cover) {
+        await this.db.documents.update(document.id, { cover })
+        await this.enqueue(workspaceId, 'document', document.id, 'update', null, { cover })
+      }
+      for (const item of page.blocks) {
+        const block = blockSchema.parse({ ...item, revision: null, deletedAt: null })
+        await this.db.blocks.add(block)
+        await this.enqueue(workspaceId, 'block', block.id, 'create', null, {
+          documentId: block.documentId,
+          type: block.type,
+          content: block.content,
+          attrs: block.attrs,
+          sortKey: block.sortKey,
+        })
+        await this.updateLinks(block, document)
+      }
+      // Tags with the same name are reused (case-insensitive), as when adding a tag by name.
+      const tags = await this.listTags(workspaceId)
+      const assigned = new Set<string>()
+      for (const assignment of page.documentTags) {
+        const local = page.tags.find((tag) => tag.id === assignment.tagId)
+        if (!local) continue
+        let tag = tags.find(
+          (existing) => existing.name.toLocaleLowerCase() === local.name.toLocaleLowerCase(),
+        )
+        if (!tag) {
+          tag = tagSchema.parse({ ...local, workspaceId, revision: null, deletedAt: null })
+          await this.db.tags.add(tag)
+          await this.enqueue(workspaceId, 'tag', tag.id, 'create', null, { name: tag.name })
+          tags.push(tag)
+        }
+        // Two local tags that differ only in case end up as one tag here.
+        if (assigned.has(tag.id)) continue
+        assigned.add(tag.id)
+        const created: DocumentTag = {
+          id: assignment.id,
+          workspaceId,
+          documentId: document.id,
+          tagId: tag.id,
+          revision: null,
+          deletedAt: null,
+        }
+        await this.db.documentTags.add(created)
+        await this.enqueue(workspaceId, 'document_tag', created.id, 'create', null, {
+          documentId: created.documentId,
+          tagId: created.tagId,
+        })
+      }
+      this.mark(ctx, workspaceId, document.id)
+      return true
+    })
   }
 
   async getAttachment(id: string): Promise<Attachment | undefined> {

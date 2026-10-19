@@ -103,7 +103,11 @@ Nach [ADR 0023](../adr/0023-local-area-without-account.md): lokaler Bereich ohne
 | T-LOCAL-02 | Kein Server erreichbar, auch als installierte App offline | Start im lokalen Bereich, Inhalte nach Neuladen da, Hinweis „Nur auf diesem Gerät“ mit „Anmelden“ | – | ☑ ²⁵ |
 | T-LOCAL-03 | Abmelden | Anmeldung erscheint, auch nach Neuladen; „Ohne Konto weiterarbeiten“ öffnet den lokalen Bereich | – | ☑ ²⁵ |
 | T-LOCAL-04 | Export ohne Konto | Markdown, JSON und ZIP aus dem lokalen Bereich | – | ☑ ²⁵ |
-| T-LOCAL-05 | Login mit lokalen Seiten (neues Konto, bestehendes Konto mit Seiten, Abbruch mittendrin) | Übernahme ohne Verlust und ohne Doppel, Dialog „Wohin mit deinen Seiten?“ nur bei vorhandenen Seiten | – | ☐ (#182) |
+| T-LOCAL-05 | Login mit lokalen Seiten (neues Konto, bestehendes Konto mit Seiten, Abbruch mittendrin) | Übernahme ohne Verlust und ohne Doppel, Dialog „Wohin mit deinen Seiten?“ nur bei vorhandenen Seiten | – | ☑ ²⁶ |
+| T-LOCAL-06 | Login ohne lokale Seiten | Kein Dialog, keine Übernahme, der leere lokale Bereich wird verworfen | – | ☑ ²⁶ |
+| T-LOCAL-07 | Ziel nur mit Recht `reader`/`commenter` | Nicht auswählbar; erzwungen schreibt die Übernahme nichts | – | ☑ ²⁶ |
+| T-LOCAL-08 | Server lehnt Teile ab (z. B. Kontingent für Anhänge) | Lokaler Bereich bleibt als Sicherung, Ansicht „vom Server abgelehnt“; erst nach Bestätigung von allem wird er gelöscht | – | ☑ ²⁶ |
+| T-LOCAL-09 | Nach der Übernahme abmelden, „Ohne Konto weiterarbeiten“ | Neuer, leerer lokaler Bereich; die Seiten sind im Konto | – | ☑ ²⁶ |
 
 ## Teilen & Rechte
 
@@ -169,3 +173,5 @@ Geplant mit [ADR 0016](../adr/0016-opt-in-telemetry.md) (`Proposed`, [#109](http
 ²⁴ Server: `packages/contract-tests/test/share-links.test.ts`, Link-Verwaltung in der Rollenmatrix von `test/sharing.test.ts`. Client: `apps/web/e2e/share-links.spec.ts` (Link anlegen, als Gast ohne Konto öffnen, widerrufen), `apps/web/src/editor/inline-dom.test.ts` (Seitenlinks als Text).
 
 ²⁵ `apps/web/e2e/without-account.spec.ts`, Offline-Start der installierten App in `e2e/pwa-offline.spec.ts`; Startmodus in `src/session.test.ts`, lokaler Workspace in `src/local/store.test.ts`.
+
+²⁶ `apps/web/e2e/takeover.spec.ts` (Registrierung mit zweitem Gerät, bestehendes Konto, neuer Workspace, ohne lokale Seiten); Wiederaufnahme, ID-Kollision, Tags, Anhänge, Leserechte, Bestätigung und Kontingent in `src/local/takeover.test.ts`.

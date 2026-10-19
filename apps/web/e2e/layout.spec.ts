@@ -52,3 +52,30 @@ test('the page menu holds history, export and delete; the header shows the last 
   await page.keyboard.press('Escape')
   await expect(page.getByRole('button', { name: 'Löschen' })).toBeHidden()
 })
+
+test('top-level pages line up with the other entries; the arrow shows on hover (#203)', async ({
+  signedIn: page,
+}) => {
+  await newPage(page, 'Oben')
+  const sidebar = page.getByRole('complementary', { name: 'Navigation' })
+  const recent = sidebar.getByRole('region', { name: 'Zuletzt bearbeitet' }).getByRole('link')
+  const node = page.getByRole('treeitem', { name: /Oben/ })
+  const icon = node.locator('.tree-icon').first()
+  await expect(icon).toBeVisible()
+  // The tree icon starts where the text of "Zuletzt bearbeitet" starts (8 px padding).
+  const iconBox = (await icon.boundingBox())!
+  const recentBox = (await recent.first().boundingBox())!
+  expect(Math.abs(iconBox.x - (recentBox.x + 8))).toBeLessThan(6)
+
+  const before = page.url()
+  await node.locator('.tree-row').hover()
+  await node.getByRole('button', { name: 'Unterseite anlegen' }).click()
+  await page.waitForURL((url) => url.href !== before)
+  await page.getByLabel('Titel').fill('Darunter')
+  const parentRow = node.locator('.tree-row').first()
+  await page.getByLabel('Titel').click()
+  await expect(parentRow.locator('.tree-arrow')).toBeHidden()
+  await parentRow.hover()
+  await expect(parentRow.locator('.tree-arrow')).toBeVisible()
+  await expect(parentRow.locator('.tree-icon')).toBeHidden()
+})

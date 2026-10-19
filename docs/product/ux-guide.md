@@ -18,12 +18,15 @@ Die Produktprinzipien gelten unverändert: Jede Bedienung funktioniert offline, 
 
 | Muster (wie in Notion) | Unsere Umsetzung | Stand |
 | --- | --- | --- |
-| Seitenleiste links: Suche, Favoriten, Seitenbaum, Papierkorb, Einstellungen unten | `WorkspaceLayout.vue`, `composables/sidebar.ts` | umgesetzt: einklappbar (`Strg/⌘ + \`), Breite per Ziehen oder Pfeiltasten am Rand, beides pro Gerät gemerkt; schmal als Overlay (#132) |
-| Seitenbaum mit Auf-/Zuklappen, „+“ bei Hover für eine Unterseite, Ziehen zum Verschieben | `TreeNode.vue` | vorhanden |
+| Seitenleiste links: Suche, Favoriten, Seitenbaum, Papierkorb, Einstellungen unten | `WorkspaceLayout.vue`, `composables/sidebar.ts` | umgesetzt: einklappbar (`Strg/⌘ + \`), Breite per Ziehen oder Pfeiltasten am Rand, beides pro Gerät gemerkt; schmal als Overlay mit Abdunkelung; Tippen daneben, `Esc` oder Wischen nach links schließt, der Fokus bleibt solange in der Seitenleiste (#132, #201). Einstellungen, Mitglieder, Papierkorb, Export & Import und Tastenkürzel als Einträge mit Icon (`NavIcon.vue`, #195) |
+| Workspace-Menü oben links: wechseln, anlegen, Einstellungen, abmelden | `WorkspaceMenu.vue`, `LogoutDialog.vue`; `role="menu"`, Pfeiltasten, `Esc` | umgesetzt (#196); ohne Konto: „Auf diesem Gerät“ und „Anmelden“ |
+| Status unauffällig, Hinweise nur bei Bedarf | `SyncStatus.vue`: **eine** Zeile mit Punkt und Kurztext („Synchronisiert“, „3 Änderungen warten“, „Offline“, „Nur auf diesem Gerät“), Klick öffnet Details und „Jetzt synchronisieren“. Speicherhinweis erst mit Inhalt und einmal wegklickbar; Konflikte und abgelehnte Änderungen bleiben rot sichtbar | umgesetzt (#195) |
+| Seitenbaum mit Auf-/Zuklappen, „+“ bei Hover für eine Unterseite, Ziehen zum Verschieben | `TreeNode.vue`: vor dem Titel das Seiten-Icon (Emoji oder Standard-Icon), bei Hover bzw. Fokus an seiner Stelle der Pfeil; oberste Ebene bündig mit den übrigen Einträgen | vorhanden; Icon-Spalte (#203) |
 | Zentrierte Inhaltsspalte, großer Seitentitel, viel Weißraum | `.page`, `--content-width` | vorhanden |
 | Kopfzeile mit Breadcrumbs und Seitenmenü | `PageView.vue` | umgesetzt: „Bearbeitet …“, Favorit, Seitenmenü ⋯ (Unterseite, Verlauf, Export, Löschen) (#132) |
 | Steuerelemente erscheinen erst bei Hover bzw. Fokus | Blockgriff ⋮⋮ (Klick: Menü mit Umwandeln, Duplizieren, Link kopieren, Verschieben, Löschen; Ziehen: verschieben), „+“ im Baum | umgesetzt (#132/#133) |
 | `/` öffnet ein Menü für Blocktypen, Markdown-Kürzel beim Tippen | `SlashMenu.vue`: leerer Block wird umgewandelt, sonst neuer Block danach; Kürzel `#`, `-`, `1.`, `>`, ```` ``` ```` | umgesetzt (#133) |
+| Inline-Markdown wird beim Tippen zu Formatierung | `editor/inline-shortcuts.ts`: `**fett**`, `_kursiv_`/`*kursiv*`, `` `Code` ``, `[Text](url)`; ein `Strg/⌘ + Z` direkt danach lässt die Zeichen stehen; gespeichert wird weiter Markdown-Inline (ADR 0008) | umgesetzt (#194) |
 | Schnellsuche mit `Strg/⌘+K` bzw. `Strg/⌘+P` | `CommandPalette.vue`: zuletzt besuchte Seiten, lokale Volltextsuche (offline), Befehle | umgesetzt (#134) |
 | To-do, Toggle, Callout, Trenner | neue Blocktypen ([ADR 0019](../adr/0019-block-types.md)); Kürzel `[] ` und `---`, Toggle eingeklappt pro Gerät | umgesetzt (#135) |
 | Seiten-Icons (Emoji) und Titelbilder | Felder `icon`/`cover` der Seite; Emoji-Auswahl offline (`IconPicker.vue`), Titelbild als Farbverlauf oder Bild-Anhang (`PageCover.vue`) | umgesetzt (#136) |
@@ -39,7 +42,7 @@ Alle Farben, Abstände, Schriftgrößen, Radien und Schatten sind CSS-Variablen 
 
 | Gruppe | Variablen |
 | --- | --- |
-| Farbe | `--bg`, `--surface`, `--sidebar`, `--text`, `--muted`, `--border`, `--accent`, `--on-accent`, `--error`, `--ok`, `--warn`, `--hover`, `--code-bg` |
+| Farbe | `--bg`, `--surface`, `--sidebar`, `--text`, `--muted`, `--border`, `--accent`, `--on-accent`, `--error`, `--ok`, `--warn`, `--hover`, `--code-bg`, `--backdrop` (hinter Dialogen), `--scrim` (hinter der Seitenleiste auf schmalen Bildschirmen) |
 | Schatten | `--shadow-popover` (Menüs), `--shadow-toast` (Hinweise am Rand) |
 | Abstand | `--space-2xs` (0,15 rem) · `--space-xs` (0,3) · `--space-sm` (0,5) · `--space-md` (0,75) · `--space-lg` (1) · `--space-xl` (1,5) · `--space-2xl` (2) · `--space-3xl` (3) · `--space-4xl` (4) · `--space-5xl` (6) |
 | Schrift | `--font-sans` (Systemschrift), `--text-xs`, `--text-sm`, `--text-lg`, `--text-xl`, `--text-2xl`, `--text-title` |
@@ -51,7 +54,7 @@ Neue Werte erst als Token anlegen, dann verwenden. Die Systemschrift ist Absicht
 ## Hell und dunkel
 
 - Standard: wie das System (`prefers-color-scheme`).
-- Manuell: Konto → Darstellung, oder `Strg/⌘ + Umschalt + L` (#134). Die Wahl gilt pro Gerät und Browser (`localStorage`) und wird vor dem ersten Zeichnen angewendet (`initTheme` in `main.ts`).
+- Manuell: Einstellungen → Darstellung, oder `Strg/⌘ + Umschalt + L` (#134). Die Wahl gilt pro Gerät und Browser (`localStorage`) und wird vor dem ersten Zeichnen angewendet (`initTheme` in `main.ts`).
 - Technisch: `data-theme="light"` bzw. `"dark"` auf `<html>`. Die dunklen Werte stehen einmal für die Systemeinstellung und einmal für die manuelle Wahl; beide Blöcke müssen gleich bleiben.
 
 ## Tastenkürzel
@@ -60,7 +63,7 @@ Wie in Notion, Übersicht in der App mit `Strg/⌘ + /` (`SHORTCUT_OVERVIEW` in 
 
 | Kürzel | Aktion | Konflikt mit dem Browser |
 | --- | --- | --- |
-| `Strg/⌘ + K` | Schnellsuche; im Text: Link auf eine Seite | Chrome/Firefox: Websuche in der Adressleiste – die App übernimmt es, wie Notion |
+| `Strg/⌘ + K` | Schnellsuche, auch im Text; mit markiertem Text: Link einfügen (#197) | Chrome/Firefox: Websuche in der Adressleiste – die App übernimmt es, wie Notion |
 | `Strg/⌘ + P` | Schnellsuche, auch im Text | Drucken – die App übernimmt es, wie Notion; Drucken über das Browser-Menü |
 | `Strg/⌘ + N` | Neue Seite | Chrome und Firefox geben es Webseiten nicht (neues Fenster). Ersatz: `Strg/⌘ + Alt + N`; in der installierten App je nach Browser auch `Strg/⌘ + N` |
 | `Strg/⌘ + \` | Seitenleiste ein-/ausblenden | keiner |
@@ -80,4 +83,5 @@ Wie in Notion, Übersicht in der App mit `Strg/⌘ + /` (`SHORTCUT_OVERVIEW` in 
 
 - Was nur bei Hover erscheint, erscheint auch bei Tastaturfokus (`:focus-visible`, `:focus-within`).
 - Jede Aktion ist per Tastatur erreichbar; Menüs schließen mit `Esc`.
+- Hinweise auf Tastenkürzel nur auf Geräten mit Maus bzw. Trackpad (`(hover: hover) and (pointer: fine)`, `composables/media.ts`), nicht auf Touch-Geräten (#201).
 - Icons ohne Text haben ein `aria-label`.

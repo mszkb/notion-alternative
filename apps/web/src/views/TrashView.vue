@@ -2,12 +2,11 @@
 import { useRouter } from 'vue-router'
 import { useLiveQuery } from '../composables/live-query'
 import { displayTitle, useWorkspace } from '../composables/workspace'
+import { formatDateTime } from '../format'
 
 const { store, workspaceId, readOnly } = useWorkspace()
 const router = useRouter()
 const trashed = useLiveQuery(() => store.trashedDocuments(workspaceId.value), [], workspaceId)
-const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
-
 async function restore(id: string) {
   await store.restoreDocument(id)
   await router.push({ name: 'page', params: { workspaceId: workspaceId.value, documentId: id } })
@@ -28,9 +27,7 @@ async function restore(id: string) {
       <li v-for="document in trashed" :key="document.id">
         <span>
           <strong>{{ displayTitle(document) }}</strong>
-          <small class="muted">
-            gelöscht {{ dateFormat.format(new Date(document.deletedAt!)) }}
-          </small>
+          <small class="muted"> gelöscht {{ formatDateTime(document.deletedAt!) }} </small>
         </span>
         <button v-if="!readOnly" type="button" @click="restore(document.id)">
           Wiederherstellen

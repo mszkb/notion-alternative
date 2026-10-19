@@ -11,10 +11,15 @@ Wichtig: Löscht man die Website-Daten des Browsers, sind die Seiten weg. Wer oh
 
 ## Später anmelden
 
-Unten in der Seitenleiste auf **Anmelden** klicken und ein Konto anlegen bzw. sich anmelden.
+Unten in der Seitenleiste auf **Anmelden** klicken und ein Konto anlegen bzw. sich anmelden. Die Seiten von diesem Gerät kommen dabei mit ins Konto, mit Unterseiten, Tags, Favoriten, Icons, Titelbildern und Anhängen. Seiten im Papierkorb bleiben zurück.
 
-> Noch in Arbeit ([#182](https://github.com/mszkb/notion-alternative/issues/182)): Beim Anmelden werden die Seiten von diesem Gerät ins Konto übernommen. Bis dahin bleiben sie im Bereich „Auf diesem Gerät“ und gehen nicht verloren. Du erreichst ihn wieder über Abmelden → **Ohne Konto weiterarbeiten**.
+- **Neues Konto** (oder ein Konto ohne Seiten): Die Seiten kommen ohne Rückfrage in deinen Workspace.
+- **Konto mit Seiten:** Die App fragt **„Wohin mit deinen Seiten?“**. Du wählst einen bestehenden Workspace, in dem du bearbeiten darfst, oder legst einen neuen an. In einem bestehenden Workspace landen die Seiten unter einer neuen Seite **„Von diesem Gerät (Datum)“**, damit nichts durcheinanderkommt; was dort schon ist, bleibt unverändert.
+
+Danach zeigt die App, wie viele Seiten übernommen wurden, und synchronisiert sie wie jede andere Änderung, auch später, falls gerade keine Verbindung besteht. Wird die Übernahme unterbrochen (Tab geschlossen, Absturz), geht sie beim nächsten Öffnen weiter, ohne dass Seiten doppelt entstehen.
+
+Lehnt der Server etwas ab, etwa weil der Speicherplatz für Anhänge voll ist, steht das unter **„Vom Server abgelehnt“**. Die Seiten bleiben auf diesem Gerät erhalten.
 
 ## Nach dem Abmelden
 
-Nach dem Abmelden zeigt die App die Anmeldung. Mit **Ohne Konto weiterarbeiten** arbeitest du wieder im Bereich „Auf diesem Gerät“.
+Nach dem Abmelden zeigt die App die Anmeldung. Mit **Ohne Konto weiterarbeiten** arbeitest du wieder im Bereich „Auf diesem Gerät“. Wurden die Seiten schon ins Konto übernommen, beginnt der Bereich leer.

@@ -149,7 +149,7 @@ Der Server steht auf dem Stand des Backups. Was danach auf dem Server geschah, i
 
 - **Konten und Passwörter:** Nach dem Backup angelegte Konten fehlen, nach dem Backup geänderte Passwörter gelten wieder in der alten Fassung.
 - **Sitzungen:** Sitzungen aus der Zeit vor dem Backup sind wieder gültig, spätere nicht; betroffene Geräte melden sich neu an (lokale Daten bleiben).
-- **Geräte:** Nach dem Backup registrierte Geräte melden sich beim nächsten Online-Start automatisch wieder an. Nach dem Backup **entfernte** Geräte sind wieder aktiv: auf der Kontoseite erneut entfernen.
+- **Geräte:** Nach dem Backup registrierte Geräte melden sich beim nächsten Online-Start automatisch wieder an. Nach dem Backup **entfernte** Geräte sind wieder aktiv: in den Einstellungen (Konto & Sicherheit → Geräte) erneut entfernen.
 - **Push:** VAPID-Schlüssel und Subscriptions stammen aus dem Backup; nach dem Backup aktivierte Benachrichtigungen auf dem Gerät erneut einschalten.
 
 ### Clients nach einem Restore

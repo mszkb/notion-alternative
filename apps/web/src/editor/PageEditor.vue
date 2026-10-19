@@ -28,6 +28,7 @@ import { registerPendingEdits } from '../pending-edits'
 import AttachmentBlock from './AttachmentBlock.vue'
 import { EditHistory } from './history'
 import { renderInline, serializeDom } from './inline-dom'
+import { CLOSING_CHARACTERS, matchInlineShortcut } from './inline-shortcuts'
 import PagePicker, { type PickerChoice } from './PagePicker.vue'
 import { opensSlashMenu, type SlashOption } from './slash'
 import SlashMenu from './SlashMenu.vue'
@@ -970,8 +971,13 @@ function onInput(block: Block, event: Event) {
     autosize(el)
   } else {
     el.classList.toggle('is-empty', textLength(el) === 0)
+    leaveFormatted()
     if (applyShortcut(block, el)) return
     const input = event as InputEvent
+    if (applyInlineShortcut(el, input)) {
+      scheduleSave(block.id)
+      return
+    }
     if (input.inputType === 'insertText' && input.data === '[' && textBeforeCaret(2) === '[[') {
       openPicker(block, el, 'page', 2)
     } else if (
@@ -983,6 +989,77 @@ function onInput(block: Block, event: Event) {
     }
   }
   scheduleSave(block.id)
+}
+
+/**
+ * Turns just-closed inline Markdown into formatting (#194). The typed characters are recorded
+ * first, so a single undo right after brings them back as text.
+ */
+function applyInlineShortcut(el: HTMLElement, input: InputEvent): boolean {
+  if (input.inputType !== 'insertText' || !input.data) return false
+  if (!CLOSING_CHARACTERS.has(input.data[input.data.length - 1]!)) return false
+  const selection = document.getSelection()
+  const node = selection?.anchorNode
+  if (!selection?.isCollapsed || !node || node.nodeType !== 3 || !el.contains(node)) return false
+  const container = node.parentElement
+  // Nothing converts inside inline code; links do not nest.
+  if (container?.closest('code')) return false
+  const text = node as Text
+  const offset = selection.anchorOffset
+  const match = matchInlineShortcut(text.data.slice(0, offset))
+  if (!match || (match.kind === 'link' && container?.closest('a'))) return false
+
+  checkpoint()
+  const tag = { bold: 'strong', italic: 'em', code: 'code', link: 'a' } as const
+  const formatted = document.createElement(tag[match.kind])
+  formatted.textContent = match.text
+  if (match.href) {
+    const anchor = formatted as HTMLAnchorElement
+    anchor.href = match.href
+    anchor.rel = 'noopener noreferrer'
+    anchor.target = '_blank'
+  }
+  const range = document.createRange()
+  range.setStart(text, match.start)
+  range.setEnd(text, offset)
+  range.deleteContents()
+  range.insertNode(formatted)
+  const caret = document.createRange()
+  caret.setStartAfter(formatted)
+  caret.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(caret)
+  formattedTail = { el: formatted, text: match.text }
+  return true
+}
+
+/** Element just created by an inline shortcut; typing goes on as plain text after it. */
+let formattedTail: { el: HTMLElement; text: string } | null = null
+
+/**
+ * Browsers put text typed at the end of an inline element into it. Right after a conversion
+ * that text belongs after the element, like in Notion.
+ */
+function leaveFormatted() {
+  const tail = formattedTail
+  formattedTail = null
+  const content = tail?.el.textContent ?? ''
+  if (!tail?.el.isConnected || content === tail.text || !content.startsWith(tail.text)) return
+  const typed = content.slice(tail.text.length)
+  tail.el.textContent = tail.text
+  let next = tail.el.nextSibling
+  if (next?.nodeType === 3) {
+    ;(next as Text).insertData(0, typed)
+  } else {
+    next = document.createTextNode(typed)
+    tail.el.after(next)
+  }
+  const caret = document.createRange()
+  caret.setStart(next, typed.length)
+  caret.collapse(true)
+  const selection = document.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(caret)
 }
 
 function textBeforeCaret(length: number): string {
@@ -1065,7 +1142,9 @@ function onKeydown(block: Block, event: KeyboardEvent) {
       scheduleSave(block.id)
       return
     }
-    if (key === 'k') {
+    // Like Notion (#197): with selected text Ctrl/⌘+K links it; without a selection the event
+    // goes on to the quick search (WorkspaceLayout).
+    if (key === 'k' && hasTextSelection(el)) {
       event.preventDefault()
       openPicker(block, el, 'link', 0)
       return
@@ -1214,6 +1293,14 @@ const picker = ref<{
   remove: number
   position: { top: number; left: number }
 } | null>(null)
+
+/** Whether a non-empty part of `el` is selected. */
+function hasTextSelection(el: HTMLElement): boolean {
+  const selection = document.getSelection()
+  if (!selection?.rangeCount || selection.isCollapsed) return false
+  const range = selection.getRangeAt(0)
+  return el.contains(range.commonAncestorContainer) && range.toString().length > 0
+}
 
 function openPicker(block: Block, el: HTMLElement, mode: 'page' | 'link', remove: number) {
   const selection = document.getSelection()

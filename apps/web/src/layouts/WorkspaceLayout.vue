@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import type { Document, ServerSearchHit } from '@notion-alt/shared'
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import TreeNode from '../components/TreeNode.vue'
 import { useLiveQuery } from '../composables/live-query'
+import { FINE_POINTER, NARROW, useMediaQuery } from '../composables/media'
 import CommandPalette from '../components/CommandPalette.vue'
+import NavIcon from '../components/NavIcon.vue'
 import ShortcutsDialog from '../components/ShortcutsDialog.vue'
+import SyncStatus from '../components/SyncStatus.vue'
+import WorkspaceMenu from '../components/WorkspaceMenu.vue'
 import { loadRecentPages, rememberVisit } from '../composables/recent-pages'
 import {
   setSidebarCollapsed,
@@ -37,12 +41,12 @@ import {
   workspaces,
   workspaceSearch,
 } from '../local/context'
-import type { SearchHit } from '../local/search'
-import { connection, currentUser, refreshSession } from '../session'
+import { type SearchHit, withoutMarkdownMarkers } from '../local/search'
+import { connection, refreshSession } from '../session'
 import { onPushHint } from '../pwa'
-import { onSyncHint, requestSync, syncState } from '../sync/engine'
+import { onSyncHint, requestSync } from '../sync/engine'
 import { DEFAULT_TRIGGERS, startSyncTriggers } from '../sync/triggers'
-import { isTextTarget, shortcutFor } from '../shortcuts'
+import { shortcutFor } from '../shortcuts'
 import { ROLE_LABELS } from '../sharing'
 import { toggleTheme } from '../theme'
 
@@ -248,62 +252,121 @@ async function syncNow() {
   await recheck()
 }
 
-const timeFormat = new Intl.DateTimeFormat('de-DE', { timeStyle: 'short' })
-
-/** One line telling whether local data is on the server. */
-const syncLabel = computed(() => {
-  if (connection.value !== 'online') return null
-  const resync = syncState.value.resync
-  if (resync) {
-    const percent = resync.total ? Math.floor((resync.done / resync.total) * 100) : 0
-    return `Neu synchronisieren… ${percent} %`
-  }
-  if (syncState.value.running) return 'Synchronisiert…'
-  if (syncState.value.lastError) return 'Synchronisierung fehlgeschlagen – neuer Versuch folgt'
-  if (pending.value > withIssues.value.length) return 'Änderungen ausstehend'
-  const at = syncState.value.lastSyncAt
-  return at ? `Synchronisiert um ${timeFormat.format(new Date(at))}` : 'Noch nicht synchronisiert'
-})
-
 function markOffline() {
   // Without an account there is no server to lose.
   if (connection.value !== 'local') connection.value = 'offline'
 }
 
-const connectionLabel = computed(
-  () =>
-    ({
-      online: 'Server verbunden',
-      offline: 'Offline – lokale Daten',
-      expired: 'Sitzung abgelaufen',
-      local: 'Nur auf diesem Gerät',
-    })[connection.value],
-)
+// ---------------------------------------------------------------- storage hint (#195)
 
-const persistenceLabel = computed(
+const PERSISTENCE_HINT_KEY = 'notion-alt.persistenceHintDismissed'
+function readHintDismissed(): boolean {
+  try {
+    return localStorage.getItem(PERSISTENCE_HINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const persistenceHintDismissed = ref(readHintDismissed())
+/**
+ * The browser may delete local data under storage pressure. Say so once there is something to
+ * lose; after dismissing it the state stays in the status details and the settings.
+ */
+const showPersistenceHint = computed(
   () =>
-    ({
-      persisted: 'Speicher dauerhaft',
-      'not-persisted': 'Speicher nicht dauerhaft',
-      unsupported: 'Dauerhafter Speicher nicht unterstützt',
-      unknown: 'Speicherstatus unbekannt',
-    })[persistence.value],
+    persistence.value === 'not-persisted' &&
+    !persistenceHintDismissed.value &&
+    documents.value.length > 0,
 )
+function dismissPersistenceHint() {
+  persistenceHintDismissed.value = true
+  try {
+    localStorage.setItem(PERSISTENCE_HINT_KEY, '1')
+  } catch {
+    // Private mode: hidden for this visit only.
+  }
+}
 
+// ---------------------------------------------------------------- sidebar (#132, #201)
+
+const narrow = useMediaQuery(NARROW)
+/** Shortcut hints only where there is a keyboard. */
+const keyboard = useMediaQuery(FINE_POINTER, true)
 const sidebarOpen = ref(false)
+/** The sidebar lies over the content (narrow screens). */
+const overlay = computed(() => narrow.value && sidebarOpen.value)
+const sidebar = ref<HTMLElement | null>(null)
+const sidebarToggle = ref<HTMLButtonElement | null>(null)
+
 watch(
   () => route.fullPath,
-  () => (sidebarOpen.value = false),
+  () => closeSidebar(false),
 )
+watch(narrow, (isNarrow) => {
+  if (!isNarrow) sidebarOpen.value = false
+})
 
-// ---------------------------------------------------------------- sidebar (#132)
+async function openSidebar() {
+  sidebarOpen.value = true
+  await nextTick()
+  focusables()[0]?.focus()
+}
 
-const NARROW = '(max-width: 760px)'
+function closeSidebar(returnFocus = true) {
+  if (!sidebarOpen.value) return
+  sidebarOpen.value = false
+  if (returnFocus) void nextTick(() => sidebarToggle.value?.focus())
+}
 
 /** Ctrl/⌘ + \ shows or hides the sidebar; on narrow screens it opens the overlay. */
 function toggleSidebar() {
-  if (globalThis.matchMedia?.(NARROW).matches) sidebarOpen.value = !sidebarOpen.value
-  else setSidebarCollapsed(!sidebarCollapsed.value)
+  if (narrow.value) {
+    if (sidebarOpen.value) closeSidebar()
+    else void openSidebar()
+  } else setSidebarCollapsed(!sidebarCollapsed.value)
+}
+
+function focusables(): HTMLElement[] {
+  const selector = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]'
+  return [...(sidebar.value?.querySelectorAll<HTMLElement>(selector) ?? [])].filter(
+    (el) => el.offsetParent !== null,
+  )
+}
+
+/** While the overlay is open, Esc closes it and Tab stays inside (#201). */
+function onSidebarKeydown(event: KeyboardEvent) {
+  if (!overlay.value) return
+  if (event.key === 'Escape' && !event.defaultPrevented) {
+    event.preventDefault()
+    closeSidebar()
+  } else if (event.key === 'Tab') {
+    const items = focusables()
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (!first || !last) return
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+}
+
+/** Swiping the overlay to the left closes it. */
+let touchStart: { x: number; y: number } | null = null
+function onTouchStart(event: TouchEvent) {
+  const touch = event.touches[0]
+  touchStart = overlay.value && touch ? { x: touch.clientX, y: touch.clientY } : null
+}
+function onTouchEnd(event: TouchEvent) {
+  const touch = event.changedTouches[0]
+  if (!touchStart || !touch) return
+  const dx = touch.clientX - touchStart.x
+  const dy = touch.clientY - touchStart.y
+  touchStart = null
+  if (dx < -60 && Math.abs(dx) > Math.abs(dy)) closeSidebar()
 }
 
 // ---------------------------------------------------------------- shortcuts, quick search (#134)
@@ -312,7 +375,7 @@ const paletteOpen = ref(false)
 const shortcutsOpen = ref(false)
 
 function onShortcut(event: KeyboardEvent) {
-  const command = shortcutFor(event, isTextTarget(event.target))
+  const command = shortcutFor(event)
   if (!command) return
   event.preventDefault()
   if (command === 'palette') {
@@ -380,14 +443,22 @@ const shellStyle = computed(() => ({
     :style="shellStyle"
   >
     <button
+      ref="sidebarToggle"
       type="button"
       class="sidebar-toggle"
       :aria-expanded="sidebarOpen"
       aria-controls="sidebar"
-      @click="sidebarOpen = !sidebarOpen"
+      @click="toggleSidebar"
     >
       ☰ <span class="visually-hidden">Navigation</span>
     </button>
+    <div
+      v-if="overlay"
+      class="sidebar-scrim"
+      aria-hidden="true"
+      data-testid="sidebar-scrim"
+      @click="closeSidebar()"
+    ></div>
     <button
       v-if="sidebarCollapsed"
       type="button"
@@ -400,18 +471,24 @@ const shellStyle = computed(() => ({
       »
     </button>
 
-    <aside id="sidebar" class="sidebar" aria-label="Navigation">
+    <aside
+      id="sidebar"
+      ref="sidebar"
+      class="sidebar"
+      aria-label="Navigation"
+      @keydown="onSidebarKeydown"
+      @touchstart.passive="onTouchStart"
+      @touchend="onTouchEnd"
+    >
       <header class="sidebar-header">
-        <RouterLink class="workspace-name" :to="{ name: 'home', query: { choose: '1' } }">
-          {{ workspace?.name ?? 'Workspace' }}
-        </RouterLink>
+        <WorkspaceMenu :workspace-id="workspaceId" />
         <button
           type="button"
           class="icon sidebar-collapse"
           aria-label="Seitenleiste ausblenden"
-          title="Seitenleiste ausblenden (Strg/⌘ + \)"
+          :title="keyboard ? 'Seitenleiste ausblenden (Strg/⌘ + \\)' : 'Seitenleiste ausblenden'"
           data-testid="sidebar-collapse"
-          @click="setSidebarCollapsed(true)"
+          @click="narrow ? closeSidebar() : setSidebarCollapsed(true)"
         >
           «
         </button>
@@ -421,7 +498,7 @@ const shellStyle = computed(() => ({
         v-model="query"
         class="search"
         type="search"
-        placeholder="Suchen… (Strg/⌘ + K)"
+        :placeholder="keyboard ? 'Suchen… (Strg/⌘ + K)' : 'Suchen…'"
         aria-label="Seiten durchsuchen"
         @keydown.enter="hits[0] && openHit(hits[0])"
         @keydown.escape="query = ''"
@@ -453,7 +530,9 @@ const shellStyle = computed(() => ({
             <li v-for="hit in extraServerHits" :key="hit.documentId">
               <button type="button" class="nav-item" @click="openServerHit(hit)">
                 <strong>{{ hit.title || 'Unbenannt' }}</strong>
-                <small v-if="hit.snippet" class="muted">{{ hit.snippet }}</small>
+                <small v-if="hit.snippet" class="muted">{{
+                  withoutMarkdownMarkers(hit.snippet)
+                }}</small>
               </button>
             </li>
           </ul>
@@ -524,48 +603,40 @@ const shellStyle = computed(() => ({
         </section>
       </template>
 
+      <nav class="nav-section nav-tools" aria-label="Werkzeuge">
+        <ul class="nav-list">
+          <li v-if="connection !== 'local'">
+            <RouterLink class="nav-item nav-tool" :to="{ name: 'account' }">
+              <NavIcon name="settings" />Einstellungen
+            </RouterLink>
+          </li>
+          <li v-if="connection !== 'local'">
+            <RouterLink
+              class="nav-item nav-tool"
+              :to="{ name: 'members', params: { workspaceId } }"
+            >
+              <NavIcon name="members" />Mitglieder
+            </RouterLink>
+          </li>
+          <li>
+            <RouterLink class="nav-item nav-tool" :to="{ name: 'trash', params: { workspaceId } }">
+              <NavIcon name="trash" />Papierkorb
+            </RouterLink>
+          </li>
+          <li>
+            <RouterLink class="nav-item nav-tool" :to="{ name: 'export', params: { workspaceId } }">
+              <NavIcon name="export" />Export & Import
+            </RouterLink>
+          </li>
+          <li v-if="keyboard">
+            <button type="button" class="nav-item nav-tool" @click="showShortcuts">
+              <NavIcon name="keyboard" />Tastenkürzel
+            </button>
+          </li>
+        </ul>
+      </nav>
+
       <footer class="sidebar-footer">
-        <p class="status" :class="`status-${connection}`" data-testid="connection">
-          <span class="dot" aria-hidden="true"></span>{{ connectionLabel }}
-          <RouterLink
-            v-if="connection === 'expired' || connection === 'local'"
-            :to="{ name: 'login' }"
-            data-testid="sign-in"
-            >Anmelden</RouterLink
-          >
-        </p>
-        <p class="status" :class="`status-${persistence}`" data-testid="persistence">
-          {{ persistenceLabel }}
-          <button
-            v-if="persistence === 'not-persisted'"
-            type="button"
-            class="link"
-            @click="requestPersistence"
-          >
-            Erneut anfragen
-          </button>
-        </p>
-        <p v-if="persistence === 'not-persisted'" class="hint muted">
-          Der Browser darf lokale Daten bei Speichermangel löschen. Tipp: App installieren oder
-          regelmäßig exportieren.
-        </p>
-        <p v-if="deviceStatus === 'revoked'" class="error" data-testid="device-revoked">
-          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten. Nach erneuter
-          Anmeldung synchronisiert es als neues Gerät weiter.
-        </p>
-        <p v-if="installPrompt" class="status">
-          <button type="button" class="link" @click="installApp">App installieren</button>
-          – startet wie eine eigene App, auch offline.
-        </p>
-        <p v-if="showIosHint" class="hint muted" data-testid="ios-install-hint">
-          Als App installieren: in Safari <strong>Teilen</strong> →
-          <strong>„Zum Home-Bildschirm“</strong>. Erst dann bleiben die lokalen Daten dauerhaft
-          gespeichert, und Benachrichtigungen sind möglich.
-          <button type="button" class="link" @click="dismissIosHint">Ausblenden</button>
-        </p>
-        <p class="muted" data-testid="pending">
-          {{ pending }} lokale Änderung{{ pending === 1 ? '' : 'en' }} noch nicht synchronisiert
-        </p>
         <p v-if="conflicts.length" class="error" data-testid="sync-conflicts">
           <RouterLink :to="{ name: 'conflicts', params: { workspaceId } }">
             {{ conflicts.length }} Konflikt{{ conflicts.length === 1 ? '' : 'e' }}
@@ -578,22 +649,30 @@ const shellStyle = computed(() => ({
             abgelehnt</RouterLink
           >. Sie bleiben lokal erhalten.
         </p>
-        <p v-if="syncLabel" class="muted sync-status" data-testid="sync-status">
-          {{ syncLabel }}
-          <button type="button" class="link" :disabled="syncState.running" @click="syncNow">
-            Jetzt synchronisieren
+        <p v-if="deviceStatus === 'revoked'" class="error" data-testid="device-revoked">
+          Dieses Gerät wurde aus dem Konto entfernt. Lokale Daten bleiben erhalten. Nach erneuter
+          Anmeldung synchronisiert es als neues Gerät weiter.
+        </p>
+        <p v-if="showPersistenceHint" class="hint" data-testid="persistence-hint">
+          Der Browser darf lokale Daten bei Speichermangel löschen. Tipp: App installieren oder
+          regelmäßig exportieren.
+          <button type="button" class="link" @click="requestPersistence">
+            Dauerhaft speichern
           </button>
-        </p>
-        <p class="muted">
-          <template v-if="currentUser">
-            {{ currentUser.email }} · <RouterLink :to="{ name: 'account' }">Konto</RouterLink> ·
-          </template>
-          <RouterLink :to="{ name: 'members', params: { workspaceId } }">Mitglieder</RouterLink> ·
-          <RouterLink :to="{ name: 'trash', params: { workspaceId } }">Papierkorb</RouterLink> ·
-          <RouterLink :to="{ name: 'export', params: { workspaceId } }">Export & Import</RouterLink>
           ·
-          <button type="button" class="link" @click="showShortcuts">Tastenkürzel</button>
+          <button type="button" class="link" @click="dismissPersistenceHint">Ausblenden</button>
         </p>
+        <p v-if="installPrompt" class="hint">
+          <button type="button" class="link" @click="installApp">App installieren</button>
+          – startet wie eine eigene App, auch offline.
+        </p>
+        <p v-if="showIosHint" class="hint muted" data-testid="ios-install-hint">
+          Als App installieren: in Safari <strong>Teilen</strong> →
+          <strong>„Zum Home-Bildschirm“</strong>. Erst dann bleiben die lokalen Daten dauerhaft
+          gespeichert, und Benachrichtigungen sind möglich.
+          <button type="button" class="link" @click="dismissIosHint">Ausblenden</button>
+        </p>
+        <SyncStatus :pending="pending" :with-issues="withIssues.length" @sync="syncNow" />
       </footer>
     </aside>
     <div
@@ -610,7 +689,7 @@ const shellStyle = computed(() => ({
       @keydown="resizeByKey"
     ></div>
 
-    <main class="content">
+    <main class="content" :inert="overlay || undefined">
       <p v-if="revoked" class="notice" role="status" data-testid="access-revoked">
         <strong>Zugriff entzogen.</strong> Du bist kein Mitglied dieses Workspace mehr. Was auf
         diesem Gerät liegt, bleibt lesbar und lässt sich
@@ -619,6 +698,15 @@ const shellStyle = computed(() => ({
         <RouterLink :to="{ name: 'members', params: { workspaceId } }"
           >Vom Gerät entfernen</RouterLink
         >
+      </p>
+      <p
+        v-else-if="workspace?.local && readOnly"
+        class="notice"
+        role="status"
+        data-testid="taken-over"
+      >
+        <strong>Schon in deinem Konto.</strong> Diese Seiten wurden beim Anmelden übernommen. Bis
+        der Server alles bestätigt hat, bleiben sie hier als Sicherung zum Lesen und Exportieren.
       </p>
       <p v-else-if="workspace && readOnly" class="notice" role="status" data-testid="read-only">
         <strong>Nur lesen.</strong> Deine Rolle in diesem Workspace: {{ ROLE_LABELS[role] }}.

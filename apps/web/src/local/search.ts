@@ -88,9 +88,22 @@ export class SearchIndex {
   }
 }
 
-/** A short excerpt around the first matching term. */
-export function makeSnippet(text: string, terms: string[], radius = 60): string {
-  if (!text) return ''
+/**
+ * Markdown typed literally (before it turned into formatting while typing, #194) stays in the
+ * text as characters; hits show it without the markers.
+ */
+export function withoutMarkdownMarkers(text: string): string {
+  return text
+    .replace(/\*\*(\S(?:.*?\S)?)\*\*/gu, '$1')
+    .replace(/(^|[^\p{L}\p{N}])[*_](\S(?:[^*_]*?\S)?)[*_](?=$|[^\p{L}\p{N}])/gu, '$1$2')
+    .replace(/`([^`]+)`/gu, '$1')
+    .replace(/\[([^\]]+)\]\((?:https?:|mailto:)[^)\s]*\)/gu, '$1')
+}
+
+/** A short excerpt around the first matching term, without Markdown markers. */
+export function makeSnippet(source: string, terms: string[], radius = 60): string {
+  if (!source) return ''
+  const text = withoutMarkdownMarkers(source)
   const lower = text.toLocaleLowerCase()
   let position = -1
   for (const term of terms) {

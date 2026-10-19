@@ -12,7 +12,7 @@ test('Ctrl/⌘ + K opens the quick search, which finds pages offline', async ({
   await waitForSaved(page)
 
   await context.setOffline(true)
-  await page.getByRole('heading', { name: 'Verlinkt von' }).click()
+  // The caret is still in the page: without selected text the shortcut searches (#197).
   await page.keyboard.press('ControlOrMeta+k')
   const palette = page.getByRole('dialog', { name: 'Schnellsuche' })
   await expect(palette).toBeVisible()
@@ -25,13 +25,25 @@ test('Ctrl/⌘ + K opens the quick search, which finds pages offline', async ({
   await expect(blockInput(page, 0)).toHaveText('Zugtickets nach Wien')
 })
 
-test('in text, Ctrl/⌘ + K inserts a link instead; Ctrl/⌘ + P always searches', async ({
+test('Ctrl/⌘ + K links selected text, otherwise it searches; Ctrl/⌘ + P always searches', async ({
   signedIn: page,
 }) => {
   await newPage(page, 'Text')
+  await page.keyboard.type('Verweis')
   await page.keyboard.press('ControlOrMeta+k')
-  await expect(page.getByRole('dialog', { name: 'Schnellsuche' })).toBeHidden()
+  const palette = page.getByRole('dialog', { name: 'Schnellsuche' })
+  await expect(palette).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Link einfügen' })).toHaveCount(0)
   await page.keyboard.press('Escape')
+  await expect(palette).toBeHidden()
+
+  await blockInput(page, 0).selectText()
+  await page.keyboard.press('ControlOrMeta+k')
+  await expect(page.getByRole('dialog', { name: 'Link einfügen' })).toBeVisible()
+  await expect(palette).toBeHidden()
+  await page.keyboard.press('Escape')
+
+  await blockInput(page, 0).click()
   await page.keyboard.press('ControlOrMeta+p')
   await expect(page.getByRole('dialog', { name: 'Schnellsuche' })).toBeVisible()
   await page.keyboard.press('Escape')

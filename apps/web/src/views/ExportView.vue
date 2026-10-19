@@ -16,6 +16,7 @@ import { buildMarkdownExport, saveFile } from '../export/markdown'
 import { refreshWorkspaces, workspaces } from '../local/context'
 import { connection } from '../session'
 import { requestSync } from '../sync/engine'
+import { formatDateTime } from '../format'
 
 const { store, workspaceId } = useWorkspace()
 const workspace = computed(() => ({
@@ -24,6 +25,8 @@ const workspace = computed(() => ({
 }))
 
 const online = computed(() => connection.value === 'online')
+/** Without an account there is no server: no history, no import (ADR 0023). */
+const withAccount = computed(() => connection.value !== 'local')
 const withHistory = ref(true)
 const running = ref(false)
 const progress = ref<string | null>(null)
@@ -110,7 +113,6 @@ const idsExist = ref(false)
 const importing = ref(false)
 /** Set when the source is a converted Notion export (#137). */
 const notionReport = ref<NotionImportReport | null>(null)
-const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
 
 const importSummary = computed(() => {
   const source = importSource.value
@@ -123,7 +125,7 @@ const importSummary = computed(() => {
     attachments,
     contents: source.attachments.size,
     history: source.data.history?.changes.length ?? null,
-    exportedAt: dateFormat.format(new Date(source.data.exported_at)),
+    exportedAt: formatDateTime(source.data.exported_at),
   }
 })
 
@@ -192,50 +194,25 @@ async function runImport(newIds: boolean) {
 <template>
   <article class="page export">
     <h1>Export und Import</h1>
-    <p class="muted">
-      Der Export entsteht aus den Daten auf diesem Gerät und funktioniert auch offline. Online
-      werden zusätzlich der Verlauf und fehlende Anhänge vom Server geholt.
-    </p>
 
-    <label class="check">
-      <input v-model="withHistory" type="checkbox" :disabled="!online" />
-      Mit Verlauf (Änderungslog vom Server, für JSON und ZIP)
-    </label>
-    <p v-if="!online" class="hint muted">
-      Offline: Der Verlauf liegt auf dem Server, exportiert wird nur der aktuelle Stand.
-    </p>
-
-    <section class="page-section" aria-labelledby="export-archive">
-      <h2 id="export-archive">Vollständig (ZIP)</h2>
+    <section class="export-main" aria-labelledby="export-all">
+      <h2 id="export-all">Sicherung</h2>
       <p>
-        Empfohlen für Backups: Markdown und JSON zusammen mit allen Anhängen und einer
-        <code>manifest.json</code> mit Prüfsummen (SHA-256) aller Dateien.
+        Alle Seiten, Bilder und Dateien als Sicherung in einer ZIP-Datei. Damit lässt sich alles
+        wiederherstellen oder in andere Programme mitnehmen. Funktioniert auch ohne Internet.
       </p>
-      <button type="button" :disabled="running" @click="exportArchive">
-        Vollständigen Export herunterladen
-      </button>
-    </section>
-
-    <section class="page-section" aria-labelledby="export-markdown">
-      <h2 id="export-markdown">Markdown</h2>
-      <p>
-        Eine <code>.md</code>-Datei pro Seite, Ordner entsprechen dem Seitenbaum. Seitenlinks werden
-        zu relativen Pfaden, Anhänge liegen in <code>_attachments/</code>. Tags, Favorit und
-        Zeitstempel stehen im Front Matter. Nur der aktuelle Stand, ohne Verlauf.
+      <button type="button" :disabled="running" @click="exportArchive">Alles exportieren</button>
+      <label v-if="withAccount" class="check">
+        <input v-model="withHistory" type="checkbox" :disabled="!online" />
+        Mit Verlauf (frühere Versionen der Seiten)
+      </label>
+      <p v-if="!withAccount" class="hint muted" data-testid="export-history-hint">
+        Ohne Konto gibt es keinen Verlauf auf einem Server; exportiert wird der aktuelle Stand.
       </p>
-      <button type="button" :disabled="running" @click="exportMarkdownZip">
-        Markdown herunterladen (ZIP)
-      </button>
-    </section>
-
-    <section class="page-section" aria-labelledby="export-json">
-      <h2 id="export-json">JSON</h2>
-      <p>
-        Verlustfreie Kopie für Backup und Import: alle Seiten, Blöcke, Tags, Links und
-        Anhang-Metadaten mit ihren IDs, auch Seiten im Papierkorb. Format:
-        <code>schema_version</code> 3.
+      <p v-else-if="!online" class="hint muted" data-testid="export-history-hint">
+        Gerade keine Verbindung zum Server: Frühere Versionen liegen dort, exportiert wird der
+        aktuelle Stand.
       </p>
-      <button type="button" :disabled="running" @click="exportJson">JSON herunterladen</button>
     </section>
 
     <p v-if="progress" class="muted" role="status" data-testid="export-progress">
@@ -264,18 +241,64 @@ async function runImport(newIds: boolean) {
     </div>
     <p v-if="error" class="error">{{ error }}</p>
 
+    <details class="page-section more-formats" data-testid="more-formats">
+      <summary>Weitere Formate</summary>
+      <section aria-labelledby="export-markdown">
+        <h3 id="export-markdown">Markdown</h3>
+        <p>
+          Eine Textdatei pro Seite, Ordner wie im Seitenbaum. Gut lesbar und in vielen Programmen zu
+          öffnen; nur der aktuelle Stand.
+        </p>
+        <button type="button" class="secondary" :disabled="running" @click="exportMarkdownZip">
+          Markdown herunterladen (ZIP)
+        </button>
+      </section>
+      <section aria-labelledby="export-json">
+        <h3 id="export-json">JSON</h3>
+        <p>Eine einzelne Datei mit allen Daten, z. B. zum Wiederherstellen ohne Anhänge.</p>
+        <button type="button" class="secondary" :disabled="running" @click="exportJson">
+          JSON herunterladen
+        </button>
+      </section>
+      <details class="tech-details">
+        <summary>Technische Details</summary>
+        <ul>
+          <li>
+            <strong>Alles exportieren:</strong> Markdown und JSON zusammen mit allen Anhängen und
+            einer <code>manifest.json</code> mit Prüfsummen (SHA-256) aller Dateien.
+          </li>
+          <li>
+            <strong>Markdown:</strong> eine <code>.md</code>-Datei pro Seite; Seitenlinks werden zu
+            relativen Pfaden, Anhänge liegen in <code>_attachments/</code>. Tags, Favorit und
+            Zeitstempel stehen im Front Matter.
+          </li>
+          <li>
+            <strong>JSON:</strong> verlustfreie Kopie mit IDs aller Seiten, Blöcke, Tags, Links und
+            Anhang-Metadaten, auch Seiten im Papierkorb; Format <code>schema_version</code> 3.
+          </li>
+          <li>Der Verlauf ist das Änderungslog vom Server (in ZIP und JSON).</li>
+        </ul>
+      </details>
+    </details>
+
     <section class="page-section import" aria-labelledby="import">
       <h2 id="import">Import</h2>
-      <p>
-        Stellt einen vollständigen Export (ZIP) oder einen JSON-Export als <strong>neuen</strong>
-        Workspace her, z. B. in einer frischen Installation. Bestehende Workspaces bleiben
-        unverändert. Prüfsummen und Format werden vor dem Import geprüft.
+      <p v-if="!withAccount" class="hint muted" data-testid="import-account-hint">
+        Ein Import legt einen neuen Workspace auf dem Server an und braucht daher ein Konto.
+        <RouterLink :to="{ name: 'login' }">Anmelden</RouterLink>
       </p>
-      <p v-if="!online" class="hint muted">
+      <p v-else-if="!online" class="hint muted">
         Der Import legt den Workspace auf dem Server an und ist nur online möglich.
       </p>
+
+      <h3 id="import-backup">Sicherung wiederherstellen</h3>
+      <p class="muted">
+        Eine Sicherung aus dieser App (ZIP oder JSON) als <strong>neuen</strong> Workspace anlegen,
+        z. B. auf einem neuen Server. Bestehende Workspaces bleiben unverändert; die Datei wird
+        vorher auf Vollständigkeit geprüft.
+      </p>
       <label>
-        Exportdatei
+        Sicherungsdatei
         <input
           type="file"
           accept=".zip,.json,application/zip,application/json"
@@ -285,7 +308,7 @@ async function runImport(newIds: boolean) {
         />
       </label>
 
-      <h3 id="import-notion">Umzug aus Notion</h3>
+      <h3 id="import-notion">Aus Notion importieren</h3>
       <p class="muted">
         In Notion unter <strong>Einstellungen → Export → „Markdown &amp; CSV“</strong> (mit
         Unterseiten und Dateien) exportieren und die ZIP-Datei hier wählen. Seiten, Unterseiten,
@@ -375,6 +398,52 @@ async function runImport(newIds: boolean) {
   align-items: flex-start;
   margin-bottom: var(--space-md);
 }
+.export-main {
+  display: grid;
+  gap: var(--space-md);
+  justify-items: start;
+}
+
+.export-main h2 {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.export-main h2,
+.export-main p,
+.export-main .check {
+  margin: 0;
+}
+
+.more-formats section {
+  margin-top: var(--space-lg);
+}
+
+.more-formats h3 {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--text-sm);
+}
+
+.more-formats p {
+  margin: 0 0 var(--space-sm);
+}
+
+.more-formats summary,
+.tech-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.tech-details {
+  margin-top: var(--space-lg);
+  font-size: var(--text-sm);
+}
+
+.import h3 {
+  margin: var(--space-xl) 0 var(--space-xs);
+  font-size: var(--text-sm);
+}
+
 .import-summary {
   display: grid;
   gap: var(--space-md);

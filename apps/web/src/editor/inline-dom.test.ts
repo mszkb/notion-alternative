@@ -27,6 +27,16 @@ describe('renderInline / serializeDom', () => {
     expect(serializeDom(el)).toBe(content)
   })
 
+  it('stores elements made from typed Markdown as Markdown, typed markers escaped (#194)', () => {
+    const el = element()
+    const strong = document.createElement('strong')
+    strong.textContent = 'fett'
+    const code = document.createElement('code')
+    code.textContent = 'x'
+    el.append('Ein ', strong, ' und ', code, ' und \\*nicht*')
+    expect(serializeDom(el)).toBe('Ein **fett** und `x` und \\\\\\*nicht\\*')
+  })
+
   it('shows the current title of linked pages and stores it on save', () => {
     const el = element()
     renderInline(el, `see [Old](page:${PAGE})`, options)
