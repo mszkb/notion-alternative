@@ -17,4 +17,6 @@ playwright-report/
 # Autonomous agent scratch files (never committed)
 /REPORT.md
 /QUESTION.md
-docs/.vitepress/cache/
+# Landing page and docs: generated from docs/ by scripts/sync-docs.mjs
+apps/site/src/content/docs/
+apps/site/.astro/

@@ -10,7 +10,7 @@ Notion nervt mit seinem „always on“. Ja, es gibt eine Offline-Funktion, aber
 docker compose up -d --build
 ```
 
-Dann `http://127.0.0.1:8080` öffnen und das erste Konto anlegen. Details: [Deployment & Betrieb](docs/operations/deployment.md). Ohne Docker auf gewöhnlichem Webspace: [Installation auf Webspace](docs/user/webhosting.md). Die gesamte Dokumentation gibt es auch als Website: <https://mszkb.github.io/notion-alternative/>.
+Dann `http://127.0.0.1:8080` öffnen und das erste Konto anlegen. Details: [Deployment & Betrieb](docs/operations/deployment.md). Ohne Docker auf gewöhnlichem Webspace: [Installation auf Webspace](docs/user/webhosting.md). Die gesamte Dokumentation gibt es auch als Website: <https://mszkb.github.io/notion-alternative/docs/>.
 
 ## Entwicklung
 

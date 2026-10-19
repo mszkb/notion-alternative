@@ -1,0 +1,11 @@
+/* Starlight in the app's accent colour (apps/web/src/styles.css). */
+:root {
+  --sl-color-accent-low: #1c2c4f;
+  --sl-color-accent: #6c9cff;
+  --sl-color-accent-high: #c9dbff;
+}
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d6e3fb;
+  --sl-color-accent: #2563d9;
+  --sl-color-accent-high: #1a3f8a;
+}

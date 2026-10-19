@@ -1,0 +1,15 @@
+{
+  "name": "@notion-alt/site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync-docs": "node scripts/sync-docs.mjs",
+    "dev": "node scripts/sync-docs.mjs --watch & astro dev",
+    "build": "node scripts/sync-docs.mjs && astro build",
+    "preview": "astro preview"
+  },
+  "devDependencies": {
+    "@astrojs/starlight": "^0.42.6",
+    "astro": "^7.4.1"
+  }
+}

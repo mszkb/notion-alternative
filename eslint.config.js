@@ -13,6 +13,7 @@ export default tseslint.config(
       '**/vendor/**',
       '**/test-results/**',
       '**/playwright-report/**',
+      'apps/site/.astro/**',
     ],
   },
   js.configs.recommended,
@@ -32,8 +33,8 @@ export default tseslint.config(
     files: [
       'packages/contract-tests/**/*.ts',
       'apps/*/scripts/**/*.{js,mjs}',
+      'apps/site/astro.config.mjs',
       'scripts/**/*.mjs',
-      'docs/.vitepress/**/*.mts',
       '*.js',
     ],
     languageOptions: { globals: globals.node },

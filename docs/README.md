@@ -2,7 +2,7 @@
 
 Abgeleitet aus der ursprünglichen Roadmap-Spezifikation („Roadmap: Self-hosted Notion-Alternative mit offline-first PWA“).
 
-Online lesbar unter <https://mszkb.github.io/notion-alternative/> ([ADR 0025](adr/0025-documentation-site.md)). Lokal: `pnpm --filter @notion-alt/docs dev`.
+Online lesbar unter <https://mszkb.github.io/notion-alternative/docs/> ([ADR 0025](adr/0025-documentation-site.md)). Lokal: `pnpm --filter @notion-alt/site dev`.
 
 ## Anleitungen
 

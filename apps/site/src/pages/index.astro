@@ -1,0 +1,559 @@
+---
+// Landing page (ADR 0025). Colours follow the app's tokens (apps/web/src/styles.css).
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
+const docs = (path = '') => `${base}docs/${path}`
+const repo = 'https://github.com/mszkb/notion-alternative'
+
+const features = [
+  {
+    title: 'Offline zuerst',
+    text: 'Alle Seiten liegen auf deinem Gerät. Ohne Netz oder wenn der Server ausfällt, liest und schreibst du einfach weiter; abgeglichen wird, sobald er wieder da ist.',
+  },
+  {
+    title: 'Ohne Konto loslegen',
+    text: 'Öffnen und schreiben. Ein Konto brauchst du erst, wenn du ein zweites Gerät nutzen oder teilen willst. Was du schon geschrieben hast, wird übernommen.',
+    link: docs('user/without-account/'),
+  },
+  {
+    title: 'Vertraut wie Notion',
+    text: 'Seitenbaum, Slash-Menü, To-dos, Toggles, Hinweise, Tags, Favoriten und Backlinks. Der Editor arbeitet mit Blöcken, so wie du es kennst.',
+    link: docs('user/editor/'),
+  },
+  {
+    title: 'Keine stillen Überschreibungen',
+    text: 'Haben zwei Geräte dieselbe Seite geändert, werden die Blöcke zusammengeführt. Was sich nicht zusammenführen lässt, zeigt die App dir zur Entscheidung.',
+  },
+  {
+    title: 'Deine Daten, deine Formate',
+    text: 'Export als Markdown, JSON oder ZIP, jederzeit und vollständig, und wieder importierbar. Kein Abo, keine Funktionssperren.',
+    link: docs('user/export/'),
+  },
+  {
+    title: 'Teilen mit Rollen',
+    text: 'Workspaces mit Leserechten, Kommentar- oder Bearbeitungsrechten teilen, einzelne Seiten per Lese-Link auch ohne Konto.',
+    link: docs('user/sharing/'),
+  },
+]
+
+const paths = [
+  {
+    title: 'Webspace',
+    tag: 'am einfachsten',
+    text: 'ZIP herunterladen, per FTP hochladen, Konto anlegen. Läuft bei üblichen Hostern mit PHP 8.2, ohne Docker und ohne Kommandozeile.',
+    link: docs('user/webhosting/'),
+    linkText: 'Anleitung Webspace',
+  },
+  {
+    title: 'Docker Compose',
+    tag: 'eigener Server',
+    text: 'Zwei Container, eine SQLite-Datei, Backup mit einem Befehl. Auch auf dem Raspberry Pi (arm64).',
+    link: docs('operations/deployment/'),
+    linkText: 'Anleitung Docker',
+  },
+  {
+    title: 'Als App installieren',
+    tag: 'jedes Gerät',
+    text: 'Auf Desktop, Android und iPhone zum Startbildschirm hinzufügen. Startet im eigenen Fenster, offline, mit Benachrichtigungen.',
+    link: docs('user/installation/'),
+    linkText: 'App installieren',
+  },
+]
+---
+
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <title>Notion-Alternative – Notizen, die dir gehören</title>
+    <meta
+      name="description"
+      content="Self-hosted, local-first Wissens- und Dokumentenplattform. Läuft offline, auf deinem eigenen Server oder einfachem Webspace."
+    />
+  </head>
+  <body>
+    <a class="skip" href="#inhalt">Zum Inhalt</a>
+    <header class="bar">
+      <div class="wrap bar-inner">
+        <a class="brand" href={base}><img class="mark" src={`${base}favicon.svg`} alt="" />Notion-Alternative</a>
+        <nav aria-label="Hauptnavigation">
+          <a href="#funktionen">Funktionen</a>
+          <a href="#installieren">Installieren</a>
+          <a href={docs()}>Dokumentation</a>
+          <a href={repo}>GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="inhalt">
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div>
+            <p class="eyebrow">Self-hosted · Local-first · Open Source</p>
+            <h1>Deine Notizen.<br />Auf deinem Gerät.<br />Auf deinem Server.</h1>
+            <p class="lead">
+              Eine Notion-Alternative, die ohne Internet funktioniert, auf deinem eigenen Webspace läuft und
+              dir deine Daten jederzeit als Markdown mitgibt.
+            </p>
+            <div class="actions">
+              <a class="button primary" href={docs('user/webhosting/')}>Jetzt installieren</a>
+              <a class="button" href={docs()}>Dokumentation</a>
+            </div>
+            <p class="note">Noch in Entwicklung. Feedback und Fehlerberichte gern auf <a href={`${repo}/issues`}>GitHub</a>.</p>
+          </div>
+
+          <div class="window" aria-hidden="true">
+            <div class="window-bar"><span></span><span></span><span></span></div>
+            <div class="window-body">
+              <div class="side">
+                <div class="side-item strong">Mein Workspace</div>
+                <div class="side-item">▸ Projekte</div>
+                <div class="side-item active">▾ Reiseplanung</div>
+                <div class="side-item indent">Packliste</div>
+                <div class="side-item">▸ Rezepte</div>
+                <div class="side-status"><span class="dot"></span>Offline · 3 Änderungen warten</div>
+              </div>
+              <div class="page">
+                <div class="page-title">Reiseplanung</div>
+                <div class="block todo done">Unterkunft buchen</div>
+                <div class="block todo">Zugtickets kaufen</div>
+                <div class="block callout">💡 Alles hier ist auch ohne Netz bearbeitbar.</div>
+                <div class="block line w80"></div>
+                <div class="block line w60"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="funktionen" class="section">
+        <div class="wrap">
+          <h2>Was sie kann</h2>
+          <div class="grid">
+            {
+              features.map((feature) => (
+                <article class="card">
+                  <h3>{feature.title}</h3>
+                  <p>{feature.text}</p>
+                  {feature.link && <a href={feature.link}>Mehr dazu →</a>}
+                </article>
+              ))
+            }
+          </div>
+        </div>
+      </section>
+
+      <section id="installieren" class="section alt">
+        <div class="wrap">
+          <h2>So kommst du hin</h2>
+          <p class="section-lead">Keine externe Datenbank, kein Redis, kein Mailserver. Eine SQLite-Datei und deine Dateien.</p>
+          <div class="grid three">
+            {
+              paths.map((path) => (
+                <article class="card">
+                  <p class="tag">{path.tag}</p>
+                  <h3>{path.title}</h3>
+                  <p>{path.text}</p>
+                  <a href={path.link}>{path.linkText} →</a>
+                </article>
+              ))
+            }
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="wrap principles">
+          <h2>Versprochen</h2>
+          <ul>
+            <li><strong>Lokal lesbar und bearbeitbar</strong>, immer, auch wenn der Server nicht erreichbar ist.</li>
+            <li><strong>Export zuerst:</strong> Markdown, JSON und ZIP funktionieren verlässlich und lassen sich wieder importieren.</li>
+            <li><strong>Keine künstlichen Sperren</strong> für alle, die selbst hosten.</li>
+            <li><strong>Push ist nur ein Hinweis:</strong> Benachrichtigungen enthalten keine Inhalte.</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer-inner">
+        <span>Notion-Alternative · MIT-Lizenz</span>
+        <nav aria-label="Fußzeile">
+          <a href={docs()}>Dokumentation</a>
+          <a href={repo}>Quellcode</a>
+          <a href={`${repo}/issues`}>Fehler melden</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #f6f6f4;
+    --surface: #ffffff;
+    --sidebar: #f0efeb;
+    --text: #1f1f1f;
+    --muted: #666666;
+    --border: #e2e2df;
+    --accent: #2563d9;
+    --on-accent: #ffffff;
+    --ok: #2b7530;
+    --warn: #9a5b00;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --radius: 6px;
+    --radius-lg: 12px;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191919;
+      --surface: #232323;
+      --sidebar: #1f1f1f;
+      --text: #ececec;
+      --muted: #9b9b9b;
+      --border: #353535;
+      --accent: #6c9cff;
+      --on-accent: #111111;
+      --ok: #66bb6a;
+      --warn: #ffb74d;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+  }
+  * {
+    box-sizing: border-box;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.6;
+  }
+  a {
+    color: var(--accent);
+  }
+  a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .wrap {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 0 1rem;
+  }
+  .skip {
+    position: absolute;
+    left: -999px;
+  }
+  .skip:focus {
+    left: 1rem;
+    top: 1rem;
+    z-index: 10;
+    background: var(--surface);
+    padding: 0.5rem 1rem;
+  }
+
+  .bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .bar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 3.5rem;
+    flex-wrap: wrap;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 650;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .mark {
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--radius);
+    background: var(--text);
+    color: var(--bg);
+    font-weight: 700;
+  }
+  .bar nav {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+  .bar nav a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.95rem;
+  }
+  .bar nav a:hover {
+    color: var(--text);
+  }
+
+  .hero {
+    padding: 4rem 0 3rem;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 3rem;
+    align-items: center;
+  }
+  .eyebrow,
+  .tag {
+    margin: 0 0 0.75rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+  .lead {
+    margin: 1.25rem 0 1.75rem;
+    font-size: 1.15rem;
+    color: var(--muted);
+    max-width: 34rem;
+  }
+  .actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .button {
+    display: inline-block;
+    padding: 0.7rem 1.2rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+  }
+  .button:hover {
+    filter: brightness(0.96);
+  }
+  .note {
+    margin-top: 1.25rem;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+
+  .window {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    font-size: 0.85rem;
+  }
+  .window-bar {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--sidebar);
+  }
+  .window-bar span {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    background: var(--border);
+  }
+  .window-body {
+    display: grid;
+    grid-template-columns: 11rem 1fr;
+    min-height: 17rem;
+  }
+  .side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.75rem 0.5rem;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .side-item {
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+  }
+  .side-item.strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .side-item.active {
+    background: color-mix(in srgb, var(--text) 7%, transparent);
+    color: var(--text);
+  }
+  .side-item.indent {
+    padding-left: 1.6rem;
+  }
+  .side-status {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--warn);
+  }
+  .page {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .page-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+  .todo::before {
+    content: '☐ ';
+    color: var(--muted);
+  }
+  .todo.done {
+    color: var(--muted);
+    text-decoration: line-through;
+  }
+  .todo.done::before {
+    content: '☑ ';
+    color: var(--ok);
+  }
+  .callout {
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    background: var(--sidebar);
+  }
+  .line {
+    height: 0.6rem;
+    border-radius: 4px;
+    background: var(--border);
+  }
+  .w80 {
+    width: 80%;
+  }
+  .w60 {
+    width: 60%;
+  }
+
+  .section {
+    padding: 4rem 0;
+  }
+  .section.alt {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  h2 {
+    margin: 0 0 1.5rem;
+    font-size: 1.9rem;
+    letter-spacing: -0.01em;
+  }
+  .section-lead {
+    margin: -0.75rem 0 1.75rem;
+    color: var(--muted);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  .card {
+    padding: 1.25rem 1.25rem 1.4rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .section.alt .card {
+    background: var(--bg);
+  }
+  .card h3 {
+    margin: 0 0 0.4rem;
+    font-size: 1.1rem;
+  }
+  .card p {
+    margin: 0 0 0.75rem;
+    color: var(--muted);
+  }
+  .card a {
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .principles ul {
+    margin: 0;
+    padding-left: 1.2rem;
+    display: grid;
+    gap: 0.6rem;
+    max-width: 46rem;
+  }
+
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 1.5rem 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .footer-inner {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .footer nav {
+    display: flex;
+    gap: 1.25rem;
+  }
+
+  @media (max-width: 52rem) {
+    .hero {
+      padding-top: 2.5rem;
+    }
+    .hero-grid,
+    .grid {
+      grid-template-columns: 1fr;
+    }
+    .window-body {
+      grid-template-columns: 1fr;
+    }
+    .side {
+      display: none;
+    }
+    .bar nav a[href^='#'] {
+      display: none;
+    }
+  }
+</style>
