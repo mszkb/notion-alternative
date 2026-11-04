@@ -19,7 +19,7 @@ Ursprünglich war ein Raspberry Pi als Referenzgerät vorgesehen. Er ist anderwe
 
 Gemessen am 2026-10-02/03 mit Stand `681b077` (main nach Phase 2).
 
-| | VPS (netcup, KVM) | Raspberry Pi 4 Model B, 2 GB |
+| | VPS (KVM) | Raspberry Pi 4 Model B, 2 GB |
 | --- | --- | --- |
 | Architektur / OS | `x86_64`, Debian 13, Kernel 6.12 | `aarch64`, Debian 13 (trixie), Kernel 6.18 |
 | CPU / RAM | 4 vCPU / 7,8 GiB | 4 Kerne / 1,8 GiB + 1,8 GiB Swap |
